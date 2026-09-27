@@ -332,6 +332,172 @@ describe("tryResponsesWebsocketUpstream", () => {
     }
   });
 
+  it.each([400, 413, 422, 507])(
+    "falls back without caching a first-event size error (%i)",
+    async (status) => {
+      server = await startMockServer((socket) => {
+        socket.on("message", () => {
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              status,
+              error: { code: "request_payload_too_large", message: "Payload too large" },
+            })
+          );
+          // A second buffered event must not turn the rejected attempt into success.
+          socket.send(JSON.stringify({ type: "response.completed", response: { id: "late" } }));
+        });
+      });
+      const result = await tryResponsesWebsocketUpstream({
+        provider: codexProvider(),
+        upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+        upstreamHeaders: new Headers(),
+        body: { model: "gpt-5.5", input: "large request" },
+      });
+      expect(result).toEqual({
+        failed: true,
+        reason: "ws_payload_too_large",
+        message: "Payload too large",
+        cacheableAsUnsupported: false,
+      });
+    }
+  );
+
+  it.each([
+    { status: 413 },
+    { status: 400, code: "context_length_exceeded" },
+    { status: 400, error: { code: "request_payload_too_large" } },
+    { status: 422, error: { type: "payload-too-large" } },
+    { status: 507, error: { code: "context_length_exceeded" } },
+  ])("falls back for a size error without synthesizing a display message: %j", async (event) => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => socket.send(JSON.stringify({ type: "error", ...event })));
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers(),
+      body: { input: "large request" },
+    });
+    expect(result).toEqual({
+      failed: true,
+      reason: "ws_payload_too_large",
+      message: undefined,
+      cacheableAsUnsupported: false,
+    });
+  });
+
+  it("forgets a retained socket rejected for size and opens a fresh one for the next request", async () => {
+    let connections = 0;
+    server = await startMockServer((socket) => {
+      connections += 1;
+      socket.on("message", (data) => {
+        const frame = JSON.parse(data.toString());
+        socket.send(
+          JSON.stringify(
+            frame.input === "large"
+              ? { type: "error", status: 413, error: { message: "Payload too large" } }
+              : { type: "response.completed", response: { id: "small" } }
+          )
+        );
+      });
+    });
+    const options = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers(),
+      sessionId: "size-rejected-session",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...options, body: { input: "small" } });
+    expect("response" in first).toBe(true);
+    if (!("response" in first)) throw new Error("initial request failed");
+    await collectSseBody(first.response);
+    expect(getResponsesWsSessionCountForTests()).toBe(1);
+
+    const rejected = await tryResponsesWebsocketUpstream({ ...options, body: { input: "large" } });
+    expect(rejected).toMatchObject({
+      failed: true,
+      reason: "ws_payload_too_large",
+      cacheableAsUnsupported: false,
+    });
+    expect(getResponsesWsSessionCountForTests()).toBe(0);
+    expect(connections).toBe(1);
+
+    const next = await tryResponsesWebsocketUpstream({ ...options, body: { input: "small" } });
+    expect("response" in next).toBe(true);
+    if (!("response" in next)) throw new Error("next request failed");
+    expect(await collectSseBody(next.response)).toContain("response.completed");
+    expect(connections).toBe(2);
+  });
+
+  it("forwards a size error after the first event instead of replaying the request", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "started" } }));
+        socket.send(
+          JSON.stringify({ type: "error", status: 413, error: { message: "Payload too large" } })
+        );
+      });
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers(),
+      body: { input: "hi" },
+    });
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) throw new Error("mid-stream error was retried");
+    const body = await collectSseBody(result.response);
+    expect(body).toContain("response.created");
+    expect(body).toContain('"status":413');
+  });
+
+  it("settles a size rejection once when abort races socket cleanup", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "error", status: 413 }));
+      });
+    });
+    const controller = new AbortController();
+    const upstreamUrl = `http://127.0.0.1:${server.port}/v1/responses`;
+    const originalClose = WebSocket.prototype.close;
+    let clientSocket: WebSocket | undefined;
+    let closeCalls = 0;
+    const closeSpy = vi.spyOn(WebSocket.prototype, "close").mockImplementation(function (
+      this: WebSocket,
+      code?: number,
+      reason?: string | Buffer
+    ) {
+      const result = originalClose.call(this, code, reason);
+      if (this.url === upstreamUrl.replace("http:", "ws:")) {
+        clientSocket = this;
+        closeCalls += 1;
+        controller.abort();
+      }
+      return result;
+    });
+    try {
+      const result = await tryResponsesWebsocketUpstream({
+        provider: codexProvider(),
+        upstreamUrl,
+        upstreamHeaders: new Headers(),
+        abortSignal: controller.signal,
+        body: { input: "hi" },
+      });
+      expect(result).toMatchObject({
+        failed: true,
+        reason: "ws_payload_too_large",
+        cacheableAsUnsupported: false,
+      });
+      expect(closeCalls).toBe(1);
+      expect(clientSocket?.listenerCount("message")).toBe(0);
+      expect(clientSocket?.listenerCount("open")).toBe(0);
+      expect(clientSocket?.listenerCount("unexpected-response")).toBe(0);
+    } finally {
+      closeSpy.mockRestore();
+    }
+  });
+
   it("returns ws_closed_before_first_event when upstream accepts but closes immediately", async () => {
     server = await startMockServer((socket) => {
       socket.on("message", () => {

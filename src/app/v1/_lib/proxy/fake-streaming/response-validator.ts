@@ -69,10 +69,12 @@ function validateNonStream(family: ProtocolFamily, body: string): ValidationResu
 }
 
 function validateAnthropicMessage(parsed: unknown): ValidationResult {
-  const obj = parsed as { content?: unknown };
+  const obj = parsed as { content?: unknown; stop_reason?: unknown };
   if (!Array.isArray(obj.content)) {
     return fail("missing_required_field", "anthropic response missing content array");
   }
+  // 请求级拒绝可以不带任何内容块；拒绝本身就是要交付给客户端的结果。
+  if (obj.stop_reason === "refusal") return SUCCESS;
   if (obj.content.length === 0) {
     return fail("no_deliverable_content", "anthropic content array is empty");
   }
@@ -226,6 +228,11 @@ function eventCarriesDeliverable(
   if (family === "anthropic") {
     const typed = json as { type?: unknown; delta?: unknown; content_block?: unknown };
     if (typed.type === "error") return false;
+    if (typed.type === "message_delta") {
+      const delta = typed.delta as { stop_reason?: unknown } | undefined;
+      // 请求级拒绝（可无内容块）同样是可交付结果
+      return delta?.stop_reason === "refusal";
+    }
     if (typed.type === "content_block_delta") {
       const delta = typed.delta as { type?: unknown; text?: unknown } | undefined;
       if (

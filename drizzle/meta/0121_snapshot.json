@@ -1594,9 +1594,63 @@
           ],
           "isUnique": false,
           "where": "\"message_request\".\"deleted_at\" IS NULL AND \"message_request\".\"client_ip\" IS NOT NULL",
-          "concurrently": false,
+          "concurrently": false
+        },
+        "idx_message_request_session_identity_prefix": {
+          "name": "idx_message_request_session_identity_prefix",
+          "columns": [
+            {
+              "expression": "COALESCE(\"session_identity\", \"session_id\") varchar_pattern_ops",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"created_at\" DESC NULLS LAST",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND (\"message_request\".\"blocked_by\" IS NULL OR \"message_request\".\"blocked_by\" <> 'warmup')"
+        },
+        "idx_message_request_session_id_prefix_cover": {
+          "name": "idx_message_request_session_id_prefix_cover",
+          "columns": [
+            {
+              "expression": "\"session_id\" varchar_pattern_ops",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"created_at\" DESC NULLS LAST",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND (\"message_request\".\"blocked_by\" IS NULL OR \"message_request\".\"blocked_by\" <> 'warmup')",
+          "concurrently": false
         }
       },
       "foreignKeys": {},
@@ -4965,9 +5019,63 @@
           ],
           "isUnique": false,
           "where": "\"usage_ledger\".\"blocked_by\" IS NULL AND \"usage_ledger\".\"is_replay\" = false",
-          "concurrently": false,
+          "concurrently": false
+        },
+        "idx_usage_ledger_session_identity_prefix": {
+          "name": "idx_usage_ledger_session_identity_prefix",
+          "columns": [
+            {
+              "expression": "COALESCE(\"session_identity\", \"session_id\") varchar_pattern_ops",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"created_at\" DESC NULLS LAST",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false,
+          "where": "\"usage_ledger\".\"blocked_by\" IS NULL"
+        },
+        "idx_usage_ledger_session_id_prefix": {
+          "name": "idx_usage_ledger_session_id_prefix",
+          "columns": [
+            {
+              "expression": "\"session_id\" varchar_pattern_ops",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"created_at\" DESC NULLS LAST",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"usage_ledger\".\"blocked_by\" IS NULL",
+          "concurrently": false
         }
       },
       "foreignKeys": {},

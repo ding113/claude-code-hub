@@ -200,6 +200,22 @@ describe("validateUpstreamResponse", () => {
       expect(failure("anthropic", body, false).ok).toBe(false);
     });
 
+    test("anthropic: empty content with end_turn still fails", () => {
+      const body = JSON.stringify({ type: "message", content: [], stop_reason: "end_turn" });
+      expect(failure("anthropic", body, false).ok).toBe(false);
+    });
+
+    test("anthropic: request-level refusal without content blocks is deliverable (#1491)", () => {
+      const body = JSON.stringify({
+        id: "msg",
+        type: "message",
+        content: [],
+        stop_reason: "refusal",
+        stop_details: { type: "refusal", category: "reasoning_extraction" },
+      });
+      expect(failure("anthropic", body, false).ok).toBe(true);
+    });
+
     test("openai-chat: empty choices array fails", () => {
       const body = JSON.stringify({
         id: "x",
@@ -248,6 +264,15 @@ describe("validateUpstreamResponse", () => {
         `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n` +
         `event: message_stop\ndata: {"type":"message_stop"}\n\n`;
       expect(failure("anthropic", sse, true).ok).toBe(true);
+    });
+
+    test("anthropic: refusal message_delta without content blocks accepted (#1491)", () => {
+      const sse =
+        `event: message_start\ndata: {"type":"message_start","message":{"id":"m","content":[]}}\n\n` +
+        `event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal"}}\n\n` +
+        `event: message_stop\ndata: {"type":"message_stop"}\n\n`;
+      expect(failure("anthropic", sse, true).ok).toBe(true);
+      expect(failure("anthropic", sse.replace('"refusal"', '"end_turn"'), true).ok).toBe(false);
     });
 
     test("openai-chat: chunks with delta content + [DONE] accepted", () => {

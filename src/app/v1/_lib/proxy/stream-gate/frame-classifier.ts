@@ -44,7 +44,7 @@ interface StreamSignal {
   doneSentinel?: string;
 }
 
-const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
+export const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
   anthropic: {
     contentRules: [
       {
@@ -86,6 +86,13 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
             ],
           },
         ],
+      },
+      {
+        // 请求级拒绝：模型可在不产生任何内容块的情况下以 stop_reason=refusal 结束。
+        // 拒绝本身就是需要交给客户端的请求结果（与 openai-chat/responses 的 refusal
+        // 内容规则一致），不能被当成空流伪造 502、触发重试或计入供应商熔断。
+        eventTypes: ["message_delta"],
+        valueMatches: [{ path: "delta.stop_reason", values: ["refusal"] }],
       },
     ],
     errorRules: [

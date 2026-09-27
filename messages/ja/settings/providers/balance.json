@@ -1,0 +1,42 @@
+{
+  "title": "アップストリーム残高",
+  "label": "残高",
+  "loading": "取得中...",
+  "unknownShort": "データなし",
+  "unlimited": "アップストリームはこのキーの上限なしを報告しています。",
+  "unlimitedShort": "無制限",
+  "unsupported": "このアップストリームには残高照会のエンドポイントがありません。",
+  "errorShort": "取得失敗",
+  "source": "取得元: {source}",
+  "granted": "付与済み: {amount}",
+  "used": "使用済み: {amount}",
+  "expiresAt": "有効期限: {time}",
+  "expiredAt": "{time} に期限切れ",
+  "checkedAt": "取得時刻: {time}",
+  "refreshHint": "クリックするとアップストリームに再照会します。",
+  "refreshAria": "アップストリーム残高を更新",
+  "refreshAll": "残高を更新",
+  "refreshingAll": "更新中...",
+  "refreshFailed": "残高を更新できませんでした",
+  "toolbarHint": "残高は各プロバイダー自身のキー、または設定済みの New API システムアクセストークンで照会され、10 分ごとに自動更新されます。",
+  "sources": {
+    "new-api-token-usage": "New API トークン残量",
+    "new-api-account": "New API アカウント残高",
+    "sub2api-usage": "Sub2API 利用状況",
+    "openai-billing": "OpenAI 互換の課金情報",
+    "deepseek-balance": "DeepSeek ウォレット",
+    "kimi-balance": "Moonshot ウォレット",
+    "chatgpt-credits": "ChatGPT アカウントのクレジット"
+  },
+  "errors": {
+    "unauthorized": "アップストリームがこのキーを拒否しました。",
+    "access_token_rejected": "アップストリームがシステムアクセストークンを拒否しました。トークンとユーザー ID を確認してください。",
+    "forbidden": "このキーには残高を読み取る権限がありません。",
+    "rate_limited": "アップストリームが残高照会をレート制限しました。",
+    "upstream_error": "アップストリームがエラーを返しました。",
+    "invalid_response": "アップストリームの応答を解析できませんでした。",
+    "timeout": "残高照会がタイムアウトしました。",
+    "network": "アップストリームに接続できませんでした。",
+    "invalid_url": "プロバイダーのアドレスが有効な URL ではありません。"
+  }
+}

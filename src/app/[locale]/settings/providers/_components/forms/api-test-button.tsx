@@ -162,6 +162,7 @@ export function ApiTestButton({
     invalid_value: "customHeaders.errors.invalidValue",
     empty_name: "customHeaders.errors.emptyName",
     crlf: "customHeaders.errors.crlf",
+    invalid_template: "customHeaders.errors.invalidTemplate",
   };
 
   const handleTest = async () => {

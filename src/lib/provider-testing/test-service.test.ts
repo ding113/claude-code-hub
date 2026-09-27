@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+const { fetchMock } = vi.hoisted(() => ({
+  fetchMock: vi.fn<typeof fetch>(),
+}));
+
 vi.mock("@/lib/proxy-agent", () => ({
   createProxyAgentForProvider: vi.fn(() => null),
+  fetchWithDispatcher: (...args: Parameters<typeof fetch>) => fetchMock(...args),
 }));
 
 import { executeProviderTest } from "./test-service";
-
-const fetchMock = vi.fn<typeof fetch>();
 
 function createMockResponse(
   responseBody: string,

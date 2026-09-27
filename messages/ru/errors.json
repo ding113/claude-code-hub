@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "Недостаточно локальных ресурсов для обработки запроса. Повторите попытку позже.",
   "_comment": "Error messages for Russian",
 
   "REQUIRED_FIELD": "{field} обязательно для заполнения",

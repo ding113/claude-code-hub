@@ -65,6 +65,13 @@ export class BufferedByteChunks {
     return chunks;
   }
 
+  /** 所有者仍负责生命周期；只读消费者不能修改这些视图。 */
+  views(): Uint8Array[] {
+    return this.tail && this.tailBytes > 0
+      ? [...this.chunks, this.tail.subarray(0, this.tailBytes)]
+      : [...this.chunks];
+  }
+
   clear(): void {
     this.chunks = [];
     this.tail = null;

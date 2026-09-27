@@ -184,10 +184,12 @@ describe("ProxyErrorHandler.handle durable persistence", () => {
     expect(persistOrder ?? Number.MAX_SAFE_INTEGER).toBeLessThan(endOrder ?? -1);
   });
 
-  test("keeps the trace when durable persistence rejects", async () => {
+  test("持久化失败保留 trace 和原始错误，并结束追踪及实时观测", async () => {
     mocks.updateMessageRequestDetailsDurably.mockRejectedValueOnce(new Error("db down"));
     const session = await createSession();
     attachMessageContext(session);
+
+    const close = vi.spyOn(session, "closeLiveObservability").mockResolvedValueOnce(undefined);
 
     await expect(ProxyErrorHandler.handle(session, new Error("fetch failed"))).rejects.toThrow(
       "db down"
@@ -197,7 +199,8 @@ describe("ProxyErrorHandler.handle durable persistence", () => {
       session,
       expect.objectContaining({ statusCode: 500, errorMessage: "fetch failed" })
     );
-    expect(mocks.endRequest).not.toHaveBeenCalled();
+    expect(mocks.endRequest).toHaveBeenCalledExactlyOnceWith(USER.id, 901);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   test("persists the final overridden status", async () => {

@@ -15,7 +15,7 @@
   "customConfig": "カスタム",
   "customHeaders": {
     "label": "カスタムリクエストヘッダー（JSON）",
-    "desc": "静的なヘッダーがテストリクエストにマージされます。認証ヘッダーは上書きされません。",
+    "desc": "静的な値またはテンプレートがテストリクエストにマージされます。認証ヘッダーは上書きされません。接続テストにはセッションがないため '{{session.id}}' と '{{session.client_id}}' はスキップされます。",
     "geminiNotSupported": "Gemini テスト経路ではカスタムヘッダーをサポートしていません",
     "errors": {
       "invalidJson": "カスタムヘッダーは有効な JSON である必要があります",
@@ -25,7 +25,8 @@
       "protectedName": "認証ヘッダーはカスタムヘッダーで設定できません",
       "invalidValue": "ヘッダー値は文字列である必要があります",
       "emptyName": "ヘッダー名は空にできません",
-      "crlf": "ヘッダー名と値に改行を含めることはできません"
+      "crlf": "ヘッダー名と値に改行を含めることはできません",
+      "invalidTemplate": "ヘッダーテンプレートが無効です。対応: '{{header.Name}}'、'{{session.id}}'、'{{session.client_id}}'"
     }
   },
   "customPayloadDesc": "カスタムJSONペイロードを入力してデフォルトのリクエストボディを上書き",

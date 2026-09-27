@@ -1,5 +1,11 @@
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { finalizeStreamOutputForClient } from "@/lib/langfuse/stream-final-output";
+import {
+  createFinalOutputUnavailable,
+  type StreamFinalOutput,
+} from "@/lib/langfuse/stream-final-output-core";
+import type { TraceContext } from "@/lib/langfuse/trace-proxy-request";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 
@@ -62,6 +68,11 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
       ? truncateResponseTextForLangfuse(session.forwardedRequestBody)
       : null;
   const requestMessage = buildRequestMessagePreview(session.request.message);
+  const clientIp = session.clientIp;
+  const originalHeaders =
+    typeof session.getOriginalHeaders === "function"
+      ? new Headers(session.getOriginalHeaders())
+      : new Headers(session.headers);
 
   return {
     startTime: session.startTime,
@@ -82,7 +93,9 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
     forwardStartTime: session.forwardStartTime,
     forwardedRequestBody,
     sessionId: session.sessionId,
+    clientIp,
     originalFormat: session.originalFormat,
+    getOriginalHeaders: () => new Headers(originalHeaders),
     getMessagesLength: () => messagesLength,
     getEndpoint: () => endpoint,
     getCurrentModel: () => currentModel,
@@ -94,6 +107,18 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
     getCacheTtlResolved: () => cacheTtlResolved,
     getContext1mApplied: () => context1mApplied,
   } as unknown as ProxySession;
+}
+
+function enqueueLangfuseTrace(traceContext: TraceContext): void {
+  void import("@/lib/langfuse/trace-proxy-request")
+    .then(({ traceProxyRequest }) => {
+      void traceProxyRequest(traceContext);
+    })
+    .catch((err) => {
+      logger.warn("[Langfuse] Proxy trace failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 }
 
 /**
@@ -119,9 +144,9 @@ export function emitProxyLangfuseTrace(
     });
     return;
   }
-
   const {
     responseHeaders,
+    responseText: rawResponseText,
     durationMs,
     statusCode,
     isStreaming,
@@ -131,26 +156,37 @@ export function emitProxyLangfuseTrace(
     sseEventCount,
     errorMessage,
   } = data;
+  let finalResponseOutput: StreamFinalOutput | undefined;
 
-  void import("@/lib/langfuse/trace-proxy-request")
-    .then(({ traceProxyRequest }) => {
-      void traceProxyRequest({
-        session: sessionSnapshot,
-        responseHeaders,
-        durationMs,
-        statusCode,
-        isStreaming,
-        responseText,
-        usageMetrics,
-        costUsd,
-        costBreakdown,
-        sseEventCount,
-        errorMessage,
+  if (isStreaming && rawResponseText.length > 0) {
+    try {
+      finalResponseOutput = finalizeStreamOutputForClient(
+        rawResponseText,
+        session.originalFormat,
+        true
+      );
+    } catch (error) {
+      finalResponseOutput = createFinalOutputUnavailable("stream_error");
+      logger.warn("[Langfuse] Stream finalization failed", {
+        error: error instanceof Error ? error.message : String(error),
       });
-    })
-    .catch((err) => {
-      logger.warn("[Langfuse] Proxy trace failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
+    }
+  }
+
+  const traceResponseText = isStreaming ? undefined : responseText;
+
+  enqueueLangfuseTrace({
+    session: sessionSnapshot,
+    responseHeaders,
+    durationMs,
+    statusCode,
+    isStreaming,
+    ...(traceResponseText !== undefined ? { responseText: traceResponseText } : {}),
+    ...(finalResponseOutput !== undefined ? { finalResponseOutput } : {}),
+    usageMetrics,
+    costUsd,
+    costBreakdown,
+    sseEventCount,
+    errorMessage,
+  });
 }

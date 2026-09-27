@@ -5,6 +5,7 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
   type MigrationIndexPreflightExecutor,
@@ -159,7 +160,8 @@ function createMigrationIndexPreflightExecutor(
         SELECT
           c.oid IS NOT NULL AS exists,
           COALESCE(i.indisvalid, false) AS valid,
-          obj_description(c.oid, 'pg_class') AS marker
+          obj_description(c.oid, 'pg_class') AS marker,
+          CASE WHEN c.oid IS NULL THEN NULL ELSE pg_get_indexdef(c.oid) END AS definition
         FROM (SELECT to_regclass(${qualifiedName}) AS oid) resolved
         LEFT JOIN pg_class c ON c.oid = resolved.oid
         LEFT JOIN pg_index i ON i.indexrelid = c.oid
@@ -168,6 +170,7 @@ function createMigrationIndexPreflightExecutor(
         exists: row?.exists === true,
         valid: row?.valid === true,
         marker: typeof row?.marker === "string" ? row.marker : null,
+        definition: typeof row?.definition === "string" ? row.definition : null,
       };
     },
   };
@@ -222,12 +225,20 @@ export async function runMigrations() {
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
     const indexExecutor = createMigrationIndexPreflightExecutor(migrationClient);
+    const env = getEnvConfig();
+    const timeouts = {
+      lockTimeoutMs: env.MIGRATION_INDEX_LOCK_TIMEOUT_MS,
+      statementTimeoutMs: env.MIGRATION_INDEX_STATEMENT_TIMEOUT_MS,
+    };
     await runSessionReplayMigrationPlan({
       baseTablesReady: await sessionReplayBaseTablesExist(migrationClient),
       latestMigrationCreatedAt: await getLatestDrizzleMigrationCreatedAt(migrationClient),
       migrate: () => migrate(db, { migrationsFolder }),
       runIndexPreflight: (options) =>
-        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, options),
+        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, {
+          ...options,
+          timeouts,
+        }),
     });
 
     logger.info("Database migrations completed successfully");

@@ -48,6 +48,7 @@ import {
 import { getPresetsForProvider } from "@/lib/provider-testing/presets";
 import {
   createProxyAgentForProvider,
+  fetchWithDispatcher,
   isValidProxyUrl,
   type ProviderProxyConfig,
 } from "@/lib/proxy-agent";
@@ -334,6 +335,10 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         name: provider.name,
         url: provider.url,
         maskedKey: maskKey(provider.key),
+        maskedNewApiAccessToken: provider.newApiAccessToken
+          ? maskKey(provider.newApiAccessToken)
+          : null,
+        newApiUserId: provider.newApiUserId,
         isEnabled: provider.isEnabled,
         weight: provider.weight,
         priority: provider.priority,
@@ -537,6 +542,8 @@ export async function addProvider(data: {
   name: string;
   url: string;
   key: string;
+  new_api_access_token?: string | null;
+  new_api_user_id?: number | null;
   is_enabled?: boolean;
   weight?: number;
   priority?: number;
@@ -752,6 +759,8 @@ export async function editProvider(
     name?: string;
     url?: string;
     key?: string;
+    new_api_access_token?: string | null;
+    new_api_user_id?: number | null;
     is_enabled?: boolean;
     weight?: number;
     priority?: number;
@@ -977,7 +986,13 @@ export async function editProvider(
       before: redactProviderUrlFields(preimageFields),
       after: redactProviderUrlFields(data),
       success: true,
-      redactExtraKeys: ["key", "custom_headers", "customHeaders"],
+      redactExtraKeys: [
+        "key",
+        "new_api_access_token",
+        "newApiAccessToken",
+        "custom_headers",
+        "customHeaders",
+      ],
     });
     return {
       ok: true,
@@ -1464,6 +1479,8 @@ type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
 const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider> = {
   name: "name",
   url: "url",
+  new_api_access_token: "newApiAccessToken",
+  new_api_user_id: "newApiUserId",
   is_enabled: "isEnabled",
   weight: "weight",
   priority: "priority",
@@ -3428,7 +3445,7 @@ export async function testProviderProxy(data: {
       }
 
       // 发起测试请求
-      const response = await fetch(data.providerUrl, init);
+      const response = await fetchWithDispatcher(data.providerUrl, init);
       const responseTime = Date.now() - startTime;
 
       return {
@@ -4321,7 +4338,7 @@ async function executeProviderApiTest(
         init.dispatcher = proxyConfig.agent;
       }
 
-      let response = await fetch(url, init);
+      let response = await fetchWithDispatcher(url, init);
       let responseTime = Date.now() - startTime;
 
       const shouldAttemptDirectRetry =
@@ -4343,7 +4360,7 @@ async function executeProviderApiTest(
 
         const fallbackStartTime = Date.now();
         try {
-          response = await fetch(url, fallbackInit);
+          response = await fetchWithDispatcher(url, fallbackInit);
           responseTime = Date.now() - fallbackStartTime;
 
           logger.info("Provider API test: Direct connection succeeded after proxy failure", {
@@ -5341,7 +5358,7 @@ async function executeProxiedFetch(
     init.dispatcher = proxy.agent;
   }
 
-  return fetch(url, init);
+  return fetchWithDispatcher(url, init);
 }
 
 /**

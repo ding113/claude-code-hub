@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   CODEX_IMAGE_GENERATION_PREFERENCE_VALUES,
+  NEW_API_ACCESS_TOKEN_MAX_LENGTH,
+  NEW_API_USER_ID_MAX,
   PROVIDER_DEFAULTS,
   PROVIDER_KEY_MAX_LENGTH,
   PROVIDER_LIMITS,
@@ -459,7 +461,7 @@ export const KeyFormSchema = z.object({
   cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 
-// 共享：静态自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则。
+// 共享：自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则（含动态模板）。
 // 行为：
 // - 缺失 → 输出中省略字段（保留可选性，不修改既有行为）
 // - 显式 null → null（清空）
@@ -483,6 +485,24 @@ const PROVIDER_CUSTOM_HEADERS_SCHEMA = z
   })
   .optional();
 
+// 共享：New API 系统访问令牌。去掉首尾空白后为空时归一化为 null（清空）
+const PROVIDER_NEW_API_ACCESS_TOKEN_SCHEMA = z
+  .string()
+  .trim()
+  .max(NEW_API_ACCESS_TOKEN_MAX_LENGTH, "系统访问令牌长度超出限制")
+  .transform((value) => (value === "" ? null : value))
+  .nullable()
+  .optional();
+
+// 共享：New API 用户 ID，旧版本 New API 要求与系统访问令牌一起提供
+const PROVIDER_NEW_API_USER_ID_SCHEMA = z
+  .number()
+  .int("用户 ID 必须是整数")
+  .min(1, "用户 ID 必须大于 0")
+  .max(NEW_API_USER_ID_MAX, "用户 ID 超出整数范围")
+  .nullable()
+  .optional();
+
 /**
  * 服务商创建数据验证schema
  */
@@ -491,6 +511,8 @@ export const CreateProviderSchema = z
     name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
     url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
     key: z.string().min(1, "API密钥不能为空").max(PROVIDER_KEY_MAX_LENGTH, "API密钥长度超出限制"),
+    new_api_access_token: PROVIDER_NEW_API_ACCESS_TOKEN_SCHEMA,
+    new_api_user_id: PROVIDER_NEW_API_USER_ID_SCHEMA,
     // 数据库字段命名：下划线
     is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
     weight: z
@@ -744,6 +766,8 @@ export const UpdateProviderSchema = z
       .min(1, "API密钥不能为空")
       .max(PROVIDER_KEY_MAX_LENGTH, "API密钥长度超出限制")
       .optional(),
+    new_api_access_token: PROVIDER_NEW_API_ACCESS_TOKEN_SCHEMA,
+    new_api_user_id: PROVIDER_NEW_API_USER_ID_SCHEMA,
     is_enabled: z.boolean().optional(),
     weight: z
       .number()

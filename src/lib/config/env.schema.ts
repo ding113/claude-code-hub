@@ -123,6 +123,9 @@ export const EnvSchema = z.object({
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串
   AUTO_MIGRATE: z.string().default("true").transform(booleanTransform),
+  // 迁移时并发建索引的锁等待与单条语句上限；大表或长事务较多时调高，超时会终止启动
+  MIGRATION_INDEX_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(5_000),
+  MIGRATION_INDEX_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(60_000).default(900_000),
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
@@ -201,6 +204,10 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
+  // 响应结束后后台消费者继续持有请求内存的最长宽限（毫秒）。超时后强制归还租约并记录
+  // 卡住的所有者标签；实际宽限不会短于 HEDGE_LOSER_DRAIN_TIMEOUT_MS + 30 秒。
+  REQUEST_MEMORY_BACKGROUND_GRACE_MS: z.coerce.number().int().min(1000).default(150_000),
+
   // 客户端断线后的 detached stream 使用进程级带权预算；内置 cluster 会先分摊容器总预算。
   DETACHED_STREAM_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(4096).default(64),
   DETACHED_STREAM_BUDGET_BYTES: z.coerce
@@ -233,7 +240,7 @@ export const EnvSchema = z.object({
   STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: z.coerce
     .number()
     .int()
-    .min(2 * 1024)
+    .min(128 * 1024)
     .max(2 * 1024 * 1024 * 1024)
     .default(256 * 1024 * 1024),
   // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
@@ -270,6 +277,9 @@ export const EnvSchema = z.object({
   LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
   LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
   LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
+  // v5 first-class attributes; consumed by LangfuseSpanProcessor
+  LANGFUSE_TRACING_ENVIRONMENT: z.string().optional(),
+  LANGFUSE_RELEASE: z.string().optional(),
 
   // IP 归属地查询服务
   // 默认使用官方托管服务；可通过 IP_GEO_API_URL 自托管
@@ -283,14 +293,6 @@ export const EnvSchema = z.object({
       code: "custom",
       path: ["DETACHED_STREAM_METERING_RESERVE_BYTES"],
       message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
-    });
-  }
-  if (env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP < env.STREAM_GATE_PREBUFFER_BYTE_CAP * 4) {
-    context.addIssue({
-      code: "custom",
-      path: ["STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP"],
-      message:
-        "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP must be at least four times STREAM_GATE_PREBUFFER_BYTE_CAP",
     });
   }
 });

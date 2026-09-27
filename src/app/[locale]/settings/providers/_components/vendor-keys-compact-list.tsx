@@ -55,6 +55,7 @@ import type {
   ProviderType,
 } from "@/types/provider";
 import type { User } from "@/types/user";
+import { ProviderBalanceChip } from "./balance/provider-balance-chip";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
 import { ProviderFormDialogContent } from "./provider-form-dialog-content";
@@ -81,6 +82,7 @@ export function VendorKeysCompactList(props: {
   const t = useTranslations("settings.providers");
   const tForm = useTranslations("settings.providers.form");
   const tList = useTranslations("settings.providers.list");
+  const tBalance = useTranslations("settings.providers.balance");
 
   const canEdit = props.currentUser?.role === "admin";
 
@@ -180,6 +182,9 @@ export function VendorKeysCompactList(props: {
                 </TableHead>
                 <TableHead className="hidden lg:table-cell h-7 w-[140px] text-right">
                   {tList("todayUsageLabel")}
+                </TableHead>
+                <TableHead className="hidden lg:table-cell h-7 w-[110px] text-right">
+                  {tBalance("label")}
                 </TableHead>
                 <TableHead className="h-7 w-[140px] text-right">{t("columnActions")}</TableHead>
               </TableRow>
@@ -489,6 +494,9 @@ function VendorKeyRow(props: {
               </span>
             </div>
           )}
+        </TableCell>
+        <TableCell className="hidden lg:table-cell py-1 text-right">
+          <ProviderBalanceChip providerId={props.provider.id} />
         </TableCell>
         <TableCell className="py-1 text-right">
           <div className="flex items-center justify-end gap-2">

@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "本機請求處理容量不足，請稍後重試。",
   "_comment": "Error messages for Chinese Traditional",
 
   "REQUIRED_FIELD": "{field}不能為空",

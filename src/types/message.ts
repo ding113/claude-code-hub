@@ -86,6 +86,9 @@ export interface ProviderChainItem {
   // 时间戳和尝试信息
   timestamp?: number;
   attemptNumber?: number; // 第几次尝试（用于标识重试）
+  // legacy Hedge / Discovery 写入：对应路由追踪里的 attemptId 与 round，请求详情据此精确对应尝试卡片
+  routingAttemptId?: string;
+  routingRound?: number;
 
   // 修复：新增成功时的状态码
   statusCode?: number;

@@ -14,6 +14,7 @@ import statusPage from "./statusPage.json";
 import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
+import providersBalance from "./providers/balance.json";
 import providersBatchEdit from "./providers/batchEdit.json";
 import providersBatchTest from "./providers/batchTest.json";
 import providersDispatchSimulator from "./providers/dispatchSimulator.json";
@@ -32,6 +33,7 @@ import providersTypes from "./providers/types.json";
 
 import providersFormApiTest from "./providers/form/apiTest.json";
 import providersFormAllowedModelRules from "./providers/form/allowedModelRules.json";
+import providersFormBalanceAccess from "./providers/form/balanceAccess.json";
 import providersFormButtons from "./providers/form/buttons.json";
 import providersFormCommon from "./providers/form/common.json";
 import providersFormDeleteDialog from "./providers/form/deleteDialog.json";
@@ -59,6 +61,7 @@ const providersForm = {
   ...providersFormCommon,
   apiTest: providersFormApiTest,
   allowedModelRules: providersFormAllowedModelRules,
+  balanceAccess: providersFormBalanceAccess,
   buttons: providersFormButtons,
   common: providersFormCommon,
   deleteDialog: providersFormDeleteDialog,
@@ -84,6 +87,7 @@ const providersForm = {
 const providers = {
   ...providersStrings,
   autoSort: providersAutoSort,
+  balance: providersBalance,
   batchEdit: providersBatchEdit,
   batchTest: providersBatchTest,
   dispatchSimulator: providersDispatchSimulator,

@@ -1,18 +1,15 @@
+import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { getMemoryGovernor, LocalCapacityError } from "@/lib/memory/governor";
+import { attachRequestMemory } from "@/lib/memory/request-lifetime";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { inferUpstreamErrorStatusCodeFromText } from "@/lib/utils/upstream-error-detection";
 import { BufferedByteChunks } from "../buffered-byte-chunks";
 import { ProxyError } from "../errors";
-import {
-  classifyFrame,
-  type FrameVerdict,
-  isCleanResponsesCompletion,
-  isRequestEchoFrame,
-  isResponsesIncompleteCompletion,
-  type ProtocolFamily,
-} from "./frame-classifier";
+import { classifyFrame, type FrameVerdict, type ProtocolFamily } from "./frame-classifier";
 import type { StreamGatePrebufferBudget, StreamGatePrebufferLease } from "./prebuffer-budget";
+import { ProbedSseFrames } from "./probed-sse-frames";
 import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
 
 /**
@@ -21,7 +18,9 @@ import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
  * - content 帧到达 -> 提交：返回已缓冲的前缀字节 + 原 reader，调用方拼接透传
  * - error / malformed 帧 -> precommit 失败：调用方抛错走现有供应商切换循环
  * - terminal 先于 content -> 空流失败；但 openai-responses 的干净完成（status=completed）
- *   视为成功响应直接提交，空回复是合法结果（见 isCleanResponsesCompletion）
+ *   视为成功响应直接提交，空回复是合法结果（见 isCleanResponsesCompletion）；
+ *   anthropic 的 message_delta(stop_reason=refusal) 由分类器判为 content，请求级拒绝
+ *   在 message_stop 之前即提交透传
  * - 流提前结束（无终止帧的 EOF）-> 空流失败
  * - neutral 帧入缓冲；超过 event/byte 上限 -> prebuffer_overflow 失败
  *   （请求回显帧不计入字节上限，见 isRequestEchoFrame）
@@ -42,12 +41,17 @@ export type StreamGateFailureReason =
  * 门控 precommit 错误。流内 error 是 HTTP 200 body 合成的错误：明确的 4xx 状态应保留，
  * 让既有错误规则决定是否重试；无法确认是客户端错误时仍按 502 走供应商故障路径。
  * 熔断计入与否再由 isRequestScopedGateFailure() 区分。
+ *
+ * statusCode 是 CCH 本地合成的状态；上游真实 HTTP 状态单独保存在 upstreamStatusCode
+ * 并写入错误体，避免日志里的 `returned 502` 被误读为上游真的返回了 502。
  */
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
   readonly gateFamily: ProtocolFamily;
   /** 干净终止帧先于任何内容到达（区别于上游断流 / 空 body 的 EOF） */
   readonly terminalBeforeContent: boolean;
+  /** 上游响应的真实 HTTP 状态（门控只作用于已成功建立的流式响应）；未知时为 null */
+  readonly upstreamStatusCode: number | null;
 
   constructor(
     reason: StreamGateFailureReason,
@@ -56,16 +60,18 @@ export class StreamPrecommitError extends ProxyError {
       providerId: number;
       providerName: string;
       frameData?: string;
+      inferenceText?: string;
       framesSeen?: number;
       bufferedBytes?: number;
       echoExcludedBytes?: number;
       terminalBeforeContent?: boolean;
+      upstreamStatusCode?: number;
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
     const inferred =
       reason === "gate_error" && detail.frameData
-        ? inferUpstreamErrorStatusCodeFromText(detail.frameData)
+        ? inferUpstreamErrorStatusCodeFromText(detail.inferenceText ?? detail.frameData)
         : null;
     const inferredClientError =
       inferred && inferred.statusCode >= 400 && inferred.statusCode < 500 ? inferred : null;
@@ -85,6 +91,7 @@ export class StreamPrecommitError extends ProxyError {
     this.gateReason = reason;
     this.gateFamily = detail.family;
     this.terminalBeforeContent = detail.terminalBeforeContent === true;
+    this.upstreamStatusCode = detail.upstreamStatusCode ?? null;
   }
 }
 
@@ -102,8 +109,9 @@ export class StreamPrecommitError extends ProxyError {
  * EOF 分支，那是真实的供应商侧异常，必须继续计入熔断。
  *
  * 其余家族的 `empty_stream` 保持计入：anthropic / openai-chat / gemini 在正常空回复下
- * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列），只吐终止帧属于畸形
- * 流，是真实的供应商侧异常。
+ * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列；anthropic 请求级
+ * 拒绝的 `message_delta.delta.stop_reason=refusal` 由分类器判为 content 直接提交），
+ * 没有任何内容或明确拒绝就只吐终止帧属于畸形流，是真实的供应商侧异常。
  *
  * 其余 reason 一律计入：`gate_error` / `decode_error` 是真实上游错误帧或损坏载荷，
  * `idle_timeout` 是真实上游静默，`prebuffer_overflow` 是异常中性帧洪泛。
@@ -126,6 +134,7 @@ function buildGateErrorBody(
     bufferedBytes?: number;
     echoExcludedBytes?: number;
     terminalBeforeContent?: boolean;
+    upstreamStatusCode?: number;
   }
 ): string {
   if (reason === "gate_error" && detail.frameData) {
@@ -137,6 +146,9 @@ function buildGateErrorBody(
       type: "stream_gate_precommit",
       reason,
       family: detail.family,
+      ...(detail.upstreamStatusCode !== undefined
+        ? { upstream_status_code: detail.upstreamStatusCode }
+        : {}),
       frames_seen: detail.framesSeen,
       buffered_bytes: detail.bufferedBytes,
       ...(detail.echoExcludedBytes ? { echo_excluded_bytes: detail.echoExcludedBytes } : {}),
@@ -166,6 +178,18 @@ export function resolveStreamGateMode(): StreamGateMode {
   }
 }
 
+/**
+ * 是否允许在提交前扣留客户端字节。
+ *
+ * 只有 enforce 且未开启高并发模式时才扣留；off / shadow / 高并发一律 TTFB 优先，
+ * 首个非空上游字节直达客户端。Replay owner 也不例外：坏流由 response-handler 的
+ * StreamProtocolObserver 事后 abort（条目不发布），不再用「零字节 failover」换取
+ * 首字节延迟——那会让关闭门控的部署仍然按首个内容帧交付。
+ */
+export function isStreamGatePrecommitActive(highConcurrencyMode: boolean): boolean {
+  return resolveStreamGateMode() === "enforce" && !highConcurrencyMode;
+}
+
 export interface StreamGateCaps {
   prebufferEventCap: number;
   prebufferByteCap: number;
@@ -187,6 +211,8 @@ export interface StreamGateOptions extends StreamGateCaps {
   family: ProtocolFamily;
   providerId: number;
   providerName: string;
+  /** 上游响应真实 HTTP 状态，仅用于区分门控本地错误与上游错误的可观测性 */
+  upstreamStatusCode?: number;
   /** 首个非空上游 chunk 到达时回调一次（调用方用于清除首字节计时器，恢复其原始语义） */
   onFirstByte?: () => void;
   /** 门控等待期的读间隔静默上限（毫秒；<=0 或未设不启用），对齐提交后 response-handler 的静默超时 */
@@ -195,6 +221,7 @@ export interface StreamGateOptions extends StreamGateCaps {
   captureCommitMarker?: boolean;
   /** 进程级共享前缀预算；生产路径必须传入，单元测试可省略。 */
   prebufferBudget?: StreamGatePrebufferBudget;
+  prebufferLease?: StreamGatePrebufferLease;
   /** 等待共享预算时使用与上游请求相同的取消信号。 */
   abortSignal?: AbortSignal;
   /** 开始等待本地预算；竞速路径用它暂停本地 hedge 阈值。 */
@@ -229,8 +256,6 @@ export type StreamGateResult =
     }
   | { committed: false; error: Error };
 
-const PREBUFFER_MEMORY_RESERVATION_MULTIPLIER = 4;
-
 /**
  * 对上游 SSE body reader 执行首个有效内容门控。
  *
@@ -242,15 +267,16 @@ export async function runStreamContentGate(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   options: StreamGateOptions
 ): Promise<StreamGateResult> {
+  const gateStarted = performance.now();
   let prebufferLease: StreamGatePrebufferLease | null = null;
   let leaseTransferred = false;
-  const parser = new SseFrameParser({
-    maxBufferedCharacters: options.prebufferByteCap,
-    bufferLimitExemption: {
-      maxBufferedCharacters: options.prebufferByteCap * 2,
-      matches: (eventName, dataHead) => isRequestEchoFrame(options.family, eventName, dataHead),
-    },
+  let parserDepthBytes = 16 * 1024;
+  const parser = new ProbedSseFrames(options.family, options.prebufferByteCap, (bytes) => {
+    if (bytes <= parserDepthBytes) return;
+    if (store && !store.growScratchBy(bytes - parserDepthBytes)) throw new LocalCapacityError();
+    parserDepthBytes = bytes;
   });
+  let store: ByteStore | null = null;
   const buffered = new BufferedByteChunks();
   let bufferedBytes = 0;
   let echoExcludedBytes = 0;
@@ -262,29 +288,64 @@ export async function runStreamContentGate(
     reason: StreamGateFailureReason,
     frameData?: string,
     terminalBeforeContent = false
-  ): StreamGateResult => ({
-    committed: false,
-    error: new StreamPrecommitError(reason, {
-      family: options.family,
-      providerId: options.providerId,
-      providerName: options.providerName,
-      frameData,
-      framesSeen,
-      bufferedBytes,
-      echoExcludedBytes,
-      terminalBeforeContent,
-    }),
-  });
+  ): StreamGateResult => {
+    const inferenceText = reason === "gate_error" ? parser.lastFrame?.inferenceText : undefined;
+    if (
+      inferenceText &&
+      inferenceText.length > 2000 &&
+      prebufferLease &&
+      !prebufferLease.tryGrow(prebufferLease.reservedBytes + inferenceText.length * 16)
+    ) {
+      return { committed: false, error: new LocalCapacityError() };
+    }
+    return {
+      committed: false,
+      error: new StreamPrecommitError(reason, {
+        family: options.family,
+        providerId: options.providerId,
+        providerName: options.providerName,
+        frameData,
+        inferenceText,
+        framesSeen,
+        bufferedBytes,
+        echoExcludedBytes,
+        terminalBeforeContent,
+        upstreamStatusCode: options.upstreamStatusCode,
+      }),
+    };
+  };
   const exceedsByteCap = () =>
     bufferedBytes - Math.min(echoExcludedBytes, options.prebufferByteCap) >
     options.prebufferByteCap;
 
   const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => {
-    const retainedPrefixBytes = buffered.retainedByteLength;
-    const prefixChunks = buffered.take();
+    const retainedPrefixBytes = store?.retainedByteLength ?? buffered.retainedByteLength;
+    const prefixChunks = store ? store.takeChunks() : buffered.take();
     // 读取期间需要覆盖 parser、输入副本和前缀的最坏峰值；提交后 parser
     // 已停止，租约只需覆盖仍挂在下游 pending slot 中的实际 backing bytes。
-    prebufferLease?.shrinkTo(retainedPrefixBytes);
+    prebufferLease?.shrinkTo(store?.spilled ? STORE_SCRATCH_BYTES : retainedPrefixBytes);
+    if (store && prebufferLease) {
+      const ownedStore = store;
+      const ownedLease = prebufferLease;
+      prebufferLease = {
+        get reservedBytes() {
+          return ownedLease.reservedBytes;
+        },
+        tryGrow: (bytes) => ownedLease.tryGrow(bytes),
+        shrinkTo: (bytes) => ownedLease.shrinkTo(bytes),
+        ...(ownedStore.spilled ? { readPrefix: () => ownedStore.readPrefix() } : {}),
+        release: () => {
+          if (!ownedStore.spilled) ownedLease.release();
+          void ownedStore
+            .dispose(() => ownedLease.release())
+            .catch((error) =>
+              logger.warn("[StreamGate] Prefix cleanup failed", { error: String(error) })
+            );
+        },
+      };
+      // 提交后 finally 不再兜底；落盘前缀的文件清理同样交给请求作用域兜底。
+      attachRequestMemory(prebufferLease);
+    }
     leaseTransferred = true;
     return {
       committed: true,
@@ -299,11 +360,14 @@ export async function runStreamContentGate(
   };
 
   try {
-    if (options.prebufferBudget) {
+    if (options.prebufferLease) {
+      prebufferLease = options.prebufferLease;
+      store = new ByteStore(prebufferLease, { signal: options.abortSignal });
+    } else if (options.prebufferBudget) {
       if (options.abortSignal?.aborted) {
         return { committed: false, error: abortSignalError(options.abortSignal) };
       }
-      const reservationBytes = options.prebufferByteCap * PREBUFFER_MEMORY_RESERVATION_MULTIPLIER;
+      const reservationBytes = STORE_SCRATCH_BYTES;
       const budgetSnapshot = options.prebufferBudget.snapshot();
       // snapshot 与 acquire 之间没有异步边界；只在本次调用确实会进入 FIFO
       // 队列时暂停供应商计时，避免正常热路径反复清除并重建 timer。
@@ -317,6 +381,7 @@ export async function runStreamContentGate(
           reservationBytes,
           options.abortSignal
         );
+        store = new ByteStore(prebufferLease, { signal: options.abortSignal });
       } catch (error) {
         return {
           committed: false,
@@ -350,7 +415,7 @@ export async function runStreamContentGate(
         try {
           parser.finishVisit((eventName, data) => {
             framesSeen++;
-            const verdict = classifyFrame(options.family, eventName, data);
+            const verdict = parser.lastFrame!.verdict;
             if (verdict === "content") {
               trailingResult = commit(eventName, true);
               return false;
@@ -366,8 +431,7 @@ export async function runStreamContentGate(
             if (
               verdict === "terminal" &&
               options.family === "openai-responses" &&
-              (isCleanResponsesCompletion(eventName, data) ||
-                isResponsesIncompleteCompletion(eventName, data))
+              parser.lastFrame!.acceptTerminal
             ) {
               trailingResult = commit(eventName, true);
               return false;
@@ -405,14 +469,21 @@ export async function runStreamContentGate(
       if (chunk.byteLength > options.prebufferByteCap * 2 - bufferedBytes) {
         return failure("prebuffer_overflow");
       }
-      buffered.append(chunk);
+      if (store) await store.append(chunk);
+      else buffered.append(chunk);
       bufferedBytes += chunk.byteLength;
+      await store?.reserveScratch(
+        STORE_SCRATCH_BYTES +
+          Math.max(0, Math.min(bufferedBytes, 64 * 1024) - 8192) * 2 +
+          parserDepthBytes -
+          16 * 1024
+      );
 
       let frameResult: StreamGateResult | null = null;
       try {
         parser.visit(chunk, (eventName, data) => {
           framesSeen++;
-          const verdict: FrameVerdict = classifyFrame(options.family, eventName, data);
+          const verdict: FrameVerdict = parser.lastFrame!.verdict;
           if (verdict === "content") {
             frameResult = exceedsByteCap()
               ? failure("prebuffer_overflow")
@@ -428,11 +499,7 @@ export async function runStreamContentGate(
             return false;
           }
           if (verdict === "terminal") {
-            if (
-              options.family === "openai-responses" &&
-              (isCleanResponsesCompletion(eventName, data) ||
-                isResponsesIncompleteCompletion(eventName, data))
-            ) {
+            if (options.family === "openai-responses" && parser.lastFrame!.acceptTerminal) {
               frameResult = exceedsByteCap()
                 ? failure("prebuffer_overflow")
                 : commit(eventName, false);
@@ -442,8 +509,8 @@ export async function runStreamContentGate(
             return false;
           }
           // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限。
-          if (isRequestEchoFrame(options.family, eventName, data)) {
-            echoExcludedBytes += Buffer.byteLength(data, "utf8");
+          if (parser.lastFrame!.echo) {
+            echoExcludedBytes += parser.lastFrame!.dataBytes;
           }
           if (framesSeen > options.prebufferEventCap) {
             frameResult = failure("prebuffer_overflow");
@@ -464,10 +531,22 @@ export async function runStreamContentGate(
         return failure("prebuffer_overflow");
       }
     }
+  } catch (error) {
+    return { committed: false, error: error instanceof Error ? error : new Error(String(error)) };
   } finally {
+    if (options.prebufferBudget || options.prebufferLease)
+      getMemoryGovernor().observe("gate", performance.now() - gateStarted, bufferedBytes);
     if (!leaseTransferred) {
       buffered.clear();
-      prebufferLease?.release();
+      const spilled = store?.spilled;
+      const cleanup = store
+        ?.dispose(() => prebufferLease?.release())
+        .catch((error) =>
+          logger.warn("[StreamGate] Prefix cleanup failed", { error: String(error) })
+        );
+      // 失败结果不等待磁盘关闭/删除；清理回调在 I/O 实际结束后归还额度。
+      if (!spilled) await cleanup;
+      if (!store) prebufferLease?.release();
     }
   }
 }

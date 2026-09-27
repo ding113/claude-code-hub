@@ -25,12 +25,21 @@ export async function initLangfuse(): Promise<void> {
     const { NodeSDK: OtelNodeSDK } = await import("@opentelemetry/sdk-node");
     const { LangfuseSpanProcessor: LfSpanProcessor } = await import("@langfuse/otel");
 
+    if (process.env.LANGFUSE_DEBUG === "true") {
+      const { configureGlobalLogger, LogLevel } = await import("@langfuse/core");
+      configureGlobalLogger({ level: LogLevel.DEBUG });
+    }
+
     const sampleRate = Number.parseFloat(process.env.LANGFUSE_SAMPLE_RATE || "1.0");
+    const environment = process.env.LANGFUSE_TRACING_ENVIRONMENT || undefined;
+    const release = process.env.LANGFUSE_RELEASE || undefined;
 
     spanProcessor = new LfSpanProcessor({
       publicKey: process.env.LANGFUSE_PUBLIC_KEY,
       secretKey: process.env.LANGFUSE_SECRET_KEY,
       baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com",
+      environment,
+      release,
       // Only export spans from langfuse-sdk scope (avoid noise from other OTel instrumentations)
       shouldExportSpan: ({ otelSpan }) => otelSpan.instrumentationScope.name === "langfuse-sdk",
     });
@@ -54,13 +63,10 @@ export async function initLangfuse(): Promise<void> {
     logger.info("[Langfuse] Observability initialized", {
       baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com",
       sampleRate,
+      environment: environment ?? null,
+      release: release ?? null,
       debug: process.env.LANGFUSE_DEBUG === "true",
     });
-
-    if (process.env.LANGFUSE_DEBUG === "true") {
-      const { configureGlobalLogger, LogLevel } = await import("@langfuse/core");
-      configureGlobalLogger({ level: LogLevel.DEBUG });
-    }
   } catch (error) {
     logger.error("[Langfuse] Failed to initialize", {
       error: error instanceof Error ? error.message : String(error),

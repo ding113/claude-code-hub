@@ -122,6 +122,35 @@ describe("classifyFrame: anthropic", () => {
     ).toBe("neutral");
   });
 
+  it("content: message_delta 请求级 refusal 是可交付结果（#1491）", () => {
+    const refusal =
+      '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"reasoning_extraction"}},"usage":{"output_tokens":0}}';
+    expect(classifyFrame("anthropic", "message_delta", refusal)).toBe("content");
+    // 无 event 行时按 data.type 识别
+    expect(classifyFrame("anthropic", null, refusal)).toBe("content");
+    // 其他 stop_reason 仍只是 bookkeeping，不能让空流借道提交
+    for (const stopReason of ['"end_turn"', '"max_tokens"', '"stop_sequence"', "null"]) {
+      const data = `{"type":"message_delta","delta":{"stop_reason":${stopReason}}}`;
+      expect(classifyFrame("anthropic", "message_delta", data)).toBe("neutral");
+    }
+    // refusal 字段只在 message_delta 上有语义
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_delta",
+        '{"type":"content_block_delta","delta":{"stop_reason":"refusal"}}'
+      )
+    ).toBe("neutral");
+    // 同帧携带 error 时错误优先，不能被当作拒绝放行
+    expect(
+      classifyFrame(
+        "anthropic",
+        "message_delta",
+        '{"type":"message_delta","delta":{"stop_reason":"refusal"},"error":{"message":"boom"}}'
+      )
+    ).toBe("error");
+  });
+
   it("error: error event and fake-200 error envelope", () => {
     expect(
       classifyFrame(

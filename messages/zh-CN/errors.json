@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "本地请求处理容量不足，请稍后重试。",
   "_comment": "Error messages for Chinese Simplified",
 
   "REQUIRED_FIELD": "{field}不能为空",

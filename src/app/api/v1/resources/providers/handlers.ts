@@ -25,6 +25,7 @@ import { ProviderCacheEffectivenessListQuerySchema } from "@/lib/api/v1/schemas/
 import {
   HIDDEN_PROVIDER_TYPES,
   ProviderApiTestSchema,
+  ProviderBalanceBatchBodySchema,
   ProviderBatchPatchApplySchema,
   ProviderBatchPatchPreviewSchema,
   ProviderBatchUpdateSchema,
@@ -109,7 +110,10 @@ export async function getProvider(c: Context): Promise<Response> {
 export async function createProvider(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, ProviderCreateSchema);
   if (!body.ok) return body.response;
-  if (hasLegacyRedactedWritePlaceholders(body.data)) {
+  if (
+    hasLegacyRedactedWritePlaceholders(body.data) ||
+    isRedactedAccessTokenEcho(body.data.new_api_access_token)
+  ) {
     return createProblemResponse({
       status: 422,
       instance: new URL(c.req.url).pathname,
@@ -158,6 +162,15 @@ export async function updateProvider(c: Context): Promise<Response> {
       instance: new URL(c.req.url).pathname,
       errorCode: "provider.redacted_placeholder_rejected",
       detail: "Redacted placeholders cannot be used for the key field when updating providers.",
+    });
+  }
+  if (isRedactedAccessTokenEcho(body.data.new_api_access_token)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail:
+        "Redacted or masked values cannot be used for the new_api_access_token field. Omit the field to keep the current token.",
     });
   }
   if (hasUnresolvedRedactedHeaderEcho(body.data.custom_headers, existing.customHeaders)) {
@@ -314,6 +327,44 @@ export async function getProviderLimitBatch(c: Context): Promise<Response> {
   return jsonResponse({
     items: Array.from(result.data.entries()).map(([id, usage]) => ({ id, usage })),
   });
+}
+
+export async function getProviderBalancesBatch(c: Context): Promise<Response> {
+  const body = await parseJson(c, ProviderBalanceBatchBodySchema);
+  if (body instanceof Response) return body;
+  const visibleProviders = await loadVisibleProviders(c);
+  if (visibleProviders instanceof Response) return visibleProviders;
+  const visibleIds = new Set(visibleProviders.map((provider) => provider.id));
+  const providerIds = body.providerIds.filter((id) => visibleIds.has(id));
+  if (providerIds.length === 0) return jsonResponse({ items: [] });
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.getProviderBalances,
+    [providerIds, { refresh: body.refresh }] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: Object.values(result.data) }, { headers: withNoStoreHeaders() });
+}
+
+export async function refreshProviderBalance(c: Context): Promise<Response> {
+  const id = parseProviderIdWithSuffix(c, "balance:refresh");
+  if (id instanceof Response) return id;
+  const existing = await findVisibleProvider(c, id);
+  if (existing instanceof Response) return existing;
+  if (!existing) return providerNotFound(c);
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.refreshProviderBalance,
+    [id] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data, { headers: withNoStoreHeaders() });
 }
 
 export async function listProviderGroups(c: Context): Promise<Response> {
@@ -628,6 +679,8 @@ function sanitizeProvider(
     name: provider.name,
     url: redactUrlCredentials(provider.url) ?? provider.url,
     maskedKey: provider.maskedKey,
+    maskedNewApiAccessToken: provider.maskedNewApiAccessToken,
+    newApiUserId: provider.newApiUserId,
     isEnabled: provider.isEnabled,
     weight: provider.weight,
     priority: provider.priority,
@@ -689,6 +742,19 @@ function sanitizeProvider(
     updatedAt: provider.updatedAt,
     ...(statistics ? { statistics } : {}),
   };
+}
+
+/**
+ * 判定提交的系统访问令牌是否只是回传的脱敏值。
+ *
+ * 列表接口以 maskKey 的「前 4 位 + •••••• + 后 4 位」形式返回令牌，
+ * 这类值与旧式 [REDACTED] 占位符都不能当作真实令牌保存。
+ */
+function isRedactedAccessTokenEcho(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    (hasLegacyRedactedWritePlaceholders(value) || value.includes("••••••"))
+  );
 }
 
 function preserveRedactedProviderUpdateFields<T extends ProviderUpdatePayload>(

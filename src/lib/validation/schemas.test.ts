@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { PROVIDER_KEY_MAX_LENGTH } from "@/lib/constants/provider.constants";
+import {
+  NEW_API_ACCESS_TOKEN_MAX_LENGTH,
+  NEW_API_USER_ID_MAX,
+  PROVIDER_KEY_MAX_LENGTH,
+} from "@/lib/constants/provider.constants";
 import {
   CreateProviderSchema,
   CreateUserSchema,
@@ -371,5 +375,98 @@ describe("Provider schemas - API 密钥长度限制", () => {
 
   test("UpdateProviderSchema 仍拒绝空密钥", () => {
     expect(UpdateProviderSchema.safeParse({ key: "" }).success).toBe(false);
+  });
+});
+
+describe("Provider schemas - New API 系统访问令牌与用户 ID", () => {
+  const createBase = {
+    name: "测试供应商",
+    url: "https://api.example.com",
+    key: "sk-test",
+  };
+
+  test("未提交时两个字段都保持缺省", () => {
+    const parsed = CreateProviderSchema.parse(createBase);
+    expect(parsed.new_api_access_token).toBeUndefined();
+    expect(parsed.new_api_user_id).toBeUndefined();
+  });
+
+  test("令牌去掉两端空白后保存", () => {
+    const parsed = CreateProviderSchema.parse({
+      ...createBase,
+      new_api_access_token: "  pat-token  ",
+      new_api_user_id: 7,
+    });
+    expect(parsed.new_api_access_token).toBe("pat-token");
+    expect(parsed.new_api_user_id).toBe(7);
+  });
+
+  test("空白令牌与 null 都表示清除", () => {
+    expect(UpdateProviderSchema.parse({ new_api_access_token: "   " }).new_api_access_token).toBe(
+      null
+    );
+    expect(UpdateProviderSchema.parse({ new_api_access_token: null }).new_api_access_token).toBe(
+      null
+    );
+    expect(UpdateProviderSchema.parse({ new_api_user_id: null }).new_api_user_id).toBe(null);
+  });
+
+  test("拒绝超出长度上限的令牌", () => {
+    const tooLong = "t".repeat(NEW_API_ACCESS_TOKEN_MAX_LENGTH + 1);
+    expect(UpdateProviderSchema.safeParse({ new_api_access_token: tooLong }).success).toBe(false);
+    expect(
+      UpdateProviderSchema.safeParse({
+        new_api_access_token: "t".repeat(NEW_API_ACCESS_TOKEN_MAX_LENGTH),
+      }).success
+    ).toBe(true);
+  });
+
+  test("用户 ID 必须是范围内的正整数", () => {
+    for (const value of [0, -1, 1.5, NEW_API_USER_ID_MAX + 1, "7"]) {
+      expect(UpdateProviderSchema.safeParse({ new_api_user_id: value }).success).toBe(false);
+    }
+    expect(UpdateProviderSchema.safeParse({ new_api_user_id: NEW_API_USER_ID_MAX }).success).toBe(
+      true
+    );
+  });
+});
+
+describe("Provider schemas - custom_headers templates", () => {
+  const baseCreate = {
+    name: "测试供应商",
+    url: "https://api.example.com",
+    key: "sk-test",
+    provider_type: "claude" as const,
+  };
+
+  test("CreateProviderSchema 接受动态模板值", () => {
+    const parsed = CreateProviderSchema.parse({
+      ...baseCreate,
+      custom_headers: {
+        "x-session-id": "{{session.id}}",
+        "x-ua": "{{header.user-agent}}",
+      },
+    });
+    expect(parsed.custom_headers).toEqual({
+      "x-session-id": "{{session.id}}",
+      "x-ua": "{{header.user-agent}}",
+    });
+  });
+
+  test("CreateProviderSchema 拒绝未知模板", () => {
+    const result = CreateProviderSchema.safeParse({
+      ...baseCreate,
+      custom_headers: { "x-foo": "{{foo}}" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("UpdateProviderSchema 接受动态模板值", () => {
+    const parsed = UpdateProviderSchema.parse({
+      custom_headers: { "x-client-session": "{{session.client_id}}" },
+    });
+    expect(parsed.custom_headers).toEqual({
+      "x-client-session": "{{session.client_id}}",
+    });
   });
 });

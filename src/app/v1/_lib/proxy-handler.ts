@@ -3,6 +3,9 @@ import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-pol
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
+import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -13,12 +16,18 @@ import { tryFakeStreamingPath } from "./proxy/fake-streaming/proxy-integration";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
+import { recordPreAuthLocalCapacityRejection } from "./proxy/local-capacity-log";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { normalizeResponseInput } from "./proxy/response-input-rectifier";
 import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
+  return withRequestMemoryLifetime(() => handleOwnedProxyRequest(c));
+}
+
+async function handleOwnedProxyRequest(c: Context): Promise<Response> {
+  const handlerStartedAt = Date.now();
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
   let acquiredConcurrencySessionId: string | null = null;
@@ -191,6 +200,11 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     });
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
+    }
+    if (isLocalCapacityError(error)) {
+      // 正文准入在认证之前：没有 session 可写库，尽力按请求头归属，不阻塞 429 响应。
+      void recordPreAuthLocalCapacityRejection(c, error.message, handlerStartedAt);
+      return await buildLocalCapacityResponse();
     }
 
     if (error instanceof ProxyError) {

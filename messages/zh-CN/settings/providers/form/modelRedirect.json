@@ -20,6 +20,7 @@
   "targetModel": "实际转发的模型",
   "sourcePlaceholder": "例如: claude-sonnet-4-6",
   "targetPlaceholder": "例如: glm-5.1",
+  "regexCaptureHint": "正则匹配支持在目标中引用捕获组：源写 ^gpt-(.+)$、目标写 test-$1，gpt-5.5 会被转发为 test-5.5。",
   "add": "添加",
   "sourceEmpty": "源模型名称不能为空",
   "sourceTooLong": "源模型名称过长（最多 {max} 个字符）",
