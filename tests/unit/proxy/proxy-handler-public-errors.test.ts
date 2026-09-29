@@ -10,6 +10,7 @@ type ProxySettingsFixture = {
   readonly fakeStreamingWhitelist: FakeStreamingWhitelistEntry[];
   readonly passThroughUpstreamErrorMessage: boolean;
   readonly verboseProviderError: boolean;
+  readonly enableMemoryAdmission: boolean;
 };
 
 const boundary = vi.hoisted(() => ({
@@ -103,6 +104,7 @@ const settings: ProxySettingsFixture = {
   fakeStreamingWhitelist: [],
   passThroughUpstreamErrorMessage: false,
   verboseProviderError: false,
+  enableMemoryAdmission: false,
 };
 
 describe("handleProxyRequest public error behavior", () => {
@@ -298,6 +300,7 @@ describe("handleProxyRequest public error behavior", () => {
     const state = globalThis as unknown as Record<symbol, unknown>;
     const previous = state[key];
     state[key] = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+    boundary.loadSettings.mockResolvedValue({ ...settings, enableMemoryAdmission: true });
     try {
       const request = new Request("http://localhost/v1/messages", {
         method: "POST",
@@ -327,6 +330,65 @@ describe("handleProxyRequest public error behavior", () => {
     } finally {
       state[key] = previous;
       vi.useRealTimers();
+    }
+  });
+
+  it("内存准入关闭时请求体读取不排队，零额度也照常进入守卫链", async () => {
+    const key = Symbol.for("cch.memoryGovernor");
+    const state = globalThis as unknown as Record<symbol, unknown>;
+    const previous = state[key];
+    const governor = new MemoryGovernor({ limit: 0, remote: false, monitor: false, enabled: true });
+    state[key] = governor;
+    boundary.runGuards.mockResolvedValue(new Response("guarded", { status: 403 }));
+    try {
+      const response = await handleProxyRequest(
+        new Context(
+          new Request("http://localhost/v1/messages", {
+            method: "POST",
+            body: JSON.stringify({ model: "claude-test", messages: [], input: "x".repeat(4096) }),
+          })
+        )
+      );
+      expect(governor.enabled).toBe(false);
+      expect(response.status).toBe(403);
+      expect(boundary.runGuards).toHaveBeenCalledTimes(1);
+      const session = boundary.runGuards.mock.calls[0]?.[0];
+      expect(session?.request.model).toBe("claude-test");
+      expect(boundary.recordPreAuthLocalCapacityRejection).not.toHaveBeenCalled();
+    } finally {
+      state[key] = previous;
+    }
+  });
+
+  it("读取系统设置失败时保持进程当前的内存准入状态", async () => {
+    const key = Symbol.for("cch.memoryGovernor");
+    const state = globalThis as unknown as Record<symbol, unknown>;
+    const previous = state[key];
+    const governor = new MemoryGovernor({
+      limit: 64 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    state[key] = governor;
+    boundary.loadSettings.mockRejectedValue(new Error("settings unavailable"));
+    boundary.runGuards.mockResolvedValue(new Response("guarded", { status: 403 }));
+    try {
+      const response = await handleProxyRequest(
+        new Context(
+          new Request("http://localhost/v1/messages", {
+            method: "POST",
+            body: JSON.stringify({ model: "claude-test", messages: [] }),
+          })
+        )
+      );
+      expect(response.status).toBe(403);
+      expect(governor.enabled).toBe(true);
+      const session = boundary.runGuards.mock.calls[0]?.[0];
+      // 设置不可用时 raw 跨供应商回退按既有约定关闭。
+      expect(session?.isRawCrossProviderFallbackEnabled()).toBe(false);
+    } finally {
+      state[key] = previous;
     }
   });
 });

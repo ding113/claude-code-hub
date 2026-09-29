@@ -14,7 +14,12 @@ const frame = (payload: object) => encoder.encode(`data: ${JSON.stringify(payloa
 
 describe("Discovery 前缀与解析容量", () => {
   it("中性帧实际增长、EOF 不提前归还，赢家回放后释放", async () => {
-    const governor = new MemoryGovernor({ limit: 8 * 1024 ** 2, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 8 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 8 * 1024 ** 2, governor);
     const neutral = frame({
       type: "response.created",
@@ -59,7 +64,12 @@ describe("Discovery 前缀与解析容量", () => {
   });
 
   it("增长不足在解析与复制前返回本地 429，取消后两级额度归零", async () => {
-    const governor = new MemoryGovernor({ limit: 256 * 1024, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 256 * 1024,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
     const buffer = new DiscoveryPrebuffer();
     buffer.attachLease(await budget.acquire(128 * 1024));

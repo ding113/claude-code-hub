@@ -60,6 +60,8 @@
     "enableOpenaiResponsesWebsocketDesc": "有効にすると、クライアントが /v1/responses に WebSocket 接続し、かつ Codex タイプのプロバイダーが選択された場合、CCH は上流にも WebSocket 接続を試みます。上流が WebSocket をサポートしない、またはハンドシェイクに失敗した場合は、クライアント WebSocket を開いたまま通常の HTTP Responses に優雅にフォールバックします。このフォールバックはサーキットブレーカーにカウントされません。非 WebSocket クライアントと非 Codex プロバイダーの動作は変わりません。",
     "enableHighConcurrencyMode": "高並行モードを有効化",
     "enableHighConcurrencyModeDesc": "有効にすると、高 RPM 時の CPU / IO 負荷を下げるため、Redis の一部デバッグスナップショットとリアルタイム Session 観測書き込みを停止します。転送、整流、fake 200 検知、課金、制限処理は維持されますが、Sessions のデバッグ詳細は減少または遅延する場合があります。",
+    "enableMemoryAdmission": "メモリ受付制御を有効化",
+    "enableMemoryAdmissionDesc": "有効にすると、リクエスト本文とストリームの最初のコンテンツまでのバッファを、このマシンの空きメモリに基づく枠で受け付けます。枠が足りない場合はディスクに一時保存し、それでも足りない場合はローカル 429 を返してクライアントに再試行を促します。無効の場合、これらのデータはすべてメモリ上に保持され、待機もローカル 429 も発生しません。",
     "enableResponseFixer": "レスポンス整流を有効化",
     "enableResponseFixerDesc": "上流応答の一般的な形式問題（エンコーディング、SSE、途切れた JSON）を自動修復します（既定で有効）。",
     "enableThinkingSignatureRectifier": "thinking 署名整流を有効化",

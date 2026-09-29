@@ -11,7 +11,10 @@ import { getMemoryGovernor } from "@/lib/memory/governor";
 import { createMemoryCoordinator } from "../../../server-lib/memory-coordinator";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  getMemoryGovernor().setEnabled(false);
+});
 
 describe("request capacity contention", () => {
   it("negotiates remote credits before rejecting a valid Discovery prefix", async () => {
@@ -32,7 +35,12 @@ describe("request capacity contention", () => {
     });
     coordinator.attach(worker);
     coordinator.resetBaseline();
-    const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
+    const governor = new MemoryGovernor({
+      processRef: child,
+      remote: true,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => Number.MAX_SAFE_INTEGER, governor);
     const prefix = new DiscoveryPrebuffer();
     try {
@@ -66,7 +74,9 @@ describe("request capacity contention", () => {
         limit: compressed ? 384 * 1024 : 1024 ** 2,
         remote: false,
         monitor: false,
+        enabled: true,
       });
+      getMemoryGovernor().setEnabled(true);
       vi.spyOn(getMemoryGovernor(), "acquire").mockImplementation((...args) =>
         governor.acquire(...args)
       );

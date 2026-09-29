@@ -21,7 +21,12 @@ const options = {
 afterEach(() => vi.useRealTimers());
 describe("TTFT 固定预占回归", () => {
   it("等待门控子限额的请求不占用全局正文额度", async () => {
-    const governor = new MemoryGovernor({ limit: 2 * 1024 ** 2, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 2 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 128 * 1024, governor);
     const first = await budget.acquire(128 * 1024);
     const controllers = Array.from({ length: 24 }, () => new AbortController());
@@ -42,7 +47,12 @@ describe("TTFT 固定预占回归", () => {
 
   it("本地与全局等待共用 20 秒期限，失败后归还本地子额度", async () => {
     vi.useFakeTimers();
-    const governor = new MemoryGovernor({ limit: 256, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 256,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 128, governor);
     const first = await budget.acquire(128);
     const occupied = governor.tryLease(128)!;

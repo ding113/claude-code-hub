@@ -18,11 +18,17 @@ let testDirectory: string;
 beforeEach(async () => {
   // Exercise the real admission implementation without depending on the host's
   // instantaneous free RAM when the parallel test worker first loads it.
-  const governor = new MemoryGovernor({ limit: 64 * 1024 ** 2, remote: false, monitor: false });
+  const governor = new MemoryGovernor({
+    limit: 64 * 1024 ** 2,
+    remote: false,
+    monitor: false,
+    enabled: true,
+  });
   vi.spyOn(getMemoryGovernor(), "acquire").mockImplementation((...args) =>
     governor.acquire(...args)
   );
   vi.spyOn(getMemoryGovernor(), "tryLease").mockImplementation((bytes) => governor.tryLease(bytes));
+  getMemoryGovernor().setEnabled(true);
   // 使用工作区所在磁盘，避免 Linux 的 /tmp 挂载为 tmpfs。
   const root = path.join(process.cwd(), "tmp");
   await mkdir(root, { recursive: true });
@@ -31,6 +37,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
+  getMemoryGovernor().setEnabled(false);
   await rm(testDirectory, { recursive: true, force: true });
 });
 describe("内存/磁盘共享正文", () => {
@@ -40,6 +47,7 @@ describe("内存/磁盘共享正文", () => {
       limit: STORE_SCRATCH_BYTES,
       monitor: false,
       remote: false,
+      enabled: true,
     });
     const lease = await governor.acquire(STORE_SCRATCH_BYTES);
     const store = new ByteStore(lease, { directory, ioTimeoutMs: 5000 });
@@ -67,6 +75,7 @@ describe("内存/磁盘共享正文", () => {
       limit: STORE_SCRATCH_BYTES,
       monitor: false,
       remote: false,
+      enabled: true,
     });
     const lease = await governor.acquire(STORE_SCRATCH_BYTES);
     const store = new ByteStore(lease, { directory, maxDiskBytes: 32 });
@@ -81,7 +90,12 @@ describe("内存/磁盘共享正文", () => {
     }
   });
   it("小正文保持内存并持有自有块，避免小视图挂住大 backing buffer", async () => {
-    const governor = new MemoryGovernor({ limit: 1024 * 1024, monitor: false, remote: false });
+    const governor = new MemoryGovernor({
+      limit: 1024 * 1024,
+      monitor: false,
+      remote: false,
+      enabled: true,
+    });
     const lease = await governor.acquire(STORE_SCRATCH_BYTES);
     const store = new ByteStore(lease);
     const parent = new Uint8Array(16 * 1024 * 1024);

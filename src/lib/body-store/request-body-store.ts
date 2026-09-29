@@ -193,7 +193,10 @@ export async function loadRequestBody(
       source.restoreMemoryAfterAdmission();
     }
     const heap = getHeapStatistics();
-    if (estimate.capacityBytes > (heap.heap_size_limit - heap.used_heap_size) * 0.5) {
+    if (
+      governor.enabled &&
+      estimate.capacityBytes > (heap.heap_size_limit - heap.used_heap_size) * 0.5
+    ) {
       throw new LocalCapacityError();
     }
     const buffer = await source.arrayBuffer();

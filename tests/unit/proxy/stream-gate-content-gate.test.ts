@@ -103,7 +103,12 @@ describe("runStreamContentGate", () => {
 
   it("已提交前缀被丢弃（既未读完也未取消）时，请求作用域结束兜底归还两级额度", async () => {
     const reservation = GATE_OPTIONS.prebufferByteCap * 4;
-    const governor = new MemoryGovernor({ limit: reservation, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: reservation,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => reservation, governor);
     const response = await withRequestMemoryLifetime(async () => {
       const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {

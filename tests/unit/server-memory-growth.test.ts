@@ -23,7 +23,12 @@ function remoteGovernor(capacity = 64 * 1024 ** 2) {
   });
   coordinator.attach(worker);
   coordinator.resetBaseline();
-  const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
+  const governor = new MemoryGovernor({
+    processRef: child,
+    remote: true,
+    monitor: false,
+    enabled: true,
+  });
   return {
     governor,
     coordinator,
@@ -77,7 +82,12 @@ describe("remote memory growth", () => {
         connected: true,
         send: vi.fn((_message: unknown, callback?: () => void) => callback?.()),
       });
-      const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
+      const governor = new MemoryGovernor({
+        processRef: child,
+        remote: true,
+        monitor: false,
+        enabled: true,
+      });
       governor.credits = 1024 ** 2;
       const lease = governor.tryLease(128 * 1024)!;
       const controller = new AbortController();
@@ -107,7 +117,12 @@ describe("remote memory growth", () => {
   );
 
   it("does not queue on local exhaustion and honors cancellation before an available growth", async () => {
-    const governor = new MemoryGovernor({ limit: 1024, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 1024,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const lease = governor.tryLease(512)!;
     await expect(lease.tryGrowAsync(2048)).resolves.toBe(false);
     await expect(lease.tryGrowAsync(-1)).rejects.toBeInstanceOf(RangeError);
