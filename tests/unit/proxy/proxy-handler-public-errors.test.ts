@@ -22,6 +22,8 @@ const boundary = vi.hoisted(() => ({
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   incrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
+  // 进程缓存中的当前设置对象；只有与之相同的读取结果才会同步到内存准入开关。
+  processCache: { current: null as ProxySettingsFixture | null },
   recordLocalCapacityRejection: vi.fn(),
   recordPreAuthLocalCapacityRejection: vi.fn(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
@@ -33,12 +35,19 @@ const boundary = vi.hoisted(() => ({
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),
   getCachedSystemSettings: boundary.loadSettings,
+  getCachedSystemSettingsOnlyCache: () => boundary.processCache.current,
 }));
 
 vi.mock("@/lib/config/system-settings-cache", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config/system-settings-cache")>()),
   getCachedSystemSettings: boundary.loadSettings,
+  getCachedSystemSettingsOnlyCache: () => boundary.processCache.current,
 }));
+
+function cacheSettings(value: ProxySettingsFixture): void {
+  boundary.processCache.current = value;
+  boundary.loadSettings.mockResolvedValue(value);
+}
 
 vi.mock("@/app/v1/_lib/proxy/guard-pipeline", () => ({
   GuardPipelineBuilder: {
@@ -124,7 +133,7 @@ describe("handleProxyRequest public error behavior", () => {
     boundary.recordPreAuthLocalCapacityRejection.mockReset();
     boundary.recordLocalCapacityRejection.mockResolvedValue(true);
     boundary.recordPreAuthLocalCapacityRejection.mockResolvedValue(true);
-    boundary.loadSettings.mockResolvedValue(settings);
+    cacheSettings(settings);
     boundary.getErrorOverride.mockResolvedValue(null);
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
     boundary.decrementConcurrentCount.mockResolvedValue(undefined);
@@ -300,7 +309,7 @@ describe("handleProxyRequest public error behavior", () => {
     const state = globalThis as unknown as Record<symbol, unknown>;
     const previous = state[key];
     state[key] = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
-    boundary.loadSettings.mockResolvedValue({ ...settings, enableMemoryAdmission: true });
+    cacheSettings({ ...settings, enableMemoryAdmission: true });
     try {
       const request = new Request("http://localhost/v1/messages", {
         method: "POST",
@@ -387,6 +396,48 @@ describe("handleProxyRequest public error behavior", () => {
       const session = boundary.runGuards.mock.calls[0]?.[0];
       // 设置不可用时 raw 跨供应商回退按既有约定关闭。
       expect(session?.isRawCrossProviderFallbackEnabled()).toBe(false);
+    } finally {
+      state[key] = previous;
+    }
+  });
+
+  it("缓存失效期间完成的旧查询与默认对象不改变进程的内存准入状态", async () => {
+    const key = Symbol.for("cch.memoryGovernor");
+    const state = globalThis as unknown as Record<symbol, unknown>;
+    const previous = state[key];
+    const governor = new MemoryGovernor({
+      limit: 64 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    state[key] = governor;
+    boundary.runGuards.mockImplementation(async () => new Response("guarded", { status: 403 }));
+    const send = () =>
+      handleProxyRequest(
+        new Context(
+          new Request("http://localhost/v1/messages", {
+            method: "POST",
+            body: JSON.stringify({ model: "claude-test", messages: [] }),
+          })
+        )
+      );
+    try {
+      // 失效后缓存为空：读取结果未写入缓存，不能用于全进程开关。
+      boundary.processCache.current = null;
+      boundary.loadSettings.mockResolvedValue({ ...settings, enableMemoryAdmission: false });
+      expect((await send()).status).toBe(403);
+      expect(governor.enabled).toBe(true);
+
+      // 缓存已被更新的设置替换，旧查询结果与之不是同一对象。
+      boundary.processCache.current = { ...settings, enableMemoryAdmission: true };
+      expect((await send()).status).toBe(403);
+      expect(governor.enabled).toBe(true);
+
+      // 当前缓存对象正常同步。
+      cacheSettings({ ...settings, enableMemoryAdmission: false });
+      expect((await send()).status).toBe(403);
+      expect(governor.enabled).toBe(false);
     } finally {
       state[key] = previous;
     }

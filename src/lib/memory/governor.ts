@@ -28,6 +28,7 @@ export interface MemoryGovernor {
   /** 系统设置「内存准入」开关；关闭时租约与增长总是成功。 */
   readonly enabled: boolean;
   setEnabled(enabled: boolean): void;
+  onEnabledChange(listener: (enabled: boolean) => void): () => void;
   observe(
     stage: "admission" | "body_read" | "body_decode" | "body_materialize" | "gate",
     milliseconds: number,

@@ -147,6 +147,52 @@ describe("内存准入开关", () => {
     }
   });
 
+  it("开关变化只在状态实际改变时通知，取消订阅后不再通知", () => {
+    const governor = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+    const seen: boolean[] = [];
+    const unsubscribe = governor.onEnabledChange((enabled) => seen.push(enabled));
+    governor.setEnabled(false);
+    governor.setEnabled(true);
+    governor.setEnabled(true);
+    governor.setEnabled(false);
+    unsubscribe();
+    governor.setEnabled(true);
+    expect(seen).toEqual([true, false]);
+    expect(governor.enabled).toBe(true);
+  });
+
+  it("关闭开关时立即放行门控子限额队列中的请求", async () => {
+    vi.useFakeTimers();
+    const governor = new MemoryGovernor({
+      limit: 64 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const restore = installGovernor(governor);
+    try {
+      const budget = getStreamGatePrebufferBudget();
+      const first = await budget.acquire(GATE_CAP);
+      let admitted = false;
+      const queued = budget.acquire(GATE_CAP).then((lease) => {
+        admitted = true;
+        return lease;
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(admitted).toBe(false);
+      expect(budget.snapshot().waiting).toBe(1);
+
+      governor.setEnabled(false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(admitted).toBe(true);
+      expect(budget.snapshot().waiting).toBe(0);
+      (await queued).release();
+      first.release();
+    } finally {
+      restore();
+    }
+  });
+
   it("门控子限额只在开启时生效", async () => {
     const cap = GATE_CAP;
     expect(resolveStreamGateGlobalPrebufferByteCap()).toBe(cap);

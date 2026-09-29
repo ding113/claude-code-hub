@@ -29,6 +29,7 @@ class MemoryGovernor {
     this.ceiling = this.limit;
     // 关闭时只记账不设限：租约与增长总是成功，不排队、不申请跨进程授权、不返回本地 429。
     this.enabled = options.enabled ?? false;
+    this.enabledListeners = new Set();
     this.used = 0;
     this.waiting = 0;
     this.peak = 0;
@@ -93,7 +94,16 @@ class MemoryGovernor {
   }
 
   setEnabled(enabled) {
-    this.enabled = enabled === true;
+    const next = enabled === true;
+    if (next === this.enabled) return;
+    this.enabled = next;
+    for (const listener of this.enabledListeners) listener(next);
+  }
+
+  /** 开关变化时通知子限额等外部队列立即重新调度排队者。 */
+  onEnabledChange(listener) {
+    this.enabledListeners.add(listener);
+    return () => this.enabledListeners.delete(listener);
   }
 
   snapshot() {

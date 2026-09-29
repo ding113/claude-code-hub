@@ -34,7 +34,7 @@ hotBudget = min(autoBudget, headroom)
 
 hotBudget 只在启动（多进程为全部 worker 就绪）时计算一次，作为固定上限。运行期每秒的收紧条件是 `limit = min(启动上限, 在用量 + headroom)`：0.6 折扣已体现在启动上限里，不再对剩余内存重复折扣。否则进程自身常驻内存（Next.js 基础堆等非受管分配）增长会在零租约时持续压低正文额度；只有真实物理余量低于启动上限或出现内存压力时才收紧。
 
-Linux 使用 MemAvailable、SwapFree，同时检查可见 cgroup v2/v1 的成员和祖先限制，遵守 memory.high、swap 禁用及 v1 memory+swap 联合限额。无法确认容器 swap 额度时不增加 swap 容量；非 Linux 以可用物理内存保守估计。
+Linux 使用 MemAvailable、SwapFree，同时检查可见 cgroup v2/v1 的成员和祖先限制，遵守 memory.high、swap 禁用及 v1 memory+swap 联合限额。cgroup 已用量按 working set 计算：v2 为 `memory.current - inactive_file`，v1 为 `memory.usage_in_bytes - total_inactive_file`（memsw 联合用量同样扣除），与 kubelet/cAdvisor 一致；溢写文件、读取过的代码与日志产生的可回收 page cache 不计入占用，否则设置了内存上限的容器运行一段时间后额度会被 cache 压到 0。无法确认容器 swap 额度时不增加 swap 容量；非 Linux 以可用物理内存保守估计。
 
 `CCH_MEMORY_BUDGET_BYTES` 可明确指定受管分配预算，替代自动比例；显式模式保留 10% 当前 RAM 余量并遵守热点物理容量。该值约束正文物化与门控工作集，并非进程 RSS 硬上限；需要硬上限时应使用容器/cgroup 内存限制。DB、Replay、detached drain 和异步写队列继续使用原有独立限额，尚未全部迁入同一个分配器。
 

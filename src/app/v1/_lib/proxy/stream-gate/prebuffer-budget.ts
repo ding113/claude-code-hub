@@ -55,7 +55,10 @@ export class StreamGatePrebufferBudget {
   constructor(
     private readonly resolveLimit: () => number,
     private readonly governor?: MemoryGovernor
-  ) {}
+  ) {
+    // 内存准入关闭时子限额变为不限，已在队列中的请求需要立即放行。
+    governor?.onEnabledChange(() => this.drainWaiters());
+  }
 
   async acquire(reservedBytes: number, signal?: AbortSignal): Promise<StreamGatePrebufferLease> {
     const started = performance.now();

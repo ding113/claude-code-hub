@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
-import { getCachedSystemSettings } from "@/lib/config";
+import { getCachedSystemSettings, getCachedSystemSettingsOnlyCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getMemoryGovernor, isLocalCapacityError } from "@/lib/memory/governor";
 import { buildLocalCapacityResponse } from "@/lib/memory/http";
@@ -63,8 +63,11 @@ async function handleOwnedProxyRequest(c: Context): Promise<Response> {
   try {
     try {
       cachedSystemSettings = await getCachedSystemSettings();
-      // 正文读取受内存准入约束，必须在读取入站正文之前同步开关。
-      getMemoryGovernor().setEnabled(cachedSystemSettings.enableMemoryAdmission);
+      // 正文读取受内存准入约束，必须在读取入站正文之前同步开关。只同步进程缓存中的
+      // 当前设置：缓存失效期间完成的旧查询与读取失败时的默认对象不能改变全进程状态。
+      if (cachedSystemSettings === getCachedSystemSettingsOnlyCache()) {
+        getMemoryGovernor().setEnabled(cachedSystemSettings.enableMemoryAdmission);
+      }
     } catch (settingsError) {
       const databaseError = findSafeDatabaseError(settingsError);
       logger.warn(
