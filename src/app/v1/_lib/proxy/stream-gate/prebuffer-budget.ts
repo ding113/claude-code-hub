@@ -55,7 +55,10 @@ export class StreamGatePrebufferBudget {
   constructor(
     private readonly resolveLimit: () => number,
     private readonly governor?: MemoryGovernor
-  ) {}
+  ) {
+    // 内存准入关闭时子限额变为不限，已在队列中的请求需要立即放行。
+    governor?.onEnabledChange(() => this.drainWaiters());
+  }
 
   async acquire(reservedBytes: number, signal?: AbortSignal): Promise<StreamGatePrebufferLease> {
     const started = performance.now();
@@ -274,12 +277,14 @@ export function getStreamGatePrebufferBudget(): StreamGatePrebufferBudget {
   const globalState = globalThis as typeof globalThis & {
     [STREAM_GATE_PREBUFFER_BUDGET_SYMBOL]?: StreamGatePrebufferBudget;
   };
+  const governor = getMemoryGovernor();
+  // 门控子限额属于内存准入；准入关闭时不限额，排队者在下一次归还时全部放行。
   globalState[STREAM_GATE_PREBUFFER_BUDGET_SYMBOL] ??= new StreamGatePrebufferBudget(
     () =>
-      process.env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP
+      governor.enabled && process.env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP
         ? resolveStreamGateGlobalPrebufferByteCap()
         : Number.MAX_SAFE_INTEGER,
-    getMemoryGovernor()
+    governor
   );
   return globalState[STREAM_GATE_PREBUFFER_BUDGET_SYMBOL];
 }

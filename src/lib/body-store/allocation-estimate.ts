@@ -23,4 +23,13 @@ export class AllocationEstimate {
     // 明文字节、UTF-16 解析临时值、对象中的字符串及出站序列化工作集。
     return 8192 + this.bytes * 8 + this.structureBytes;
   }
+
+  /**
+   * 解析完成后请求在整个生命周期内持续持有的工作集：原始字节、对象中的字符串
+   * （UTF-16 最多两倍）、对象结构与一份出站序列化副本。解析临时值已可回收，
+   * 长时间流式响应期间不能继续按解析峰值占用额度。
+   */
+  get retainedBytes(): number {
+    return 8192 + this.bytes * 4 + this.structureBytes;
+  }
 }

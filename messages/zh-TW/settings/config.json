@@ -60,6 +60,8 @@
     "enableOpenaiResponsesWebsocketDesc": "啟用後，當客戶端以 WebSocket 連線 /v1/responses 且命中 Codex 類型供應商時，CCH 會嘗試與上游建立 WebSocket 連線。若上游不支援或握手失敗，將優雅降級為一般 HTTP Responses，客戶端 WebSocket 保持開啟；降級不計入熔斷。非 WebSocket 客戶端與非 Codex 供應商行為不變。",
     "enableHighConcurrencyMode": "啟用高並發模式",
     "enableHighConcurrencyModeDesc": "開啟後，將關閉部分 Redis 除錯快照與即時 Session 觀測寫入，以降低高並發下的 CPU 與 IO 開銷。轉發、整流、fake 200 偵測、計費與限額不受影響，但 Sessions 除錯詳情會減少或延後。",
+    "enableMemoryAdmission": "啟用記憶體准入",
+    "enableMemoryAdmissionDesc": "開啟後，請求本文與串流首內容緩衝依本機可用記憶體分配額度，額度不足時暫存到磁碟，仍然不足時回傳本地 429 並提示用戶端稍後重試。關閉時這些資料全部保留在記憶體中，不排隊，也不回傳本地 429。",
     "enableResponseFixer": "啟用回應整流",
     "enableResponseFixerDesc": "自動修復上游回應中常見的編碼、SSE 與 JSON 格式問題（預設開啟）。",
     "enableThinkingSignatureRectifier": "啟用 thinking 簽名整流器",

@@ -2,7 +2,7 @@ import { type FileHandle, mkdir, mkdtemp, open, rm, statfs } from "node:fs/promi
 import path from "node:path";
 import { BufferedByteChunks } from "@/app/v1/_lib/proxy/buffered-byte-chunks";
 import { logger } from "@/lib/logger";
-import { LocalCapacityError, type MemoryLease } from "@/lib/memory/governor";
+import { getMemoryGovernor, LocalCapacityError, type MemoryLease } from "@/lib/memory/governor";
 import { getSpoolBudget, getSpoolRoot, spoolPrefix } from "../../../server-lib/spool-directory";
 
 export const STORE_SCRATCH_BYTES = 128 * 1024;
@@ -93,11 +93,10 @@ export class ByteStore {
   private async appendInternal(chunk: Uint8Array): Promise<void> {
     if (this.disposed) throw new Error("Body store disposed");
     const capacity = Math.ceil((this.byteLength + chunk.byteLength) / BLOCK_BYTES) * BLOCK_BYTES;
-    if (
-      !this.file &&
-      capacity <= (this.options.hotBytes ?? HOT_BYTES) &&
-      (await this.tryGrow(this.scratchBytes + capacity))
-    ) {
+    // 内存准入关闭时正文全部留在内存，不落盘。
+    const hotBytes =
+      this.options.hotBytes ?? (getMemoryGovernor().enabled ? HOT_BYTES : Number.POSITIVE_INFINITY);
+    if (!this.file && capacity <= hotBytes && (await this.tryGrow(this.scratchBytes + capacity))) {
       this.memory.append(chunk);
       this.byteLength += chunk.byteLength;
       return;

@@ -869,6 +869,13 @@
       "when": 1790352239389,
       "tag": "0123_provider_new_api_access_token",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1790674741240,
+      "tag": "0124_system_settings_memory_admission",
+      "breakpoints": true
     }
   ]
 }

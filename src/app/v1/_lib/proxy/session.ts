@@ -1772,6 +1772,7 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
       ? getOpenAIImageMultipartSummary(imageRequestMetadata)
       : "(multipart image request)";
     requestBodyLogNote = "图片 multipart 请求已记录结构化摘要。";
+    loaded.lease.shrinkTo(loaded.retainedBytes);
 
     return {
       requestMessage,
@@ -1798,8 +1799,9 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     requestBodyLog = requestBodyText;
     requestBodyLogNote = "请求体不是合法 JSON，已记录原始文本。";
   }
-  // 保留按正文结构估算的工作集，覆盖后续过滤、重试和异步消费者；
-  // 不能只按字节数缩至固定倍数，密集小对象的 V8 开销可能更大。
+  // 解析峰值已结束。请求剩余生命周期（含长时间流式响应、过滤、重试与后台消费者）按正文结构
+  // 估算的实际持有量占用额度；密集小对象的 V8 开销计入 structureBytes，不能只按字节数估算。
+  loaded.lease.shrinkTo(loaded.retainedBytes);
 
   return {
     requestMessage,

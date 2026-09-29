@@ -1,9 +1,9 @@
 import type { Context } from "hono";
 import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
-import { getCachedSystemSettings } from "@/lib/config";
+import { getCachedSystemSettings, getCachedSystemSettingsOnlyCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
-import { isLocalCapacityError } from "@/lib/memory/governor";
+import { getMemoryGovernor, isLocalCapacityError } from "@/lib/memory/governor";
 import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -61,15 +61,13 @@ async function handleOwnedProxyRequest(c: Context): Promise<Response> {
     return identity.identity;
   };
   try {
-    session = await ProxySession.fromContext(c);
     try {
       cachedSystemSettings = await getCachedSystemSettings();
-      session.setHighConcurrencyModeEnabled(
-        cachedSystemSettings.enableHighConcurrencyMode ?? false
-      );
-      session.setRawCrossProviderFallbackEnabled(
-        cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
-      );
+      // 正文读取受内存准入约束，必须在读取入站正文之前同步开关。只同步进程缓存中的
+      // 当前设置：缓存失效期间完成的旧查询与读取失败时的默认对象不能改变全进程状态。
+      if (cachedSystemSettings === getCachedSystemSettingsOnlyCache()) {
+        getMemoryGovernor().setEnabled(cachedSystemSettings.enableMemoryAdmission);
+      }
     } catch (settingsError) {
       const databaseError = findSafeDatabaseError(settingsError);
       logger.warn(
@@ -81,9 +79,14 @@ async function handleOwnedProxyRequest(c: Context): Promise<Response> {
           databaseCode: databaseError?.code,
         }
       );
-      session.setHighConcurrencyModeEnabled(false);
-      session.setRawCrossProviderFallbackEnabled(false);
     }
+    session = await ProxySession.fromContext(c);
+    session.setHighConcurrencyModeEnabled(cachedSystemSettings?.enableHighConcurrencyMode ?? false);
+    session.setRawCrossProviderFallbackEnabled(
+      cachedSystemSettings
+        ? (cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true)
+        : false
+    );
 
     // 自动检测请求格式（端点优先，请求体补充）
     if (session.originalFormat === "claude") {

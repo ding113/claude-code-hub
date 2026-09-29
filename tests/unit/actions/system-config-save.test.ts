@@ -420,4 +420,18 @@ describe("saveSystemSettings", () => {
       })
     );
   });
+
+  it("should pass enableMemoryAdmission through validation and save, then invalidate the cache", async () => {
+    const result = await saveSystemSettings({
+      enableMemoryAdmission: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableMemoryAdmission: true,
+      })
+    );
+    expect(invalidateSystemSettingsCacheMock).toHaveBeenCalledTimes(1);
+  });
 });

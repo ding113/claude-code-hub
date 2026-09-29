@@ -106,6 +106,59 @@ describe("内存与 swap 的实际剩余容量", () => {
     });
   });
 
+  it("cgroup v2 用量扣除可回收的 inactive file cache，祖先组同样扣除", () => {
+    const snapshot = fixture({
+      "/sys/fs/cgroup/service/worker/memory.max": String(GiB),
+      "/sys/fs/cgroup/service/worker/memory.current": String(1000 * MiB),
+      "/sys/fs/cgroup/service/worker/memory.stat": `anon ${20 * MiB}\nfile ${950 * MiB}\nactive_file ${50 * MiB}\ninactive_file ${900 * MiB}\n`,
+      "/sys/fs/cgroup/service/memory.max": String(2 * GiB),
+      "/sys/fs/cgroup/service/memory.current": String(1900 * MiB),
+      "/sys/fs/cgroup/service/memory.stat": `anon ${900 * MiB}\ninactive_file ${900 * MiB}\n`,
+    });
+    // 只有 inactive 部分视为可回收，active file 仍计入占用。
+    // worker：1024 - (1000 - 900) = 924 MiB；祖先：2048 - (1900 - 900) = 1048 MiB。
+    expect(snapshot.availableRamBytes).toBe(924 * MiB);
+    expect(createMemoryPlan({ env: {}, snapshot }).hotBudgetBytes).toBe(
+      Math.floor(0.6 * (924 - 256) * MiB)
+    );
+  });
+
+  it("cgroup v2 缺少 memory.stat 或字段时按 memory.current 计算", () => {
+    const files = {
+      "/sys/fs/cgroup/service/worker/memory.max": String(GiB),
+      "/sys/fs/cgroup/service/worker/memory.current": String(768 * MiB),
+    };
+    expect(fixture(files).availableRamBytes).toBe(256 * MiB);
+    expect(
+      fixture({ ...files, "/sys/fs/cgroup/service/worker/memory.stat": "anon 1\nfile 2\n" })
+        .availableRamBytes
+    ).toBe(256 * MiB);
+  });
+
+  it("inactive file 大于用量时实际占用不为负", () => {
+    expect(
+      fixture({
+        "/sys/fs/cgroup/service/worker/memory.max": String(GiB),
+        "/sys/fs/cgroup/service/worker/memory.current": String(100 * MiB),
+        "/sys/fs/cgroup/service/worker/memory.stat": `inactive_file ${200 * MiB}\n`,
+      }).availableRamBytes
+    ).toBe(GiB);
+  });
+
+  it("cgroup v1 用量与 memsw 联合用量都扣除 total_inactive_file", () => {
+    expect(
+      fixture({
+        "/proc/self/cgroup": "5:memory:/service",
+        "/proc/self/mountinfo": "29 23 0:26 / /sys/fs/cgroup/memory rw - cgroup cgroup rw,memory",
+        "/sys/fs/cgroup/memory/service/memory.limit_in_bytes": String(2 * GiB),
+        "/sys/fs/cgroup/memory/service/memory.usage_in_bytes": String(1.75 * GiB),
+        "/sys/fs/cgroup/memory/service/memory.stat": `inactive_file ${100 * MiB}\ntotal_inactive_file ${768 * MiB}\n`,
+        "/sys/fs/cgroup/memory/service/memory.memsw.limit_in_bytes": String(2.5 * GiB),
+        "/sys/fs/cgroup/memory/service/memory.memsw.usage_in_bytes": String(2 * GiB),
+      })
+    ).toMatchObject({ availableRamBytes: GiB, availableSwapBytes: 256 * MiB });
+  });
+
   it("cgroup namespace 中的根成员仍遵守挂载根限制", () => {
     expect(
       fixture({

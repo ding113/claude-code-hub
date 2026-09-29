@@ -1,8 +1,8 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { runStreamContentGate } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
-import { LocalCapacityError } from "@/lib/memory/governor";
+import { getMemoryGovernor, LocalCapacityError } from "@/lib/memory/governor";
 import { logger } from "@/lib/logger";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
 import { getSpoolBudget } from "../../../server-lib/spool-directory";
@@ -19,9 +19,11 @@ const disk = vi.hoisted(() => ({
 }));
 vi.mock("node:fs/promises", () => disk);
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }));
+beforeEach(() => getMemoryGovernor().setEnabled(true));
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  getMemoryGovernor().setEnabled(false);
 });
 
 describe("磁盘故障与取消", () => {
@@ -33,6 +35,7 @@ describe("磁盘故障与取消", () => {
       limit: STORE_SCRATCH_BYTES,
       remote: false,
       monitor: false,
+      enabled: true,
     });
     const lease = governor.tryLease(STORE_SCRATCH_BYTES)!;
     return { governor, lease };
@@ -90,6 +93,7 @@ describe("磁盘故障与取消", () => {
       limit: STORE_SCRATCH_BYTES * 2 + 4096,
       remote: false,
       monitor: false,
+      enabled: true,
     });
     const lease = governor.tryLease(STORE_SCRATCH_BYTES)!;
     const store = new ByteStore(lease);

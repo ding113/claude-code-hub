@@ -299,9 +299,10 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.setSystemTime(now);
 
     // 第一次 select(fullSelection) 因新列缺失而抛 42703；
-    // The new legacy hedge column is the newest rung, so it is stripped before replay columns.
+    // The memory admission and legacy hedge columns are the newest rungs, so they are stripped before replay columns.
     const selectMock = vi
       .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
@@ -337,23 +338,25 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const result = await getSystemSettings();
 
     // 降级读取成功（未抛错），缺失列由 transformer 落默认值。
-    expect(selectMock).toHaveBeenCalledTimes(4);
+    expect(selectMock).toHaveBeenCalledTimes(5);
     expect(result.siteTitle).toBe("CC Hub");
     expect(result.enableHttp2).toBe(true);
     expect(result.affinityIgnoreClientSessionId).toBe(true);
     expect(result.streamGateMode).toBe("enforce");
+    expect(result.enableMemoryAdmission).toBe(false);
 
-    const fourthSelection = selectMock.mock.calls[3]?.[0] as Record<string, unknown>;
-    expect(fourthSelection).not.toHaveProperty("legacyHedgeMaxInFlight");
-    expect(fourthSelection).not.toHaveProperty("replayCacheTtlMinutes");
-    expect(fourthSelection).not.toHaveProperty("cacheEffectivenessEnabled");
-    expect(fourthSelection).toHaveProperty("replayEnabled");
-    expect(fourthSelection).toHaveProperty("affinityIgnoreClientSessionId");
-    expect(fourthSelection).toHaveProperty("streamGateMode");
-    expect(fourthSelection).toHaveProperty("stickyTimeoutCooldownMs");
-    expect(fourthSelection).toHaveProperty("racingTotalTimeoutMs");
-    expect(fourthSelection).toHaveProperty("enableGeminiFunctionIdRectifier");
-    expect(fourthSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
+    const successfulSelection = selectMock.mock.calls[4]?.[0] as Record<string, unknown>;
+    expect(successfulSelection).not.toHaveProperty("enableMemoryAdmission");
+    expect(successfulSelection).not.toHaveProperty("legacyHedgeMaxInFlight");
+    expect(successfulSelection).not.toHaveProperty("replayCacheTtlMinutes");
+    expect(successfulSelection).not.toHaveProperty("cacheEffectivenessEnabled");
+    expect(successfulSelection).toHaveProperty("replayEnabled");
+    expect(successfulSelection).toHaveProperty("affinityIgnoreClientSessionId");
+    expect(successfulSelection).toHaveProperty("streamGateMode");
+    expect(successfulSelection).toHaveProperty("stickyTimeoutCooldownMs");
+    expect(successfulSelection).toHaveProperty("racingTotalTimeoutMs");
+    expect(successfulSelection).toHaveProperty("enableGeminiFunctionIdRectifier");
+    expect(successfulSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
 
     vi.useRealTimers();
   });
