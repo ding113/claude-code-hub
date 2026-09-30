@@ -345,6 +345,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     replayEnabled: dbSettings?.replayEnabled ?? null,
     replayCacheTtlMinutes: normalizedReplayCacheTtlMinutes,
     cacheEffectivenessEnabled: dbSettings?.cacheEffectivenessEnabled ?? null,
+    enableMemoryAdmission: dbSettings?.enableMemoryAdmission ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

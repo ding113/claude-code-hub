@@ -128,6 +128,7 @@ export const DEFAULT_SETTINGS: Pick<
   | "racingTotalTimeoutMs"
   | "stickyTimeoutCooldownMs"
   | "legacyHedgeMaxInFlight"
+  | "enableMemoryAdmission"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -169,6 +170,7 @@ export const DEFAULT_SETTINGS: Pick<
   racingTotalTimeoutMs: 60_000,
   stickyTimeoutCooldownMs: 300_000,
   legacyHedgeMaxInFlight: 2,
+  enableMemoryAdmission: false,
 };
 
 /**
@@ -263,6 +265,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       replayEnabled: null,
       replayCacheTtlMinutes: DEFAULT_SETTINGS.replayCacheTtlMinutes,
       cacheEffectivenessEnabled: null,
+      enableMemoryAdmission: DEFAULT_SETTINGS.enableMemoryAdmission,
       discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
       discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,
       maxDiscoveryRounds: DEFAULT_SETTINGS.maxDiscoveryRounds,

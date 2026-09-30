@@ -327,7 +327,12 @@ describe("ProxySession routing trace recorder", () => {
   it.each([false, true])(
     "响应 EOF 后保留慢观测刷新和删除的请求额度，删除失败=%s",
     async (failed) => {
-      const governor = new MemoryGovernor({ limit: 100, remote: false, monitor: false });
+      const governor = new MemoryGovernor({
+        limit: 100,
+        remote: false,
+        monitor: false,
+        enabled: true,
+      });
       const write = Promise.withResolvers<void>();
       const deletion = Promise.withResolvers<void>();
       liveChainMocks.writeLiveRoutingTrace.mockImplementationOnce(() => write.promise);

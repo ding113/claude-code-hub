@@ -25,6 +25,10 @@ export interface MemoryLeaseLedger {
   byTag: Record<string, { count: number; bytes: number; oldestAgeMs: number }>;
 }
 export interface MemoryGovernor {
+  /** 系统设置「内存准入」开关；关闭时租约与增长总是成功。 */
+  readonly enabled: boolean;
+  setEnabled(enabled: boolean): void;
+  onEnabledChange(listener: (enabled: boolean) => void): () => void;
   observe(
     stage: "admission" | "body_read" | "body_decode" | "body_materialize" | "gate",
     milliseconds: number,
@@ -38,6 +42,7 @@ export interface MemoryGovernor {
   ): Promise<MemoryLease>;
   tryLease(bytes: number, tag?: MemoryLeaseTag): MemoryLease | null;
   snapshot(): {
+    enabled: boolean;
     usedBytes: number;
     limitBytes: number;
     waiting: number;

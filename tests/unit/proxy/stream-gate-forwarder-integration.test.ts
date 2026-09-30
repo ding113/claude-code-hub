@@ -597,7 +597,12 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
           });
           const session = createSession();
           session.setProvider(provider);
-          const governor = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+          const governor = new MemoryGovernor({
+            limit: 0,
+            remote: false,
+            monitor: false,
+            enabled: true,
+          });
           vi.spyOn(getStreamGatePrebufferBudget(), "acquire").mockImplementation((bytes, signal) =>
             governor.acquire(bytes, signal)
           );
@@ -637,8 +642,18 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
         const session = createSession();
         session.setProvider(first);
         mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(second);
-        const free = new MemoryGovernor({ limit: 1024 * 1024, remote: false, monitor: false });
-        const occupied = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+        const free = new MemoryGovernor({
+          limit: 1024 * 1024,
+          remote: false,
+          monitor: false,
+          enabled: true,
+        });
+        const occupied = new MemoryGovernor({
+          limit: 0,
+          remote: false,
+          monitor: false,
+          enabled: true,
+        });
         vi.spyOn(getStreamGatePrebufferBudget(), "acquire")
           .mockImplementationOnce((bytes, signal) => free.acquire(bytes, signal))
           .mockImplementation((bytes, signal) => occupied.acquire(bytes, signal));

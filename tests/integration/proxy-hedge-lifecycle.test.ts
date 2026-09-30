@@ -96,6 +96,7 @@ vi.mock("@/lib/memory/governor", async (importOriginal) => {
         limit: 64 * 1024 ** 2,
         remote: false,
         monitor: false,
+        enabled: true,
       });
       return state.bodyGovernor;
     },
@@ -753,7 +754,12 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     const client = new AbortController();
     const now = vi.spyOn(Date, "now");
     const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
-    const governor = new MemoryGovernor({ limit: 8 * 1024 ** 2, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 8 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 8 * 1024 ** 2, governor);
     const admission = vi
       .spyOn(getStreamGatePrebufferBudget(), "acquire")
@@ -837,7 +843,12 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     async ({ sticky, waitMs, cancel }) => {
       const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
       const client = new AbortController();
-      const governor = new MemoryGovernor({ limit: 1024 ** 2, remote: false, monitor: false });
+      const governor = new MemoryGovernor({
+        limit: 1024 ** 2,
+        remote: false,
+        monitor: false,
+        enabled: true,
+      });
       const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
       const occupied = await budget.acquire(1024 ** 2);
       const admission = vi
@@ -916,7 +927,12 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
   it("pauses Sticky and race deadlines during compatibility response admission", async () => {
     const upstream = await startUpstream("application/json");
     const client = new AbortController();
-    const governor = new MemoryGovernor({ limit: 1024 ** 2, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
     const entered = Promise.withResolvers<void>();
     let occupied: Awaited<ReturnType<typeof budget.acquire>> | undefined;
@@ -1000,7 +1016,12 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
   it("Discovery 解析容量不足返回本地 429，取消所有候选且不惩罚供应商", async () => {
     const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
     const client = new AbortController();
-    const governor = new MemoryGovernor({ limit: 256 * 1024, remote: false, monitor: false });
+    const governor = new MemoryGovernor({
+      limit: 256 * 1024,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
     const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
     const admission = vi
       .spyOn(getStreamGatePrebufferBudget(), "acquire")

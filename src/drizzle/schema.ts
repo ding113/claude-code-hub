@@ -1087,6 +1087,10 @@ export const systemSettings = pgTable('system_settings', {
   // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
   cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),
 
+  // 内存准入（默认关闭）
+  // 开启后：请求正文与流式门控前缀按可用内存预算准入，超出时落盘或返回本地 429
+  enableMemoryAdmission: boolean('enable_memory_admission').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({

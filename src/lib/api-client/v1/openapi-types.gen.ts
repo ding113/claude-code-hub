@@ -12744,6 +12744,8 @@ export interface operations {
                         streamGateMode: "off" | "shadow" | "enforce";
                         /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                         affinityIgnoreClientSessionId: boolean;
+                        /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                        enableMemoryAdmission: boolean;
                         /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                         replayEnabled: boolean | null;
                         /** @description Replay completed payload reuse window in minutes. */
@@ -13034,6 +13036,8 @@ export interface operations {
                     streamGateMode?: "off" | "shadow" | "enforce";
                     /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                     affinityIgnoreClientSessionId?: boolean;
+                    /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                    enableMemoryAdmission?: boolean;
                     /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                     replayEnabled?: boolean | null;
                     /** @description Replay completed payload reuse window in minutes. */
@@ -13199,6 +13203,8 @@ export interface operations {
                         streamGateMode: "off" | "shadow" | "enforce";
                         /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                         affinityIgnoreClientSessionId: boolean;
+                        /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                        enableMemoryAdmission: boolean;
                         /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                         replayEnabled: boolean | null;
                         /** @description Replay completed payload reuse window in minutes. */

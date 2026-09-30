@@ -1171,6 +1171,8 @@ export const UpdateSystemSettingsSchema = z
       .optional(),
     // 忽略客户端 Session ID（可选）
     affinityIgnoreClientSessionId: z.boolean().optional(),
+    // 内存准入（可选）
+    enableMemoryAdmission: z.boolean().optional(),
     // F2 Replay 响应缓存与复用（可选；null = 跟随环境变量）
     replayEnabled: z.boolean().nullable().optional(),
     // F2 Replay 完成 payload 可重放窗口(分钟)

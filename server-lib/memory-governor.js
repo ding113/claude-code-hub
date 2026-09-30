@@ -27,6 +27,9 @@ class MemoryGovernor {
     this.plan = createMemoryPlan({ env: this.env, snapshot: this.readSnapshot() });
     this.limit = options.limit ?? this.plan.hotBudgetBytes;
     this.ceiling = this.limit;
+    // 关闭时只记账不设限：租约与增长总是成功，不排队、不申请跨进程授权、不返回本地 429。
+    this.enabled = options.enabled ?? false;
+    this.enabledListeners = new Set();
     this.used = 0;
     this.waiting = 0;
     this.peak = 0;
@@ -90,8 +93,21 @@ class MemoryGovernor {
     }
   }
 
+  setEnabled(enabled) {
+    const next = enabled === true;
+    if (next === this.enabled) return;
+    this.enabled = next;
+    for (const listener of this.enabledListeners) listener(next);
+  }
+
+  /** 开关变化时通知子限额等外部队列立即重新调度排队者。 */
+  onEnabledChange(listener) {
+    this.enabledListeners.add(listener);
+    return () => this.enabledListeners.delete(listener);
+  }
+
   snapshot() {
-    return { usedBytes: this.used, limitBytes: this.remote ? this.credits : this.limit, waiting: this.waiting, peakBytes: this.peak, rejected: this.rejected, source: this.plan.source, stages: this.stages, leases: this.leaseLedger() };
+    return { enabled: this.enabled, usedBytes: this.used, limitBytes: this.remote ? this.credits : this.limit, waiting: this.waiting, peakBytes: this.peak, rejected: this.rejected, source: this.plan.source, stages: this.stages, leases: this.leaseLedger() };
   }
 
   /** 仅供诊断：按标签汇总在账租约，定位长期不归还的所有者。 */
@@ -166,7 +182,7 @@ class MemoryGovernor {
   tryLease(bytes, tag = "untagged") {
     if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError("Invalid memory lease size");
     const limit = this.remote ? this.credits : this.limit;
-    if (bytes > limit - this.used) return null;
+    if (this.enabled && bytes > limit - this.used) return null;
     this.used += bytes;
     this.peak = Math.max(this.peak, this.used);
     let size = bytes;
@@ -178,7 +194,7 @@ class MemoryGovernor {
       if (released) return false;
       if (target <= size) return true;
       const delta = target - size;
-      if (delta > (this.remote ? this.credits : this.limit) - this.used) {
+      if (this.enabled && delta > (this.remote ? this.credits : this.limit) - this.used) {
         if (requestCredits) void this.requestCredits(delta);
         return false;
       }

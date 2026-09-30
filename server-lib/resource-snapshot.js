@@ -62,7 +62,13 @@ function readResourceSnapshot(options = {}) {
     }
     while (directory === mount || directory.startsWith(`${mount}/`)) {
       const number = (file) => finiteBytes(safeRead(path.join(directory, file)));
-      const current = number(v2 ? "memory.current" : "memory.usage_in_bytes");
+      // cgroup 用量包含可回收的 page cache（溢写文件、读取过的代码与日志），不扣除时
+      // 运行一段时间后剩余额度会被 cache 压到 0。与 kubelet/cAdvisor 的 working set 一致，
+      // 扣除 inactive file 后作为实际占用。
+      const stat = safeRead(path.join(directory, "memory.stat")) || "";
+      const inactiveFile = finiteBytes(stat.match(v2 ? /^inactive_file (\d+)$/m : /^total_inactive_file (\d+)$/m)?.[1]) ?? 0;
+      const usage = number(v2 ? "memory.current" : "memory.usage_in_bytes");
+      const current = usage === null ? null : Math.max(0, usage - inactiveFile);
       if (current !== null) hasMemoryController = true;
       for (const limitFile of v2 ? ["memory.max", "memory.high"] : ["memory.limit_in_bytes"]) {
         const limit = number(limitFile);
@@ -79,7 +85,8 @@ function readResourceSnapshot(options = {}) {
         if (limit !== null) swap = Math.min(swap, used === null ? 0 : Math.max(0, limit - used));
       } else {
         const limit = number("memory.memsw.limit_in_bytes");
-        const used = number("memory.memsw.usage_in_bytes");
+        const memswUsage = number("memory.memsw.usage_in_bytes");
+        const used = memswUsage === null ? null : Math.max(0, memswUsage - inactiveFile);
         if (limit !== null && used !== null) {
           hasSwapAccounting = true;
           combinedRemaining = Math.min(combinedRemaining, Math.max(0, limit - used));

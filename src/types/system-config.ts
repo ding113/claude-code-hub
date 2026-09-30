@@ -171,6 +171,10 @@ export interface SystemSettings {
   // null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS（默认 true）
   cacheEffectivenessEnabled: boolean | null;
 
+  // 内存准入（默认关闭）
+  // 开启后：请求正文与流式门控前缀按可用内存预算准入，超出时落盘或返回本地 429
+  enableMemoryAdmission: boolean;
+
   /** Bounded streaming Discovery settings. */
   discoveryEnabled: boolean;
   discoveryConcurrency: number;
@@ -308,4 +312,7 @@ export interface UpdateSystemSettingsInput {
 
   // F3b 缓存模拟开关（可选；null = 清除覆写跟随环境变量）
   cacheEffectivenessEnabled?: boolean | null;
+
+  // 内存准入开关（可选）
+  enableMemoryAdmission?: boolean;
 }

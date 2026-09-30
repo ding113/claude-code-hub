@@ -207,6 +207,7 @@ function createFallbackSettings(): SystemSettings {
     replayEnabled: null,
     replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
     cacheEffectivenessEnabled: null,
+    enableMemoryAdmission: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -285,6 +286,12 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "enableMemoryAdmission",
+    column: systemSettings.enableMemoryAdmission,
+    selectWarn: "system_settings 缺少 enableMemoryAdmission，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 enableMemoryAdmission，继续降级更新。",
+  },
   {
     key: "legacyHedgeMaxInFlight",
     column: systemSettings.legacyHedgeMaxInFlight,
@@ -925,6 +932,11 @@ export async function updateSystemSettings(
     // F3b 缓存模拟开关覆写（如果提供；null = 清除覆写跟随环境变量）
     if (payload.cacheEffectivenessEnabled !== undefined) {
       updates.cacheEffectivenessEnabled = payload.cacheEffectivenessEnabled;
+    }
+
+    // 内存准入开关（如果提供）
+    if (payload.enableMemoryAdmission !== undefined) {
+      updates.enableMemoryAdmission = payload.enableMemoryAdmission;
     }
 
     let updated;

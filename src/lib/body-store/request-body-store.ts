@@ -36,6 +36,8 @@ export async function loadRequestBody(
   originalByteLength: number;
   encoding: string | null;
   lease: MemoryLease;
+  /** 调用方完成解析后应把 lease 收缩到该值。 */
+  retainedBytes: number;
 }> {
   const governor = getMemoryGovernor();
   const started = performance.now();
@@ -193,7 +195,10 @@ export async function loadRequestBody(
       source.restoreMemoryAfterAdmission();
     }
     const heap = getHeapStatistics();
-    if (estimate.capacityBytes > (heap.heap_size_limit - heap.used_heap_size) * 0.5) {
+    if (
+      governor.enabled &&
+      estimate.capacityBytes > (heap.heap_size_limit - heap.used_heap_size) * 0.5
+    ) {
       throw new LocalCapacityError();
     }
     const buffer = await source.arrayBuffer();
@@ -201,7 +206,7 @@ export async function loadRequestBody(
     governor.observe("body_materialize", performance.now() - materializeStarted, source.byteLength);
     const lease = materializedLease;
     materializedLease = null;
-    return { buffer, encoding, originalByteLength, lease };
+    return { buffer, encoding, originalByteLength, lease, retainedBytes: estimate.retainedBytes };
   } finally {
     await Promise.allSettled([
       raw.dispose(() => rawLease.release()),
