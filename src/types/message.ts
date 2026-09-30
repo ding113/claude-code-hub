@@ -262,6 +262,8 @@ export interface ProviderChainItem {
     bufferedBytes: number; // 提交时已缓冲的前缀字节数
     echoExcludedBytes: number; // 被排除出字节计数的请求回显帧字节数
     gateWaitMs: number; // 门控等待时长（首字节到提交）
+    // true = 中性帧数量达到上限、尚未见到内容帧即放行（旧记录无该字段，视为 false）
+    releasedBeforeContent?: boolean;
   };
 
   // === F3a 亲和命中详情（reason === "affinity_hit" 时记录） ===

@@ -226,8 +226,11 @@ export const EnvSchema = z.object({
   // ===== CCHP 网关移植功能开关 =====
   // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
   STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("enforce"),
-  // 门控 precommit 缓冲上限：超限即视为该供应商流异常，failover 释放内存
-  // （字节计数排除请求回显帧，见 stream-gate/frame-classifier.ts isRequestEchoFrame）
+  // 门控 precommit 缓冲上限：
+  // - EVENT_CAP：首个内容帧前最多扣住的中性帧数；达到后放行（提交已缓冲前缀并透传），
+  //   不判供应商失败——长思考流在首个内容帧前会连续输出大量小中性帧
+  // - BYTE_CAP：超限即视为该供应商流异常，failover 释放内存
+  //   （字节计数排除请求回显帧，见 stream-gate/frame-classifier.ts isRequestEchoFrame）
   STREAM_GATE_PREBUFFER_EVENT_CAP: z.coerce.number().int().min(1).max(4096).default(64),
   STREAM_GATE_PREBUFFER_BYTE_CAP: z.coerce
     .number()
