@@ -4498,6 +4498,9 @@ export class ProxyForwarder {
         }
 
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
+        // 直连场景不在这里设置 dispatcher：删除 dispatcher 后会回落到全局 Agent，
+        // 而 src/lib/proxy-agent.ts 的全局 Agent 已显式 allowH2:false，因此确实走 HTTP/1.1。
+        // 该不变式是本次回退有效的前提，修改全局 Agent 时必须同步检查这里。
         let http1ProxyConfig: typeof proxyConfig = null;
         if (proxyConfig) {
           http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
