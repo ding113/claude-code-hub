@@ -25,6 +25,8 @@
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
+const { readResponsesWsPayloadLimits } = require("./server-lib/responses-ws-payload");
+const { formatWsPayloadTooLargeMessage } = require("./server-lib/responses-ws-error-message");
 
 function isNextDevMode(nodeEnv) {
   return nodeEnv !== "production";
@@ -45,6 +47,8 @@ const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
 const WS_SESSION_HEADER = "x-cch-responses-ws-session";
+const WS_FORCE_HTTP_HEADER = "x-cch-responses-ws-force-http";
+const WS_FORCE_HTTP_PAYLOAD_TOO_LARGE = "payload_too_large_for_upstream_ws";
 const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
 const INTERNAL_SECRET_ENV = "CCH_RESPONSES_WS_INTERNAL_SECRET";
 
@@ -57,7 +61,8 @@ const RESERVED_INTERNAL_HEADER_PREFIX = "x-cch-";
 // Per-WebSocket-connection guardrails: cap the queue depth and total queued
 // bytes to make a misbehaving / malicious client a bounded-memory event.
 const MAX_PENDING_FRAMES = 64;
-const MAX_PENDING_BYTES = 64 * 1024 * 1024; // 64 MiB across all queued frames
+const WS_PAYLOAD_LIMITS = readResponsesWsPayloadLimits();
+const MAX_PENDING_BYTES = WS_PAYLOAD_LIMITS.pending;
 const MAX_PENDING_OUTBOUND_BYTES = 1024 * 1024; // 1 MiB per client WebSocket
 // Internal HTTP responses ultimately become one outbound WS frame per event.
 // Bound aggregation at the same layer instead of first materializing a body
@@ -67,12 +72,9 @@ const MAX_INTERNAL_SSE_EVENT_CHARACTERS = MAX_PENDING_OUTBOUND_BYTES;
 const REQUEST_BODY_DRAIN_TIMEOUT_MS = 30_000;
 const OUTBOUND_SEND_TIMEOUT_MS = 30_000;
 
-// Maximum payload size for any single inbound WS frame. The default `ws`
-// limit is 100 MiB. We pick 32 MiB to accommodate Codex requests that ship
-// large conversation history alongside the prompt — a tighter cap caused the
-// `ws` library to socket.destroy() (TCP RST) without sending a close frame,
-// surfacing on the client as "Connection reset without closing handshake".
-const WS_MAX_PAYLOAD_BYTES = 32 * 1024 * 1024; // 32 MiB per frame
+// Allow the application to send a structured 413 above the business limit,
+// while bounding a complete (possibly fragmented) message in the ws receiver.
+const WS_MAX_PAYLOAD_BYTES = WS_PAYLOAD_LIMITS.hard;
 
 const TERMINAL_EVENT_TYPES = new Set([
   "response.completed",
@@ -251,7 +253,12 @@ function sanitizedRequestPath(rawUrl) {
   }
 }
 
-async function handleWebSocketConnection(ws, req, internalHttpTarget) {
+async function handleWebSocketConnection(
+  ws,
+  req,
+  internalHttpTarget,
+  payloadLimits = WS_PAYLOAD_LIMITS
+) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
   const responsesWsSessionId = randomUUID();
@@ -352,13 +359,17 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
       log("warn", "ws_client_close_failed", { error: String(err) });
     }
   };
-  const sendErrorAndClose = (error, close) => {
+  const sendErrorAndClose = (error, close, status) => {
     if (closed || closing) return;
     closing = true;
     abortCurrentInternalReq();
     dropPendingFrames();
     const finish = () => requestClose(close.code, close.reason);
-    safeSend(ws, { type: "error", error }, { onSuccess: finish, onFailure: finish });
+    safeSend(
+      ws,
+      { type: "error", ...(status === undefined ? {} : { status }), error },
+      { onSuccess: finish, onFailure: finish }
+    );
   };
 
   ws.on("close", finalize);
@@ -446,7 +457,9 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
       body.model = queryModel;
     }
 
+    const forceHttpForPayload = queuedFrame.bytes > payloadLimits.soft;
     log("info", "ws_request_started", {
+      forceHttpForPayload,
       model: typeof body.model === "string" ? body.model : null,
       payloadBytes: queuedFrame.bytes,
       hasPreviousResponseId: typeof body.previous_response_id === "string",
@@ -461,7 +474,8 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
       responsesWsSessionId,
       registerTurnResource,
       requestClose,
-      internalHttpTarget
+      internalHttpTarget,
+      forceHttpForPayload ? WS_FORCE_HTTP_PAYLOAD_TOO_LARGE : null
     );
     raw = "";
     frame = null;
@@ -514,7 +528,22 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
     }
     const text = data.toString("utf8");
     const size = Buffer.byteLength(text, "utf8");
-    if (pending.length >= MAX_PENDING_FRAMES || pendingBytes + size > MAX_PENDING_BYTES) {
+    if (size > payloadLimits.absolute) {
+      log("warn", "ws_request_payload_too_large", {
+        payloadBytes: size,
+        limitBytes: payloadLimits.absolute,
+      });
+      sendErrorAndClose(
+        {
+          code: "request_payload_too_large",
+          message: formatWsPayloadTooLargeMessage(req.headers, size, payloadLimits.absolute),
+        },
+        { code: 1009, reason: "request_payload_too_large" },
+        413
+      );
+      return;
+    }
+    if (pending.length >= MAX_PENDING_FRAMES || pendingBytes + size > payloadLimits.pending) {
       log("warn", "ws_pending_overflow", {
         pendingFrames: pending.length,
         pendingBytes,
@@ -547,7 +576,8 @@ async function forwardToInternalHttp(
   responsesWsSessionId,
   registerInternalReq,
   requestClose,
-  internalHttpTarget
+  internalHttpTarget,
+  forceHttpReason
 ) {
   // requestClose(code, reason) initiates the WebSocket closing handshake AND
   // synchronously marks the client connection closed so the caller's pending
@@ -598,6 +628,9 @@ async function forwardToInternalHttp(
   internalHeaders["content-type"] = "application/json";
   internalHeaders[CLIENT_TRANSPORT_HEADER] = "websocket";
   internalHeaders[WS_FORWARD_FLAG_HEADER] = "1";
+  if (forceHttpReason === WS_FORCE_HTTP_PAYLOAD_TOO_LARGE) {
+    internalHeaders[WS_FORCE_HTTP_HEADER] = forceHttpReason;
+  }
   if (typeof responsesWsSessionId === "string" && responsesWsSessionId.length > 0) {
     internalHeaders[WS_SESSION_HEADER] = responsesWsSessionId;
   }

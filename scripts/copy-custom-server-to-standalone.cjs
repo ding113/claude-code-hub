@@ -54,3 +54,37 @@ if (!fs.existsSync(libSrc)) {
 const libDst = path.join(dstDir, "server-lib");
 fs.cpSync(libSrc, libDst, { recursive: true });
 console.log(`[copy-custom-server] Copied ${libSrc} -> ${libDst}`);
+
+// The custom WS entry formats terminal errors outside Next's request context.
+// Its dictionaries are not discovered by Next's compiled import tracing.
+for (const locale of ["zh-CN", "zh-TW", "en", "ru", "ja"]) {
+  const source = path.join(cwd, "messages", locale, "errors.json");
+  const target = path.join(dstDir, "messages", locale, "errors.json");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(source, target);
+}
+
+// Next bundles its application imports, but the CommonJS WS entry needs the
+// translator's actual runtime files. Trace this entry separately so the
+// standalone artifact never falls back to a parent checkout's node_modules.
+async function copyWsErrorRuntime() {
+  const { nodeFileTrace } = require("next/dist/compiled/@vercel/nft");
+  const { fileList, warnings } = await nodeFileTrace(
+    [path.join(cwd, "server-lib", "responses-ws-error-message.js")],
+    { base: cwd, processCwd: cwd }
+  );
+  if (warnings.size > 0) {
+    throw new Error([...warnings].map((warning) => warning.message).join("\n"));
+  }
+  for (const file of fileList) {
+    if (!file.startsWith("node_modules/")) continue;
+    const target = path.join(dstDir, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.cpSync(path.join(cwd, file), target, { recursive: true, dereference: true });
+  }
+}
+
+copyWsErrorRuntime().catch((error) => {
+  console.error("[copy-custom-server] Failed to copy WebSocket error runtime", error);
+  process.exitCode = 1;
+});
