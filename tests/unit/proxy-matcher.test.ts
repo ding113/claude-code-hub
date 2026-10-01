@@ -18,6 +18,9 @@ describe("proxy matcher", () => {
       "/v1beta/messages",
       "/v1beta",
       "/v1beta/v1/foo",
+      "/v2/video_generation",
+      "/v2/query/video_generation/task_123",
+      "/v2",
     ])("does not match %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(false);
     });

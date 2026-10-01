@@ -54,6 +54,24 @@ const ENDPOINT_PROVIDER_CASES = [
     expectedProviderType: "openai-compatible",
   },
   {
+    id: "video-generation-v2-create",
+    path: "/v2/video_generation",
+    requestedModel: "MiniMax-H3",
+    expectedProviderType: "openai-compatible",
+  },
+  {
+    id: "video-generation-v2-query",
+    path: "/v2/query/video_generation/task_123",
+    requestedModel: "",
+    expectedProviderType: "openai-compatible",
+  },
+  {
+    id: "video-generation-v2-resources",
+    path: "/v2/video_generation/task_123",
+    requestedModel: "",
+    expectedProviderType: "openai-compatible",
+  },
+  {
     id: "openai-completions",
     path: "/v1/completions",
     requestedModel: "gpt-3.5-turbo-instruct",
