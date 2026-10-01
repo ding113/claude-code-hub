@@ -10,6 +10,7 @@ vi.mock("@/lib/proxy-agent", () => ({
 }));
 
 import { executeProviderTest } from "./test-service";
+import { getTestBody } from "./utils/test-prompts";
 
 function createMockResponse(
   responseBody: string,
@@ -751,6 +752,58 @@ describe("executeProviderTest", () => {
     expect(result.success).toBe(false);
     expect(result.status).toBe("red");
     expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+  });
+
+  test.each(["cx_codex_basic", "cx_gpt_basic"])(
+    "codex preset %s passes an upstream that only accepts tool options with tools",
+    async (preset) => {
+      // Strict OpenAI-compatible upstreams reject tool_choice and parallel_tool_calls
+      // when tools is missing or empty (#1485).
+      fetchMock.mockImplementation(async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+        const rejected = ["tool_choice", "parallel_tool_calls"].find(
+          (field) => !hasTools && field in body
+        );
+        if (rejected) {
+          return createMockResponse(
+            JSON.stringify({
+              error: {
+                message: `Invalid value for '${rejected}': '${rejected}' is only allowed when 'tools' are specified.`,
+                type: "invalid_request_error",
+              },
+            }),
+            { ok: false, status: 400, statusText: "Bad Request" }
+          );
+        }
+        return createMockResponse(
+          `event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"pong","item_id":"msg_123","output_index":0,"sequence_number":1}
+`,
+          { contentType: "text/event-stream" }
+        );
+      });
+
+      const result = await executeProviderTest({
+        providerUrl: "https://api.example.com",
+        apiKey: "sk-test-codex",
+        providerType: "codex",
+        model: "gpt-5.5",
+        preset,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.content).toBe("pong");
+    }
+  );
+
+  test("codex fallback test body sends no tool options while tools is empty", () => {
+    const body = getTestBody("codex", "gpt-5.5");
+
+    expect(body.tools).toEqual([]);
+    expect(body).not.toHaveProperty("tool_choice");
+    expect(body).not.toHaveProperty("parallel_tool_calls");
   });
 
   test("codex 新版 SSE 事件流应正确提取 output_text delta，避免误判为内容不匹配", async () => {

@@ -14,8 +14,6 @@
     }
   ],
   "tools": [],
-  "tool_choice": "auto",
-  "parallel_tool_calls": false,
   "reasoning": {
     "effort": "low",
     "summary": "auto"

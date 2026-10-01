@@ -247,7 +247,7 @@ export interface CodexTestBody {
     content: Array<{ type: "input_text"; text: string }>;
   }>;
   tools: unknown[];
-  tool_choice: string;
+  tool_choice?: string;
   parallel_tool_calls?: boolean;
   reasoning?: { effort: string; summary: string };
   store: boolean;

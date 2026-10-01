@@ -56,8 +56,6 @@ export const CODEX_TEST_BODY: CodexTestBody = {
     },
   ],
   tools: [],
-  tool_choice: "auto",
-  parallel_tool_calls: false,
   reasoning: { effort: "low", summary: "auto" },
   store: false,
   stream: true,
