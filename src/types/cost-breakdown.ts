@@ -27,6 +27,26 @@ export interface StoredCostBreakdown {
   group_multiplier: number;
   /** Final total cost after both multipliers */
   total: string;
+  /** Long-context tier applied to the whole request. Absent when no tier was hit. */
+  long_context?: StoredLongContextTier;
+}
+
+/**
+ * Long-context tier hit: once the request's input context exceeds the threshold, every billed
+ * dimension of the whole request uses its tier unit price.
+ * Each multiplier is the tier unit price divided by the unit price that applies without the tier;
+ * a multiplier is absent when that dimension has no tier price.
+ */
+export interface StoredLongContextTier {
+  /** The tier applies when observed_input_tokens is strictly greater than this value */
+  threshold_tokens: number;
+  /** Input context of the request: input + cache creation + cache read + image input tokens */
+  observed_input_tokens: number;
+  input_multiplier?: number;
+  output_multiplier?: number;
+  cache_creation_5m_multiplier?: number;
+  cache_creation_1h_multiplier?: number;
+  cache_read_multiplier?: number;
 }
 
 /**

@@ -338,6 +338,8 @@
         "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
         "context1m": "1M контекст",
         "context1mEnabled": "Окно контекста 1M включено",
+        "longContextTier": "Длинный контекст >{threshold}",
+        "longContextTierRule": "Входной контекст {tokens} токенов превышает {threshold}, поэтому весь запрос тарифицируется по ценам длинного контекста",
         "pricingProvider": "Провайдер тарифа",
         "pricingSourceLabel": "Источник тарифа",
         "pricingSource": {
@@ -630,6 +632,8 @@
       "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
       "context1m": "1M Контекст",
       "context1mEnabled": "Окно контекста 1M включено",
+      "longContextTier": "Длинный контекст >{threshold}",
+      "longContextTierRule": "Входной контекст {tokens} токенов превышает {threshold}, поэтому весь запрос тарифицируется по ценам длинного контекста",
       "pricingProvider": "Провайдер тарифа",
       "pricingSourceLabel": "Источник тарифа",
       "pricingSource": {
