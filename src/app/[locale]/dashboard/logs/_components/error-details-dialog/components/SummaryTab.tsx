@@ -28,6 +28,12 @@ import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
+import {
+  formatLongContextObservedTokens,
+  formatLongContextThreshold,
+  getLongContextTierMultiplierRows,
+  type LongContextTierDimension,
+} from "@/lib/utils/long-context-tier-display";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import { calculateOutputRate, shouldHideOutputRate } from "@/lib/utils/performance-formatter";
 import {
@@ -166,6 +172,25 @@ export function SummaryTab({
     isFake200PostStreamFailure && fake200Code
       ? t(getFake200ReasonKey(fake200Code, "fake200Reasons"))
       : null;
+
+  const longContextTier = costBreakdown?.long_context ?? null;
+  const hasCache1hTokens =
+    (cacheCreation1hInputTokens ?? 0) > 0 ||
+    (cacheTtlApplied === "1h" && (cacheCreationInputTokens ?? 0) > 0);
+  const longContextDimensionLabel = (dimension: LongContextTierDimension) => {
+    switch (dimension) {
+      case "input":
+        return t("billingDetails.input");
+      case "output":
+        return t("billingDetails.output");
+      case "cacheWrite":
+        return hasCache1hTokens ? t("billingDetails.cacheWrite5m") : t("billingDetails.cacheWrite");
+      case "cacheWrite1h":
+        return t("billingDetails.cacheWrite1h");
+      case "cacheRead":
+        return t("billingDetails.cacheRead");
+    }
+  };
 
   // Resolve per-TTL cache creation costs for display. Strategy:
   //  1. Prefer the split fields (cache_creation_5m / _1h) written since the
@@ -590,6 +615,36 @@ export function SummaryTab({
                   </div>
                 </div>
               )}
+
+              {longContextTier ? (
+                <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-800 dark:bg-amber-950/20">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                    >
+                      {t("billingDetails.longContextTier", {
+                        threshold: formatLongContextThreshold(longContextTier.threshold_tokens),
+                      })}
+                    </Badge>
+                    <span className="font-mono text-xs">
+                      {getLongContextTierMultiplierRows(longContextTier, hasCache1hTokens)
+                        .map(
+                          (row) => `${longContextDimensionLabel(row.dimension)} ${row.multiplier}`
+                        )
+                        .join(" · ")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("billingDetails.longContextTierRule", {
+                      tokens: formatLongContextObservedTokens(
+                        longContextTier.observed_input_tokens
+                      ),
+                      threshold: formatLongContextThreshold(longContextTier.threshold_tokens),
+                    })}
+                  </p>
+                </div>
+              ) : null}
 
               {hasPriorityServiceTier ? (
                 <div className="flex justify-between items-center">

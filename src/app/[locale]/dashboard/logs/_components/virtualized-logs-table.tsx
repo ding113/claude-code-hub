@@ -31,6 +31,12 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import {
+  formatLongContextObservedTokens,
+  formatLongContextThreshold,
+  getLongContextTierMultiplierRows,
+  type LongContextTierDimension,
+} from "@/lib/utils/long-context-tier-display";
+import {
   calculateOutputRate,
   formatDuration,
   isNonBillingEndpoint,
@@ -316,14 +322,31 @@ export function VirtualizedLogsTable({
     const title = t("logs.details.billingDetails.title");
     const totalCostLabel = t("logs.billingDetails.totalCost");
     const amountClassName = "font-mono tabular-nums text-right";
-    const headerChip = log.context1mApplied ? (
-      <Badge
-        variant="outline"
-        className="shrink-0 text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
-      >
-        {t("logs.billingDetails.context1m")}
-      </Badge>
-    ) : null;
+    const longContextTier = log.costBreakdown?.long_context ?? null;
+    // tooltip 与页面主题反色：深色主题下 tooltip 为浅色底，标签需使用浅色底上的配色
+    const headerChip =
+      log.context1mApplied || longContextTier ? (
+        <div className="flex shrink-0 items-center gap-1">
+          {log.context1mApplied ? (
+            <Badge
+              variant="outline"
+              className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-100 dark:text-purple-800 dark:border-purple-300"
+            >
+              {t("logs.billingDetails.context1m")}
+            </Badge>
+          ) : null}
+          {longContextTier ? (
+            <Badge
+              variant="outline"
+              className="text-[10px] leading-tight px-1 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-100 dark:text-amber-800 dark:border-amber-300"
+            >
+              {t("logs.billingDetails.longContextTier", {
+                threshold: formatLongContextThreshold(longContextTier.threshold_tokens),
+              })}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null;
 
     const resolveCacheCreationRows = () => {
       const breakdown = log.costBreakdown;
@@ -597,6 +620,44 @@ export function VirtualizedLogsTable({
         : null,
     ].filter((row): row is NonNullable<typeof row> => row !== null);
 
+    const hasCache1hTokens =
+      (log.cacheCreation1hInputTokens ?? 0) > 0 ||
+      (log.cacheTtlApplied === "1h" && (log.cacheCreationInputTokens ?? 0) > 0);
+    const longContextDimensionLabel = (dimension: LongContextTierDimension) => {
+      switch (dimension) {
+        case "input":
+          return t("logs.billingDetails.input");
+        case "output":
+          return t("logs.billingDetails.output");
+        case "cacheWrite":
+          return hasCache1hTokens
+            ? t("logs.billingDetails.cacheWrite5m")
+            : t("logs.columns.cacheWrite");
+        case "cacheWrite1h":
+          return t("logs.billingDetails.cacheWrite1h");
+        case "cacheRead":
+          return t("logs.billingDetails.cacheRead");
+      }
+    };
+    const longContextSection = longContextTier ? (
+      <div className="space-y-2 rounded-md border border-amber-300/30 bg-amber-300/10 p-2">
+        <p className="text-[11px] leading-snug text-background/80">
+          {t("logs.billingDetails.longContextTierRule", {
+            tokens: formatLongContextObservedTokens(longContextTier.observed_input_tokens),
+            threshold: formatLongContextThreshold(longContextTier.threshold_tokens),
+          })}
+        </p>
+        {getLongContextTierMultiplierRows(longContextTier, hasCache1hTokens).map((row) => (
+          <div key={row.dimension} className="flex items-center justify-between gap-3">
+            <span className="text-[11px] text-background/70">
+              {longContextDimensionLabel(row.dimension)}
+            </span>
+            <span className={cn(amountClassName, "text-[11px]")}>{row.multiplier}</span>
+          </div>
+        ))}
+      </div>
+    ) : null;
+
     const hasActiveMultipliers = activeMultiplierRows.length > 0;
     const baseTotal = formatCurrency(log.costBreakdown.base_total, currencyCode, 6);
     // costBreakdown.total is the winner-only base; when hedge losers were billed the grand
@@ -630,6 +691,8 @@ export function VirtualizedLogsTable({
               ))}
             </div>
           ) : null}
+
+          {longContextSection}
 
           {hasActiveMultipliers ? (
             <>
