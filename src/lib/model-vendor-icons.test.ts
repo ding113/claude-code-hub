@@ -25,6 +25,7 @@ describe("getModelVendor", () => {
     { modelId: "spark-max-32k", expectedVendor: "iflytek" },
     { modelId: "anthropic/claude-sonnet-4-5", expectedVendor: "anthropic" },
     { modelId: "openrouter/deepseek/deepseek-chat", expectedVendor: "deepseek" },
+    { modelId: "orcarouter/deepseek/deepseek-chat", expectedVendor: "deepseek" },
     { modelId: "unknown-model-xyz", expectedVendor: null },
     { modelId: "", expectedVendor: null },
   ];
@@ -57,6 +58,8 @@ describe("getVendorIconComponent", () => {
   it("resolves exact vendor slugs", () => {
     expect(getVendorIconComponent("anthropic")).toBeTruthy();
     expect(getVendorIconComponent("openai")).toBeTruthy();
+    expect(getVendorIconComponent("openrouter")).toBeTruthy();
+    expect(getVendorIconComponent("orcarouter")).toBeTruthy();
     expect(getVendorIconComponent("amazon-bedrock")).toBeTruthy();
   });
 

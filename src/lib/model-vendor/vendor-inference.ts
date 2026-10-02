@@ -83,6 +83,7 @@ const HOST_PREFIXES = new Set([
   "fireworks",
   "fireworks-ai",
   "openrouter",
+  "orcarouter",
   "deepinfra",
   "novita",
   "novita-ai",
