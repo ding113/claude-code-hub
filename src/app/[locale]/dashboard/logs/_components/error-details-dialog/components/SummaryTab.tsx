@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatCacheCostRatio, resolveCacheCostRatios } from "@/lib/utils/cache-cost-ratio";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
@@ -213,6 +214,33 @@ export function SummaryTab({
   };
 
   const cacheSplit = resolveCacheCreationSplit();
+
+  const showCacheWrite5m =
+    (cacheCreation5mInputTokens ?? 0) > 0 ||
+    ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h");
+  const showCacheWrite1h =
+    (cacheCreation1hInputTokens ?? 0) > 0 ||
+    ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h");
+  const cacheWrite5mTokens = showCacheWrite5m
+    ? (cacheCreation5mInputTokens ?? 0) > 0
+      ? cacheCreation5mInputTokens
+      : cacheCreationInputTokens
+    : 0;
+  const cacheWrite1hTokens = showCacheWrite1h
+    ? (cacheCreation1hInputTokens ?? 0) > 0
+      ? cacheCreation1hInputTokens
+      : cacheCreationInputTokens
+    : 0;
+  const cacheRatios = resolveCacheCostRatios({
+    costBreakdown,
+    inputTokens,
+    cacheWrite5mTokens,
+    cacheWrite1hTokens,
+    cacheReadTokens: cacheReadInputTokens,
+  });
+  const cacheWrite5mRatio = formatCacheCostRatio(cacheRatios.cacheWrite5m);
+  const cacheWrite1hRatio = formatCacheCostRatio(cacheRatios.cacheWrite1h);
+  const cacheReadRatio = formatCacheCostRatio(cacheRatios.cacheRead);
 
   return (
     <div className="space-y-6">
@@ -495,18 +523,14 @@ export function SummaryTab({
               </div>
 
               {/* Cache Write 5m */}
-              {((cacheCreation5mInputTokens ?? 0) > 0 ||
-                ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h")) && (
+              {showCacheWrite5m && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite5m")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(
-                      (cacheCreation5mInputTokens ?? 0) > 0
-                        ? cacheCreation5mInputTokens
-                        : cacheCreationInputTokens
-                    )}{" "}
-                    {t("billingDetails.unit.tokens")}{" "}
-                    <span className="text-orange-600">(1.25x)</span>
+                    {formatTokenAmount(cacheWrite5mTokens)} {t("billingDetails.unit.tokens")}
+                    {cacheWrite5mRatio && (
+                      <span className="ml-1 text-orange-600">({cacheWrite5mRatio})</span>
+                    )}
                     {costBreakdown && cacheSplit.fiveM !== null ? (
                       <span className="ml-3 text-muted-foreground">
                         {formatCurrency(cacheSplit.fiveM, "USD", 6)}
@@ -517,17 +541,14 @@ export function SummaryTab({
               )}
 
               {/* Cache Write 1h */}
-              {((cacheCreation1hInputTokens ?? 0) > 0 ||
-                ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h")) && (
+              {showCacheWrite1h && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite1h")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(
-                      (cacheCreation1hInputTokens ?? 0) > 0
-                        ? cacheCreation1hInputTokens
-                        : cacheCreationInputTokens
-                    )}{" "}
-                    {t("billingDetails.unit.tokens")} <span className="text-orange-600">(2x)</span>
+                    {formatTokenAmount(cacheWrite1hTokens)} {t("billingDetails.unit.tokens")}
+                    {cacheWrite1hRatio && (
+                      <span className="ml-1 text-orange-600">({cacheWrite1hRatio})</span>
+                    )}
                     {costBreakdown && cacheSplit.oneH !== null ? (
                       <span className="ml-3 text-muted-foreground">
                         {formatCurrency(cacheSplit.oneH, "USD", 6)}
@@ -542,8 +563,10 @@ export function SummaryTab({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheRead")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(cacheReadInputTokens)} {t("billingDetails.unit.tokens")}{" "}
-                    <span className="text-emerald-600">(0.1x)</span>
+                    {formatTokenAmount(cacheReadInputTokens)} {t("billingDetails.unit.tokens")}
+                    {cacheReadRatio && (
+                      <span className="ml-1 text-emerald-600">({cacheReadRatio})</span>
+                    )}
                     {costBreakdown ? (
                       <span className="ml-3 text-muted-foreground">
                         {formatCurrency(costBreakdown.cache_read, "USD", 6)}
