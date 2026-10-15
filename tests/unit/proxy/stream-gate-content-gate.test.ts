@@ -424,6 +424,26 @@ describe("runStreamContentGate", () => {
     expect(result.readerDone).toBe(false);
   });
 
+  it("openai-chat: OpenRouter 兼容 reasoning 帧在默认 event cap 前提交", async () => {
+    const reasoningFrames = Array.from(
+      { length: 65 },
+      (_, index) =>
+        `data: {"choices":[{"index":0,"delta":{"reasoning":"step ${index}","reasoning_details":[{"type":"reasoning.text","text":"step ${index}","index":0}]}}]}\n\n`
+    );
+    const reader = readerFromChunks([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n',
+      ...reasoningFrames,
+    ]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-chat",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.readerDone).toBe(false);
+  });
+
   it("openai-responses: commits a compaction item before response.completed", async () => {
     const compaction =
       'event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}\n\n';
