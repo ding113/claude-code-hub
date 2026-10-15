@@ -223,6 +223,17 @@ describe("classifyFrame: openai-chat", () => {
         '{"choices":[{"index":0,"delta":{"reasoning":"We","reasoning_details":[{"type":"reasoning.text","text":"We","format":"unknown","index":0}]},"finish_reason":null}]}'
       )
     ).toBe("content");
+    // 单字段各自命中，避免任一规则被删时被组合帧掩盖
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"reasoning":"We"}}]}')).toBe(
+      "content"
+    );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"We"}]}}]}'
+      )
+    ).toBe("content");
     expect(
       classifyFrame(
         "openai-chat",
