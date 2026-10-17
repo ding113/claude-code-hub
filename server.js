@@ -1078,6 +1078,69 @@ function isResponsesWsUpgrade(req) {
   return parsed.pathname === WS_PATH;
 }
 
+function installResponsesWsUpgradeHandler(server, WebSocketServer, internalHttpTarget) {
+  let wss = null;
+  if (WebSocketServer) {
+    wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
+  }
+
+  // Node only emits "upgrade" when at least one listener is present. Keep a
+  // sentinel listener so our emit-level path dispatcher receives the event,
+  // while still allowing non-/v1/responses upgrades to be handled by listeners
+  // registered later by Next.js.
+  const sentinelUpgradeListener = () => {};
+  server.on("upgrade", sentinelUpgradeListener);
+
+  const originalEmit = server.emit;
+  server.emit = function emitWithResponsesWsRouting(eventName, ...args) {
+    if (eventName !== "upgrade") {
+      return originalEmit.call(this, eventName, ...args);
+    }
+
+    const [req, socket, head] = args;
+    if (isResponsesWsUpgrade(req)) {
+      if (!wss) {
+        socket.destroy();
+        return true;
+      }
+
+      try {
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          log("info", "ws_client_connected", { path: sanitizedRequestPath(req.url) });
+          handleWebSocketConnection(ws, req, internalHttpTarget).catch((err) => {
+            log("error", "ws_handler_error", {
+              error: String(err && err.message ? err.message : err),
+            });
+            try {
+              ws.close(1011, "internal_error");
+            } catch {
+              // ignore
+            }
+          });
+        });
+      } catch (err) {
+        log("warn", "ws_upgrade_failed", {
+          error: String(err && err.message ? err.message : err),
+        });
+        socket.destroy();
+      }
+      return true;
+    }
+
+    const nonSentinelUpgradeListeners = this
+      .listeners("upgrade")
+      .filter((listener) => listener !== sentinelUpgradeListener);
+    if (nonSentinelUpgradeListeners.length === 0) {
+      socket.destroy();
+      return true;
+    }
+
+    return originalEmit.call(this, eventName, ...args);
+  };
+
+  return wss;
+}
+
 function listenServer(server, options) {
   return new Promise((resolve, reject) => {
     const handleError = (error) => {
@@ -1210,34 +1273,7 @@ async function main() {
   const internalHttpTarget = await listenOnPrivateLoopback(internalServer);
   const server = http.createServer(requestListener);
 
-  let wss = null;
-  if (WebSocketServer) {
-    wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
-
-    server.on("upgrade", (req, socket, head) => {
-      if (!isResponsesWsUpgrade(req)) {
-        socket.destroy();
-        return;
-      }
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        log("info", "ws_client_connected", { path: sanitizedRequestPath(req.url) });
-        handleWebSocketConnection(ws, req, internalHttpTarget).catch((err) => {
-          log("error", "ws_handler_error", {
-            error: String(err && err.message ? err.message : err),
-          });
-          try {
-            ws.close(1011, "internal_error");
-          } catch {
-            // ignore
-          }
-        });
-      });
-    });
-  } else {
-    server.on("upgrade", (_req, socket) => {
-      socket.destroy();
-    });
-  }
+  const wss = installResponsesWsUpgradeHandler(server, WebSocketServer, internalHttpTarget);
 
   try {
     await listenServer(server, { port, host: hostname });
@@ -1411,8 +1447,10 @@ module.exports = {
   main,
   sanitizedRequestPath,
   isNextDevMode,
+  isResponsesWsUpgrade,
   handleWebSocketConnection,
   forwardToInternalHttp,
+  installResponsesWsUpgradeHandler,
   listenServer,
   listenOnPrivateLoopback,
   notifyMulticoreReady,
