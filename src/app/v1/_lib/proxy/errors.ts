@@ -849,6 +849,14 @@ export function isTransportError(error: Error): boolean {
  * 2. 类型安全：使用 TypeScript 枚举确保限流类型正确
  * 3. 可追踪性：包含 provider_id 用于追溯限流来源
  */
+/** A connection-local response cannot be continued on another upstream socket. */
+export class ResponsesWsContinuationError extends ProxyError {
+  constructor(public readonly reason: string) {
+    super(`previous_response_not_found: ${reason}`, 400);
+    this.name = "ResponsesWsContinuationError";
+  }
+}
+
 export class RateLimitError extends Error {
   constructor(
     public readonly type: "rate_limit_error",
@@ -991,6 +999,10 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * @returns 错误分类（CLIENT_ABORT、LOCAL_OVERLOAD、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
 export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
+  if (error instanceof ResponsesWsContinuationError) {
+    return ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+  }
+
   // 优先级 1: 真实上游 HTTP 5xx 始终表示供应商故障
   // 必须先于基于 message/cause 的中断与传输错误启发式，避免上游正文误导分类。
   // FAKE_200_* 的 5xx 是 CCH 根据 HTTP 200 响应体合成的，不能作为权威传输状态。

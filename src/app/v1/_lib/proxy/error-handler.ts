@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import { isLocalCapacityError } from "@/lib/memory/governor";
 import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { RateLimitService } from "@/lib/rate-limit/service";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import { updateMessageRequestDetailsDurably } from "@/repository/message";
@@ -24,8 +25,10 @@ import {
   isRateLimitError,
   ProxyError,
   type RateLimitError,
+  ResponsesWsContinuationError,
 } from "./errors";
 import { recordLocalCapacityRejection } from "./local-capacity-log";
+import { abortReplayOwnership } from "./replay/replay-spool";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -344,6 +347,57 @@ export class ProxyErrorHandler {
       }
       return finalResponse;
     };
+
+    if (error instanceof ResponsesWsContinuationError) {
+      await abortReplayOwnership(session, "continuation_unavailable");
+      if (
+        session.sessionId &&
+        session.provider &&
+        session.consumeProviderSessionRef?.(session.provider.id)
+      ) {
+        await RateLimitService.releaseProviderSession(session.provider.id, session.sessionId).catch(
+          () => undefined
+        );
+      }
+      const runtime = session as ProxySession & {
+        clearResponseTimeout?: () => void;
+        releaseAgent?: () => void;
+      };
+      for (const name of ["clearResponseTimeout", "releaseAgent"] as const) {
+        const cleanup = runtime[name];
+        runtime[name] = undefined;
+        try {
+          cleanup?.();
+        } catch {
+          // Cleanup must not replace the canonical recoverable client error.
+        }
+      }
+      let locale = "en";
+      try {
+        const { getLocale } = await import("next-intl/server");
+        locale = await getLocale();
+      } catch {
+        // Early guard failures can run outside the Next.js locale context.
+      }
+      const message = await getErrorMessageServer(
+        locale,
+        ERROR_CODES.RESPONSES_WS_PREVIOUS_RESPONSE_NOT_FOUND
+      );
+      return await finalizeErrorResponse(
+        Response.json(
+          {
+            error: {
+              type: "invalid_request_error",
+              code: "previous_response_not_found",
+              param: "previous_response_id",
+              message,
+            },
+          },
+          { status: 400 }
+        ),
+        logErrorMessage
+      );
+    }
 
     // 检测是否有覆写配置（响应体或状态码）
     // 使用异步版本确保错误规则已加载

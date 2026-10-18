@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 
@@ -15,10 +15,12 @@ const mocks = vi.hoisted(() => {
     })),
     isHttp2Enabled: vi.fn(async () => false),
     getPreferredProviderEndpoints: vi.fn(),
+    findProviderEndpointById: vi.fn(),
     recordEndpointSuccess: vi.fn(async () => {}),
     recordEndpointFailure: vi.fn(async () => {}),
     recordSuccess: vi.fn(),
     recordFailure: vi.fn(async () => {}),
+    releaseProviderSession: vi.fn(async () => {}),
     getCircuitState: vi.fn(() => "closed"),
     getProviderHealthInfo: vi.fn(async () => ({
       health: { failureCount: 0 },
@@ -30,6 +32,11 @@ const mocks = vi.hoisted(() => {
     getCachedProviders: vi.fn(async () => []),
   };
 });
+
+vi.mock("@/lib/redis/client", () => ({
+  getRedisClient: () => null,
+  closeRedis: vi.fn(async () => {}),
+}));
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -72,6 +79,20 @@ vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
   recordVendorTypeAllEndpointsTimeout: mocks.recordVendorTypeAllEndpointsTimeout,
 }));
 
+vi.mock("@/lib/rate-limit/service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/rate-limit/service")>();
+  return {
+    ...actual,
+    RateLimitService: class extends actual.RateLimitService {
+      static releaseProviderSession = mocks.releaseProviderSession;
+    },
+  };
+});
+
+vi.mock("@/repository/provider-endpoints", () => ({
+  findProviderEndpointById: mocks.findProviderEndpointById,
+}));
+
 vi.mock("@/repository/provider", () => ({
   findAllProviders: mocks.findAllProviders,
 }));
@@ -92,10 +113,21 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import {
   ProxyError,
+  ResponsesWsContinuationError,
   ErrorCategory,
   categorizeErrorAsync,
   getErrorDetectionResultAsync,
 } from "@/app/v1/_lib/proxy/errors";
+import {
+  attachResponsesWsOutcome,
+  setResponsesWsContinuationBinding,
+} from "@/app/v1/_lib/responses-ws/continuation";
+import {
+  INTERNAL_SECRET_HEADER,
+  RESPONSES_WS_SESSION_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+} from "@/app/v1/_lib/responses-ws/internal-secret";
+import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { logger } from "@/lib/logger";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
@@ -1583,5 +1615,207 @@ describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
       })
     );
     expect(session.getProviderChain()[0].errorDetails?.matchedRule?.ruleId).toBe(42);
+  });
+});
+
+describe("connection-local Responses WS forwarding", () => {
+  const binding = {
+    sessionId: "physical-ws",
+    generation: "generation-1",
+    providerId: 1,
+    endpointId: 7,
+    upstreamUrl: "https://bound.example/v1/responses",
+    fingerprint: "fingerprint-1",
+    connectionLocal: true,
+    active: false,
+  };
+  function localSession(attach = true): ProxySession {
+    const session = createSession(new URL("https://example.com/v1/responses"));
+    session.headers = new Headers({
+      "x-cch-client-transport": "websocket",
+      [INTERNAL_SECRET_HEADER]: "forward-ws-test",
+      [WS_FORWARD_FLAG_HEADER]: "1",
+      [RESPONSES_WS_SESSION_HEADER]: "physical-ws",
+    });
+    session.request.message = {
+      model: "gpt-test",
+      stream: true,
+      store: false,
+      previous_response_id: "resp-test",
+      input: [],
+    };
+    session.originalFormat = "response";
+    session.setProvider(createProvider({ providerType: "codex", maxRetryAttempts: 3 }));
+    session.setRawCrossProviderFallbackEnabled(true);
+    if (attach) setResponsesWsContinuationBinding(session, { ...binding });
+    return session;
+  }
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.stubEnv("CCH_RESPONSES_WS_INTERNAL_SECRET", "forward-ws-test");
+    mocks.findProviderEndpointById.mockResolvedValue(
+      makeEndpoint({ id: 7, vendorId: 123, providerType: "codex", url: "https://bound.example" })
+    );
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+    mocks.isVendorTypeCircuitOpen.mockResolvedValue(false);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  test("rejects an absent snapshot before transport setup", async () => {
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    await expect(ProxyForwarder.send(localSession(false))).rejects.toBeInstanceOf(
+      ResponsesWsContinuationError
+    );
+    expect(doForward).not.toHaveBeenCalled();
+    expect(mocks.getPreferredProviderEndpoints).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+  });
+
+  test("uses only the bound endpoint and preserves the typed state for final settlement", async () => {
+    const session = localSession();
+    const state = { generation: binding.generation, connectionLocal: true };
+    const response = attachResponsesWsOutcome(
+      new Response('data: {"type":"response.completed"}\n\n', {
+        headers: { "content-type": "text/event-stream" },
+      }),
+      state
+    );
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward").mockResolvedValue(response);
+    const alternative = vi.spyOn(ProxyForwarder as any, "selectAlternative");
+    expect(await ProxyForwarder.send(session)).toBe(response);
+    expect(doForward).toHaveBeenCalledExactlyOnceWith(
+      session,
+      session.provider,
+      "https://bound.example",
+      expect.objectContaining({ endpointId: 7 }),
+      1,
+      false,
+      undefined,
+      expect.any(Function)
+    );
+    expect(mocks.getPreferredProviderEndpoints).not.toHaveBeenCalled();
+    expect(alternative).not.toHaveBeenCalled();
+    expect(peekDeferredStreamingFinalization(session)?.responsesWsOutcome).toBe(state);
+  });
+
+  test("never retries or rectifies a typed continuation failure and releases its provider ref once", async () => {
+    const session = localSession();
+    session.sessionId = "public-session";
+    session.recordProviderSessionRef(1, { retainOnSuccess: false });
+    const error = new ResponsesWsContinuationError("upstream_session_changed");
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward").mockRejectedValue(error);
+    const alternative = vi.spyOn(ProxyForwarder as any, "selectAlternative");
+    await expect(ProxyForwarder.send(session)).rejects.toBe(error);
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(alternative).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.releaseProviderSession).toHaveBeenCalledExactlyOnceWith(1, "public-session");
+  });
+
+  test("a real provider 500 still records health once, without retry or provider migration", async () => {
+    const session = localSession();
+    const error = new ProxyError("upstream failed", 500);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward").mockRejectedValue(error);
+    const alternative = vi.spyOn(ProxyForwarder as any, "selectAlternative");
+    await expect(ProxyForwarder.send(session)).rejects.toBe(error);
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(alternative).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).toHaveBeenCalledExactlyOnceWith(1, error);
+  });
+  test("refuses a bound provider with an open vendor circuit before sending", async () => {
+    const session = localSession();
+    mocks.isVendorTypeCircuitOpen.mockResolvedValue(true);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    const alternative = vi.spyOn(ProxyForwarder as any, "selectAlternative");
+    await expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+      reason: "bound_provider_unavailable",
+    });
+    expect(doForward).not.toHaveBeenCalled();
+    expect(alternative).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+  });
+  test.each([false, true])(
+    "does not replay a network failure and honors network health accounting=%s",
+    async (accountNetworkErrors) => {
+      const envModule = await import("@/lib/config/env.schema");
+      const currentEnv = envModule.getEnvConfig();
+      const envSpy = vi.spyOn(envModule, "getEnvConfig").mockReturnValue({
+        ...currentEnv,
+        ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: accountNetworkErrors,
+      });
+      try {
+        const session = localSession();
+        const error = Object.assign(new Error("connection reset"), { code: "ECONNRESET" });
+        vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+        const doForward = vi.spyOn(ProxyForwarder as any, "doForward").mockRejectedValue(error);
+        const alternative = vi.spyOn(ProxyForwarder as any, "selectAlternative");
+        await expect(ProxyForwarder.send(session)).rejects.toBe(error);
+        expect(doForward).toHaveBeenCalledOnce();
+        expect(alternative).not.toHaveBeenCalled();
+        if (accountNetworkErrors)
+          expect(mocks.recordFailure).toHaveBeenCalledExactlyOnceWith(1, error);
+        else expect(mocks.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        envSpy.mockRestore();
+      }
+    }
+  );
+  test.each([
+    null,
+    { isEnabled: false },
+    { deletedAt: new Date() },
+    { vendorId: 999 },
+    { providerType: "claude" },
+    { url: "https://changed.example" },
+  ])("rejects removed, disabled or changed route config: %j", async (change) => {
+    const session = localSession();
+    const endpoint = makeEndpoint({
+      id: 7,
+      vendorId: 123,
+      providerType: "codex",
+      url: "https://bound.example",
+    });
+    mocks.findProviderEndpointById.mockResolvedValue(
+      change === null ? null : { ...endpoint, ...change }
+    );
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    await expect(ProxyForwarder.send(session)).rejects.toBeInstanceOf(ResponsesWsContinuationError);
+    expect(doForward).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+  });
+
+  test("preserves a configured prefix and request query while checking the exact bound target", async () => {
+    const session = localSession();
+    session.requestUrl = new URL("https://example.com/v1/responses?transport=ws");
+    mocks.findProviderEndpointById.mockResolvedValue(
+      makeEndpoint({
+        id: 7,
+        vendorId: 123,
+        providerType: "codex",
+        url: "https://bound.example/gateway",
+      })
+    );
+    setResponsesWsContinuationBinding(session, {
+      ...binding,
+      upstreamUrl: "https://bound.example/gateway/v1/responses?transport=ws",
+    });
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward").mockResolvedValue(
+      new Response('data: {"type":"response.completed"}\n\n', {
+        headers: { "content-type": "text/event-stream" },
+      })
+    );
+    await ProxyForwarder.send(session);
+    expect(doForward.mock.calls[0]?.[2]).toBe("https://bound.example/gateway");
+  });
+
+  test("checks the current legacy provider URL when the binding has no pool endpoint", async () => {
+    const session = localSession();
+    setResponsesWsContinuationBinding(session, { ...binding, endpointId: null });
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    await expect(ProxyForwarder.send(session)).rejects.toBeInstanceOf(ResponsesWsContinuationError);
+    expect(doForward).not.toHaveBeenCalled();
+    expect(mocks.findProviderEndpointById).not.toHaveBeenCalled();
   });
 });

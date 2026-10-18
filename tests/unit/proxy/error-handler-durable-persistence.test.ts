@@ -2,7 +2,12 @@ import { Context } from "hono";
 import { DrizzleQueryError } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProxyErrorHandler } from "@/app/v1/_lib/proxy/error-handler";
-import { ProxyError } from "@/app/v1/_lib/proxy/errors";
+import {
+  categorizeErrorAsync,
+  ErrorCategory,
+  ProxyError,
+  ResponsesWsContinuationError,
+} from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import type { ErrorDetectionResult } from "@/lib/error-rule-detector";
@@ -12,6 +17,7 @@ import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
 const mocks = vi.hoisted(() => ({
+  releaseProviderSession: vi.fn(async () => {}),
   detectAsync: vi.fn<(content: string) => Promise<ErrorDetectionResult>>(),
   emitProxyLangfuseTrace: vi.fn<typeof emitProxyLangfuseTrace>(),
   endRequest: vi.fn(),
@@ -21,6 +27,10 @@ const mocks = vi.hoisted(() => ({
   })),
   updateMessageRequestDetailsDurably: vi.fn<typeof updateMessageRequestDetailsDurably>(),
   loggerWarn: vi.fn(),
+}));
+
+vi.mock("@/lib/rate-limit/service", () => ({
+  RateLimitService: { releaseProviderSession: mocks.releaseProviderSession },
 }));
 
 vi.mock("@/lib/error-rule-detector", () => ({
@@ -251,5 +261,75 @@ describe("ProxyErrorHandler.handle durable persistence", () => {
     expect(response.status).toBe(503);
     expect(mocks.updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
     expect(mocks.endRequest).toHaveBeenCalledWith(USER.id, 901);
+  });
+});
+
+describe("Responses WS continuation canonical errors", () => {
+  test("keeps canonical 400 and param even when an error override matches", async () => {
+    vi.clearAllMocks();
+    mocks.detectAsync.mockResolvedValue({ matched: true, overrideStatusCode: 503 });
+    mocks.updateMessageRequestDetailsDurably.mockResolvedValue(undefined);
+    const session = await createSession();
+    attachMessageContext(session);
+    const error = new ResponsesWsContinuationError("upstream_session_missing");
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    const response = await ProxyErrorHandler.handle(session, error);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        type: "invalid_request_error",
+        code: "previous_response_not_found",
+        param: "previous_response_id",
+        message: expect.any(String),
+      },
+    });
+    expect(mocks.detectAsync).not.toHaveBeenCalled();
+    expect(mocks.updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      901,
+      expect.objectContaining({
+        statusCode: 400,
+        errorMessage: expect.stringContaining("previous_response_not_found"),
+      })
+    );
+    expect(mocks.endRequest).toHaveBeenCalledExactlyOnceWith(USER.id, 901);
+  });
+  test("releases an early guard's owned provider ref and transport callbacks at most once", async () => {
+    vi.clearAllMocks();
+    const session = await createSession();
+    session.setProvider({ id: 7 } as never);
+    session.recordProviderSessionRef(7, { retainOnSuccess: false });
+    const clearResponseTimeout = vi.fn();
+    const releaseAgent = vi.fn();
+    Object.assign(session, { clearResponseTimeout, releaseAgent });
+    const error = new ResponsesWsContinuationError("upstream_session_missing");
+    expect((await ProxyErrorHandler.handle(session, error)).status).toBe(400);
+    expect((await ProxyErrorHandler.handle(session, error)).status).toBe(400);
+    expect(mocks.releaseProviderSession).toHaveBeenCalledExactlyOnceWith(7, "s_durable");
+    expect(clearResponseTimeout).toHaveBeenCalledOnce();
+    expect(releaseAgent).toHaveBeenCalledOnce();
+  });
+  test("preserves the canonical error when provider release and transport cleanup fail", async () => {
+    vi.clearAllMocks();
+    mocks.releaseProviderSession.mockRejectedValueOnce(new Error("release unavailable"));
+    const session = await createSession();
+    session.setProvider({ id: 7 } as never);
+    session.recordProviderSessionRef(7, { retainOnSuccess: false });
+    const clearResponseTimeout = vi.fn(() => {
+      throw new Error("timeout cleanup failed");
+    });
+    const releaseAgent = vi.fn(() => {
+      throw new Error("agent cleanup failed");
+    });
+    Object.assign(session, { clearResponseTimeout, releaseAgent });
+    const error = new ResponsesWsContinuationError("upstream_session_missing");
+    const response = await ProxyErrorHandler.handle(session, error);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "previous_response_not_found", param: "previous_response_id" },
+    });
+    expect(clearResponseTimeout).toHaveBeenCalledOnce();
+    expect(releaseAgent).toHaveBeenCalledOnce();
+    expect((await ProxyErrorHandler.handle(session, error)).status).toBe(400);
+    expect(mocks.releaseProviderSession).toHaveBeenCalledExactlyOnceWith(7, "s_durable");
   });
 });
