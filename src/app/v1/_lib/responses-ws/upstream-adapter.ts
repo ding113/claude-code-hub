@@ -117,6 +117,34 @@ const SSE_DATA_PREFIX = new TextEncoder().encode("data: ");
 const SSE_LINE_BREAK = new TextEncoder().encode("\n");
 const SSE_EVENT_END = new TextEncoder().encode("\n\n");
 
+function getTerminalError(event: unknown): ResponsesWsOutcomeState["terminalError"] {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return undefined;
+  const value = event as Record<string, unknown>;
+  if (value.type !== "error" && value.type !== "response.failed") return undefined;
+
+  const response = value.response as Record<string, unknown> | undefined;
+  const error = (value.type === "response.failed" ? response?.error : value.error) as
+    | Record<string, unknown>
+    | undefined;
+  const candidateCode = error?.code ?? value.code;
+  const code =
+    typeof candidateCode === "string" && candidateCode.trim().length > 0
+      ? candidateCode
+      : "UPSTREAM_PROTOCOL_ERROR";
+  const status =
+    code === "previous_response_not_found"
+      ? value.status === 409
+        ? 409
+        : 400
+      : typeof value.status === "number" &&
+          Number.isInteger(value.status) &&
+          value.status >= 400 &&
+          value.status <= 599
+        ? value.status
+        : 502;
+  return { code, status };
+}
+
 /**
  * Encodes one WS text message as one SSE data event without split/map/join
  * copies. The exact UTF-8 size is known before allocation.
@@ -722,17 +750,17 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
 
     const text = typeof data === "string" ? data : data.toString("utf8");
-    if (text.includes("previous_response_not_found")) {
+    if (
+      !outcomeState.terminalError &&
+      (text.includes('"error"') ||
+        text.includes('"response.failed"') ||
+        text.includes("previous_response_not_found"))
+    ) {
       try {
-        const event = JSON.parse(text);
-        if (event?.type === "error" && event.error?.code === "previous_response_not_found") {
-          outcomeState.continuationError = {
-            code: "previous_response_not_found",
-            status: event.status === 409 ? 409 : 400,
-          };
-        }
+        const terminalError = getTerminalError(JSON.parse(text));
+        if (terminalError) outcomeState.terminalError = terminalError;
       } catch {
-        // Arbitrary text is not evidence of a structured continuation error.
+        // Arbitrary text is not evidence of a structured terminal error.
       }
     }
     if (!firstEventSeen) {
@@ -1040,6 +1068,10 @@ export async function tryResponsesWebsocketUpstream(options: {
     let terminal = false;
     try {
       const parsed = JSON.parse(text);
+      if (!outcomeState.terminalError) {
+        const terminalError = getTerminalError(parsed);
+        if (terminalError) outcomeState.terminalError = terminalError;
+      }
       if (parsed && typeof parsed.type === "string" && TERMINAL_EVENT_TYPES.has(parsed.type)) {
         terminal = true;
         terminalEventSeen = true;

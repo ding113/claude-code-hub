@@ -263,6 +263,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     );
     expect(body).toContain("upstream_ws_sse_event_too_large");
     expect(body.length).toBeLessThan(1024);
+    expect(getResponsesWsOutcome(result.response)?.terminalError).toBeUndefined();
   });
 
   it("pauses and resumes the upstream when tiny messages outrun the downstream", async () => {
@@ -1165,6 +1166,161 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(getResponsesWsSessionBinding(common.sessionId)).toBeNull();
   });
 
+  it.each([
+    {
+      event: { type: "error", code: "server_error", status: 503 },
+      code: "server_error",
+      status: 503,
+    },
+    {
+      event: { type: "error", error: { code: "context_length_exceeded" }, status: 400 },
+      code: "context_length_exceeded",
+      status: 400,
+    },
+    {
+      event: { type: "response.failed", response: { error: { code: "server_error" } } },
+      code: "server_error",
+      status: 502,
+    },
+    {
+      event: { type: "error", code: "server_error", status: 200 },
+      code: "server_error",
+      status: 502,
+    },
+    {
+      event: { type: "error", code: "server_error", status: 600 },
+      code: "server_error",
+      status: 502,
+    },
+    {
+      event: { type: "error", code: "server_error", status: 500.5 },
+      code: "server_error",
+      status: 502,
+    },
+    {
+      event: { type: "error", code: "server_error", status: "500" },
+      code: "server_error",
+      status: 502,
+    },
+    {
+      event: {
+        type: "error",
+        error: { code: "different_error", message: "previous_response_not_found" },
+      },
+      code: "different_error",
+      status: 502,
+    },
+    {
+      event: { type: "error", error: { code: 123 }, status: 599 },
+      code: "UPSTREAM_PROTOCOL_ERROR",
+      status: 599,
+    },
+    { event: { type: "response.failed" }, code: "UPSTREAM_PROTOCOL_ERROR", status: 502 },
+    {
+      event: { type: "error", code: "previous_response_not_found", status: 409 },
+      code: "previous_response_not_found",
+      status: 409,
+    },
+    {
+      event: {
+        type: "response.failed",
+        response: { error: { code: "previous_response_not_found" } },
+      },
+      code: "previous_response_not_found",
+      status: 400,
+    },
+  ])("records trusted WS terminal error metadata for $event", async ({ event, code, status }) => {
+    const frame = JSON.stringify(event);
+    const createdFrame = JSON.stringify({
+      type: "response.created",
+      response: { id: "resp_created" },
+    });
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(createdFrame);
+        socket.send(frame);
+      });
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      body: { store: false },
+    });
+    if (!("response" in result)) throw new Error("mock WS did not connect");
+    expect(await collectSseBody(result.response)).toBe(
+      `data: ${createdFrame}\n\ndata: ${frame}\n\n`
+    );
+    expect(getResponsesWsOutcome(result.response)?.terminalError).toEqual({ code, status });
+  });
+
+  it("captures the first canonical error before the queued terminal event is consumed", async () => {
+    let sendErrors: (() => void) | undefined;
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_created" } }));
+        sendErrors = () => {
+          for (const status of [400, 409]) {
+            socket.send(
+              JSON.stringify({
+                type: "error",
+                status,
+                error: { code: "previous_response_not_found" },
+              })
+            );
+          }
+        };
+      });
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      body: { store: false },
+    });
+    if (!("response" in result)) throw new Error("mock WS did not connect");
+    const outcome = getResponsesWsOutcome(result.response)!;
+    sendErrors!();
+    await vi.waitFor(() => {
+      expect(outcome.terminalError).toEqual({ code: "previous_response_not_found", status: 400 });
+    });
+    await result.response.body!.cancel();
+    expect(outcome.terminalError).toEqual({ code: "previous_response_not_found", status: 400 });
+  });
+
+  it("keeps a queued generic error ahead of a later canonical error before consumption", async () => {
+    let sendErrors: (() => void) | undefined;
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_created" } }));
+        sendErrors = () => {
+          socket.send(JSON.stringify({ type: "error", code: "server_error", status: 503 }));
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              status: 409,
+              error: { code: "previous_response_not_found" },
+            })
+          );
+        };
+      });
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      body: { store: false },
+    });
+    if (!("response" in result)) throw new Error("mock WS did not connect");
+    const outcome = getResponsesWsOutcome(result.response)!;
+    sendErrors!();
+    await vi.waitFor(() => {
+      expect(outcome.terminalError).toEqual({ code: "server_error", status: 503 });
+    });
+    await result.response.body!.cancel();
+    expect(outcome.terminalError).toEqual({ code: "server_error", status: 503 });
+  });
+
   it.each([400, 409])(
     "records exact structured continuation status %s without retaining payload",
     async (status) => {
@@ -1194,13 +1350,13 @@ describe("tryResponsesWebsocketUpstream", () => {
       });
       if (!("response" in result)) throw new Error("mock WS did not connect");
       const outcome = getResponsesWsOutcome(result.response)!;
-      expect(outcome.continuationError).toBeUndefined();
+      expect(outcome.terminalError).toBeUndefined();
       sendError!();
       await collectSseBody(result.response);
       expect(outcome).toEqual({
         generation: expect.any(String),
         connectionLocal: true,
-        continuationError: { code: "previous_response_not_found", status },
+        terminalError: { code: "previous_response_not_found", status },
       });
       expect(JSON.stringify(outcome)).not.toContain("private response detail");
       expect(getResponsesWsSessionBinding(sessionId)).toBeNull();
@@ -1208,11 +1364,10 @@ describe("tryResponsesWebsocketUpstream", () => {
   );
 
   it.each([
-    '{"type":"error","error":{"code":"different_error","message":"previous_response_not_found"}}',
     '{"type":"response.completed","response":{"output":"previous_response_not_found"}}',
     '{"type":"response.completed","error":{"code":"previous_response_not_found"}}',
     "previous_response_not_found",
-  ])("does not infer continuation metadata from unrelated content %s", async (frame) => {
+  ])("does not infer terminal metadata from unrelated content %s", async (frame) => {
     server = await startMockServer((socket) => {
       socket.on("message", () => {
         socket.send(frame);
@@ -1231,7 +1386,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     });
     if (!("response" in result)) throw new Error("mock WS did not connect");
     await collectSseBody(result.response);
-    expect(getResponsesWsOutcome(result.response)?.continuationError).toBeUndefined();
+    expect(getResponsesWsOutcome(result.response)?.terminalError).toBeUndefined();
   });
 
   it("forgets the upstream WS after websocket_connection_limit_reached", async () => {
@@ -1993,6 +2148,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       body.includes("upstream_ws_mid_stream_error") ||
         body.includes("upstream_ws_closed_mid_stream")
     ).toBe(true);
+    expect(getResponsesWsOutcome(result.response)?.terminalError).toBeUndefined();
   });
 
   it("synthesizes a mid-stream error when upstream closes cleanly without a terminal event", async () => {
@@ -2027,6 +2183,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(body).toContain('"type":"error"');
     expect(body).toContain("upstream_ws_closed_mid_stream");
     expect(body).toContain("code=1000");
+    expect(getResponsesWsOutcome(result.response)?.terminalError).toBeUndefined();
   });
 
   it("closes the upstream WS after delivering a terminal event", async () => {

@@ -14,7 +14,7 @@ export interface ResponsesWsSessionBinding {
 export interface ResponsesWsOutcomeState {
   generation: string;
   connectionLocal: boolean;
-  continuationError?: { code: "previous_response_not_found"; status: 400 | 409 };
+  terminalError?: { code: string; status: number };
 }
 
 const continuationBindings = new WeakMap<object, ResponsesWsSessionBinding>();

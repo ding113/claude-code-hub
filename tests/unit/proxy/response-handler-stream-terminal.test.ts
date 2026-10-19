@@ -430,7 +430,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       const status = compaction ? 409 : 400;
       const source = new ReadableStream<Uint8Array>({
         pull(controller) {
-          outcome.continuationError = { code: "previous_response_not_found", status };
+          outcome.terminalError = { code: "previous_response_not_found", status };
           controller.enqueue(new TextEncoder().encode(body));
           controller.close();
         },
@@ -448,6 +448,73 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       );
       expect(session.getProviderChain()).toContainEqual(
         expect.objectContaining({ reason: "client_error_non_retryable", statusCode: status })
+      );
+      expect(releaseAgent).toHaveBeenCalledOnce();
+      expect(mocks.trackerEnd).toHaveBeenCalledOnce();
+      expect(mocks.replayComplete).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    { code: "context_length_exceeded", status: 400 },
+    { code: "server_error", status: 502 },
+    { code: "UPSTREAM_PROTOCOL_ERROR", status: 502 },
+  ])(
+    "records a trusted raw WS terminal error $code without success effects",
+    async (terminalError) => {
+      const { releaseAgent, session } = await createSession({
+        pathname: "/v1/responses",
+        body: { model: "codex-test", stream: true, input: [{ type: "compaction_trigger" }] },
+      });
+      session.setProvider({ ...createProvider(), providerType: "codex" });
+      session.originalFormat = "response";
+      expect(session.getEndpointPolicy().kind).toBe("raw_passthrough");
+      const outcome: ResponsesWsOutcomeState = {
+        generation: "raw-error-generation",
+        connectionLocal: false,
+      };
+      setDeferredStreamingFinalization(session, {
+        providerId: session.provider!.id,
+        providerName: session.provider!.name,
+        providerPriority: 0,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 109,
+        endpointUrl: session.provider!.url,
+        upstreamStatusCode: 200,
+        responsesWsOutcome: outcome,
+      });
+      const body = `data: ${JSON.stringify({ type: "error", error: { code: terminalError.code } })}\n\n`;
+      const source = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          outcome.terminalError = terminalError;
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      });
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      expect(await returned.text()).toBe(body);
+      await settleTasks();
+      expect(mocks.durable).toHaveBeenCalledExactlyOnceWith(
+        MESSAGE.id,
+        expect.objectContaining({
+          statusCode: terminalError.status,
+          errorMessage: terminalError.code,
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+      expect(session.getProviderChain()).toContainEqual(
+        expect.objectContaining({
+          statusCode: terminalError.status,
+          errorMessage: terminalError.code,
+        })
+      );
+      expect(session.getProviderChain()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reason: expect.stringMatching(/^(request|retry)_success$/) }),
+        ])
       );
       expect(releaseAgent).toHaveBeenCalledOnce();
       expect(mocks.trackerEnd).toHaveBeenCalledOnce();

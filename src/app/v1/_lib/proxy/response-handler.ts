@@ -1810,11 +1810,16 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
-  const continuationFailure = meta?.responsesWsOutcome?.continuationError;
+  const terminalError = meta?.responsesWsOutcome?.terminalError;
+  const continuationFailure =
+    terminalError?.code === "previous_response_not_found" ? terminalError : undefined;
+  const trustedWsFailure =
+    continuationFailure ??
+    (session.getEndpointPolicy().kind === "raw_passthrough" ? terminalError : undefined);
   // Serial WS attempts predate explicit deferred ref ownership. Claim only
   // their already-owned ref; Discovery/Hedge keep their explicit ownership.
   if (
-    continuationFailure &&
+    trustedWsFailure &&
     meta &&
     meta.providerSessionRefOwned === undefined &&
     session.hasProviderSessionRef?.(meta.providerId)
@@ -2054,7 +2059,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     streamEndedNormally &&
     !completionInspection.hasMarker;
   const allowAuxiliarySessionBinding =
-    !continuationFailure &&
+    !trustedWsFailure &&
     isSessionBindingMutationAllowed(session) &&
     !completionInspection.sawIncomplete &&
     !completionMarkerMissingForBinding &&
@@ -2119,8 +2124,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     protocolFailure &&
     (protocolFailure.verdict === "error" ||
       (streamEndedNormally && !successfulPostcommitMalformed));
-  const detected = continuationFailure
-    ? ({ isError: true, code: continuationFailure.code, detail: undefined } as const)
+  const detected = trustedWsFailure
+    ? ({ isError: true, code: trustedWsFailure.code, detail: undefined } as const)
     : !bodyDetected.isError &&
         ((shouldDetectFake200 && completionInspection.hasProtocolError) || fatalHttpProtocolFailure)
       ? ({
@@ -2138,7 +2143,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
-    if (protocolFailure || continuationFailure) return false;
+    if (protocolFailure || trustedWsFailure) return false;
     if (completionInspection.sawIncomplete) return false;
 
     const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
@@ -2175,7 +2180,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
             (meta.healthPausedDurationMs ?? 0)
         );
   const clientAbortNoFirstByte =
-    !continuationFailure &&
+    !trustedWsFailure &&
     !clientAbortCompleteSuccess &&
     clientAborted &&
     meta?.healthAttemptId != null &&
@@ -2220,9 +2225,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     !detected.isError &&
     upstreamStatusCode >= 200 &&
     upstreamStatusCode < 300;
-  if (continuationFailure) {
-    effectiveStatusCode = continuationFailure.status;
-    errorMessage = continuationFailure.code;
+  if (trustedWsFailure) {
+    effectiveStatusCode = trustedWsFailure.status;
+    errorMessage = trustedWsFailure.code;
   } else if (detected.isError) {
     const inferred = parseResponseDiagnostics
       ? inferUpstreamErrorStatusCodeFromText(allContent)
@@ -2388,11 +2393,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // 同时，为了让故障转移/熔断能正确工作：
   // - 客户端主动中断：默认不计入熔断器；仅 legacy serial 的静默首字节阈值命中会归因供应商
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
-  if (
-    !continuationFailure &&
-    (clientAborted || !streamEndedNormally) &&
-    !clientAbortCompleteSuccess
-  ) {
+  if (!trustedWsFailure && (clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) {
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,

@@ -118,8 +118,8 @@ describe("Responses WS continuation contract", () => {
     expect(copyResponsesWsOutcome(original, wrapper)).toBe(wrapper);
     expect(getResponsesWsOutcome(wrapper)).toBe(outcome);
     const originalState = getResponsesWsOutcome(original)!;
-    originalState.continuationError = { code: "previous_response_not_found", status: 409 };
-    expect(getResponsesWsOutcome(wrapper)?.continuationError).toEqual({
+    originalState.terminalError = { code: "previous_response_not_found", status: 409 };
+    expect(getResponsesWsOutcome(wrapper)?.terminalError).toEqual({
       code: "previous_response_not_found",
       status: 409,
     });
