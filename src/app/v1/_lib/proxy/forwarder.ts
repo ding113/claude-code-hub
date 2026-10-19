@@ -70,6 +70,7 @@ import type {
   SpecialSetting,
 } from "@/types/special-settings";
 import type { SystemSettings } from "@/types/system-config";
+import { normalizeCodexSessionId } from "../codex/session-extractor";
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import {
@@ -9519,7 +9520,21 @@ export class ProxyForwarder {
       overrides,
     });
 
-    return headerProcessor.process(session.headers);
+    const headers = headerProcessor.process(session.headers);
+    if (provider.providerType === "codex" && isWebsocketClientRequest(session.headers)) {
+      const sessionId =
+        normalizeCodexSessionId(headers.get("session_id")) ??
+        normalizeCodexSessionId(headers.get("x-session-id")) ??
+        (!headers.has("session_id") && !headers.has("x-session-id")
+          ? normalizeCodexSessionId(session.request.message.prompt_cache_key)
+          : null);
+      if (sessionId) {
+        for (const name of ["session_id", "x-session-id"]) {
+          if (!headers.has(name)) headers.set(name, sessionId);
+        }
+      }
+    }
+    return headers;
   }
   private static buildGeminiHeaders(
     session: ProxySession,

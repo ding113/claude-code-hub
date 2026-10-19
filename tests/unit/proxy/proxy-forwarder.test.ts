@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Provider } from "@/types/provider";
+import { completeCodexSessionIdentifiers } from "@/app/v1/_lib/codex/session-completer";
 import { DEFAULT_CODEX_USER_AGENT, ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import {
@@ -118,6 +119,224 @@ function createAuthLeakSession(): ProxySession {
     ]),
   });
 }
+
+describe("ProxyForwarder - WebSocket session header aliases", () => {
+  const sessionId = "01a1447b-8df8-7692-8ec2-cd8fcfa0016c";
+
+  beforeEach(() => {
+    vi.stubEnv("CCH_RESPONSES_WS_INTERNAL_SECRET", "session-alias-secret");
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  function websocketSession(aliases: Record<string, string>): ProxySession {
+    return createSession({
+      userAgent: "CodexTest/1.0",
+      headers: new Headers({
+        "x-cch-client-transport": "websocket",
+        [WS_FORWARD_FLAG_HEADER]: "1",
+        [INTERNAL_SECRET_HEADER]: "session-alias-secret",
+        ...aliases,
+      }),
+    });
+  }
+
+  it.each(["session_id", "x-session-id"])(
+    "keeps normal and raw compact headers identical with only %s in the handshake",
+    async (alias) => {
+      const normal = websocketSession({ [alias]: sessionId });
+      normal.request.message = { store: false, input: [] };
+      await completeCodexSessionIdentifiers({
+        keyId: 1,
+        headers: normal.headers,
+        requestBody: normal.request.message,
+        userAgent: normal.userAgent,
+      });
+      const compact = websocketSession({ [alias]: sessionId });
+      compact.request.message = {
+        store: false,
+        previous_response_id: "resp_previous",
+        input: [{ type: "compaction_trigger" }],
+      };
+      const originalHeaders = new Headers(compact.headers);
+      const originalBody = structuredClone(compact.request.message);
+
+      const normalHeaders = buildHeaders(normal, createCodexProvider());
+      const compactHeaders = buildHeaders(compact, createCodexProvider());
+
+      expect(Object.fromEntries(compactHeaders)).toEqual(Object.fromEntries(normalHeaders));
+      expect(compactHeaders.get("session_id")).toBe(sessionId);
+      expect(compactHeaders.get("x-session-id")).toBe(sessionId);
+      expect(Object.fromEntries(compact.headers)).toEqual(Object.fromEntries(originalHeaders));
+      expect(compact.request.message).toEqual(originalBody);
+    }
+  );
+
+  it("keeps normal and raw compact headers identical when only the body supplies the session ID", async () => {
+    const normal = websocketSession({});
+    normal.request.message = { store: false, input: [], prompt_cache_key: sessionId };
+    await completeCodexSessionIdentifiers({
+      keyId: 1,
+      headers: normal.headers,
+      requestBody: normal.request.message,
+      userAgent: normal.userAgent,
+    });
+    const compact = websocketSession({});
+    compact.request.message = {
+      store: false,
+      previous_response_id: "resp_previous",
+      input: [{ type: "compaction_trigger" }],
+      prompt_cache_key: ` ${sessionId} `,
+    };
+    const originalHeaders = new Headers(compact.headers);
+    const originalBody = structuredClone(compact.request.message);
+    const normalHeadersBefore = new Headers(normal.headers);
+    const normalBodyBefore = structuredClone(normal.request.message);
+
+    const normalHeaders = buildHeaders(normal, createCodexProvider());
+    const compactHeaders = buildHeaders(compact, createCodexProvider());
+
+    expect(Object.fromEntries(compactHeaders)).toEqual(Object.fromEntries(normalHeaders));
+    expect(compactHeaders.get("session_id")).toBe(sessionId);
+    expect(compactHeaders.get("x-session-id")).toBe(sessionId);
+    expect(Object.fromEntries(compact.headers)).toEqual(Object.fromEntries(originalHeaders));
+    expect(compact.request.message).toEqual(originalBody);
+    expect(Object.fromEntries(normal.headers)).toEqual(Object.fromEntries(normalHeadersBefore));
+    expect(normal.request.message).toEqual(normalBodyBefore);
+  });
+
+  it.each(["session_id", "x-session-id"])(
+    "prefers the valid %s alias over the body session ID",
+    (alias) => {
+      const session = websocketSession({ [alias]: sessionId });
+      session.request.message = {
+        prompt_cache_key: "01a15236-a883-75f3-8735-86cdb16316ac",
+      };
+      const originalHeaders = new Headers(session.headers);
+      const originalBody = structuredClone(session.request.message);
+
+      const headers = buildHeaders(session, createCodexProvider());
+
+      expect(headers.get("session_id")).toBe(sessionId);
+      expect(headers.get("x-session-id")).toBe(sessionId);
+      expect(Object.fromEntries(session.headers)).toEqual(Object.fromEntries(originalHeaders));
+      expect(session.request.message).toEqual(originalBody);
+    }
+  );
+
+  it("prefers processed provider session headers over the body session ID", () => {
+    const session = websocketSession({});
+    session.request.message = { prompt_cache_key: "01a15236-a883-75f3-8735-86cdb16316ac" };
+    const provider = createCodexProvider();
+    provider.customHeaders = { session_id: sessionId };
+    const originalHeaders = new Headers(session.headers);
+    const originalBody = structuredClone(session.request.message);
+
+    const headers = buildHeaders(session, provider);
+
+    expect(headers.get("session_id")).toBe(sessionId);
+    expect(headers.get("x-session-id")).toBe(sessionId);
+    expect(Object.fromEntries(session.headers)).toEqual(Object.fromEntries(originalHeaders));
+    expect(session.request.message).toEqual(originalBody);
+  });
+
+  it.each([undefined, null, "", "invalid", "contains invalid characters!", "a".repeat(257), 123])(
+    "does not generate session headers for a missing or invalid body cache key: %j",
+    (promptCacheKey) => {
+      const session = websocketSession({
+        [RESPONSES_WS_SESSION_HEADER]: "01a15236-a883-75f3-8735-86cdb16316ac",
+      });
+      session.sessionId = "01a15236-a883-75f3-8735-86cdb16316ac";
+      session.upstreamSessionSeed = "01a15236-a883-75f3-8735-86cdb16316ac";
+      session.request.message = {
+        previous_response_id: "resp_01a15236-a883-75f3-8735-86cdb16316ac",
+        metadata: { session_id: "01a15236-a883-75f3-8735-86cdb16316ac" },
+        ...(promptCacheKey === undefined ? {} : { prompt_cache_key: promptCacheKey }),
+      };
+      const originalHeaders = new Headers(session.headers);
+      const originalBody = structuredClone(session.request.message);
+
+      const headers = buildHeaders(session, createCodexProvider());
+
+      expect(headers.has("session_id")).toBe(false);
+      expect(headers.has("x-session-id")).toBe(false);
+      expect(Object.fromEntries(session.headers)).toEqual(Object.fromEntries(originalHeaders));
+      expect(session.request.message).toEqual(originalBody);
+    }
+  );
+
+  it.each([
+    {},
+    { session_id: "invalid" },
+    { session_id: sessionId, "x-session-id": "" },
+    { session_id: "invalid", "x-session-id": sessionId },
+    { session_id: sessionId, "x-session-id": "01a15236-a883-75f3-8735-86cdb16316ac" },
+  ])("preserves absent, invalid, and explicitly conflicting aliases: %j", (aliases) => {
+    const headers = buildHeaders(websocketSession(aliases), createCodexProvider());
+    expect(headers.get("session_id")).toBe(aliases.session_id ?? null);
+    expect(headers.get("x-session-id")).toBe(aliases["x-session-id"] ?? null);
+  });
+
+  it.each([
+    { session_id: "" },
+    { "x-session-id": "" },
+    { session_id: "invalid" },
+    { "x-session-id": "invalid" },
+    { session_id: "", "x-session-id": "invalid" },
+    { session_id: sessionId, "x-session-id": "" },
+    { session_id: "invalid", "x-session-id": sessionId },
+    { session_id: sessionId, "x-session-id": "01a15236-a883-75f3-8735-86cdb16316ac" },
+  ])("does not replace explicitly supplied aliases with the body cache key: %j", (aliases) => {
+    const session = websocketSession(aliases);
+    session.request.message = { prompt_cache_key: "01a15401-c4dd-7332-b56c-d2bec4304c73" };
+    const originalHeaders = new Headers(session.headers);
+    const originalBody = structuredClone(session.request.message);
+
+    const headers = buildHeaders(session, createCodexProvider());
+
+    expect(headers.get("session_id")).toBe(aliases.session_id ?? null);
+    expect(headers.get("x-session-id")).toBe(aliases["x-session-id"] ?? null);
+    expect(Object.fromEntries(session.headers)).toEqual(Object.fromEntries(originalHeaders));
+    expect(session.request.message).toEqual(originalBody);
+  });
+
+  it.each(["http", "spoofed websocket", "non-Codex provider"])(
+    "does not add aliases for %s",
+    (scope) => {
+      const session = websocketSession({ session_id: sessionId });
+      if (scope === "http") session.headers.delete("x-cch-client-transport");
+      if (scope === "spoofed websocket") session.headers.set(INTERNAL_SECRET_HEADER, "untrusted");
+      const provider =
+        scope === "non-Codex provider" ? createOpenAIProvider() : createCodexProvider();
+
+      const headers = buildHeaders(session, provider);
+
+      expect(headers.get("session_id")).toBe(sessionId);
+      expect(headers.get("x-session-id")).toBeNull();
+    }
+  );
+
+  it.each(["http", "spoofed websocket", "non-Codex provider"])(
+    "does not copy the body cache key into headers for %s",
+    (scope) => {
+      const session = websocketSession({});
+      session.request.message = { prompt_cache_key: sessionId };
+      if (scope === "http") session.headers.delete("x-cch-client-transport");
+      if (scope === "spoofed websocket") session.headers.set(INTERNAL_SECRET_HEADER, "untrusted");
+      const provider =
+        scope === "non-Codex provider" ? createOpenAIProvider() : createCodexProvider();
+      const originalHeaders = new Headers(session.headers);
+      const originalBody = structuredClone(session.request.message);
+
+      const headers = buildHeaders(session, provider);
+
+      expect(headers.has("session_id")).toBe(false);
+      expect(headers.has("x-session-id")).toBe(false);
+      expect(Object.fromEntries(session.headers)).toEqual(Object.fromEntries(originalHeaders));
+      expect(session.request.message).toEqual(originalBody);
+    }
+  );
+});
 
 describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
   it("应该优先使用过滤器修改的 user-agent（Codex provider）", () => {
