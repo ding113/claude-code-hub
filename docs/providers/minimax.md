@@ -1,6 +1,6 @@
 # MiniMax Provider Guide
 
-Claude Code Hub can route MiniMax models through its existing Anthropic-compatible and OpenAI-compatible provider types. Create separate provider entries for each protocol and region so that routing and failover remain explicit.
+Claude Code Hub routes MiniMax through its existing Anthropic-compatible and OpenAI-compatible provider types. Use **MiniMax-M3.1-Flash** first, with **MiniMax-M3** as the other current text model. Create separate provider entries for each protocol and region so routing and failover remain explicit.
 
 ## Endpoint Matrix
 
@@ -9,43 +9,60 @@ Claude Code Hub can route MiniMax models through its existing Anthropic-compatib
 | Global | `https://api.minimax.io/v1` | `https://api.minimax.io/anthropic` |
 | China | `https://api.minimaxi.com/v1` | `https://api.minimaxi.com/anthropic` |
 
-Use the URLs exactly as shown. The OpenAI-compatible URL includes `/v1`. The Anthropic-compatible URL ends at `/anthropic`; do not append `/v1`. Claude Code Hub appends the request path, including `/v1/messages`, when forwarding an Anthropic request.
+Use the URLs exactly as shown. The OpenAI-compatible URL includes `/v1`. The Anthropic-compatible URL ends at `/anthropic`; Claude Code Hub appends the incoming `/v1/messages` path. Do not mix the two protocols. Keep your API key in the provider secret field.
 
-Official documentation:
+## Provider Entries and Model Selection
 
-- Global: https://platform.minimax.io/docs/api-reference/api-overview
-- China: https://platform.minimaxi.com/docs/api-reference/api-overview
+Create a `claude` or `openai-compatible` provider entry for the protocol you use. The direct MiniMax model picker offers these IDs in order:
 
-## Provider Entries
+1. `MiniMax-M3.1-Flash`
+2. `MiniMax-M3`
 
-Create one `claude` provider entry and one `openai-compatible` provider entry for each region. Set the provider URL to the matching value from the endpoint matrix and set the provider's allowed model list to the exact model IDs below.
+Both models have a 1,000,000-token context window and accept text, image, and video inputs. Set the provider's allowed model list to the exact IDs you intend to route. Existing explicit legacy selections and custom model redirect rules remain usable and editable; discovery filtering does not migrate saved configurations or rewrite request model names. Media models are unaffected.
 
-Do not reuse an OpenAI-compatible URL for an Anthropic provider entry or an Anthropic-compatible URL for an OpenAI-compatible entry. Keep the API key in the provider secret field and never place it in documentation or model redirect rules.
+For gateways, use their advertised IDs rather than the direct MiniMax IDs. Discovery retains verified routes such as OpenRouter's `minimax/minimax-m3.1-flash:free` and `minimax/minimax-m3`, or OpenCode's `minimax-m3.1-flash-free`. It does not manufacture a Flash route when the upstream catalog does not advertise one. The manual model input remains available for deliberate custom aliases.
 
-## Model Catalog
+## Thinking and Request Parameters
 
-Prices are in USD per one million tokens.
+| Setting | MiniMax-M3.1-Flash | MiniMax-M3 |
+| --- | --- | --- |
+| Thinking | Always on; omit `thinking` or use `{"type":"adaptive"}` | Supports `adaptive` and `disabled` |
+| Default thinking | On for both protocols | Off for Anthropic; on for OpenAI |
+| Effort | `low`, `medium`, `high`, `xhigh`, `max`; default `max` | Flash effort tuning does not apply |
+| Service tier | Unsupported; omit `service_tier` | `standard` or `priority` |
 
-### MiniMax-M3
+Flash rejects `thinking: {"type":"disabled"}` and effort `none`. Leave provider thinking overrides at their default when using Flash. Claude Code Hub forwards explicit client settings; it does not silently convert a request for disabled thinking into adaptive thinking.
 
-- Context window: `1,000,000` tokens
-- Input modalities: text, image, and video
-- Thinking: adaptive or disabled
-- Input: `$0.60`
-- Output: `$2.40`
-- Cache read: `$0.12`
-- Cache write pricing: not specified
+For Anthropic requests, use `output_config.effort`. For OpenAI requests, use `reasoning_effort`; Flash does not support `reasoning_split: false`. Preserve complete assistant thinking blocks or `reasoning_content`, tool calls, and tool results in subsequent turns. Thinking tokens count toward the generation limit, so allow enough tokens for both reasoning and the final response.
 
-### MiniMax-M2.7
+Example Anthropic body sent to the hub's `/v1/messages` endpoint:
 
-- Context window: `204,800` tokens
-- Input modalities: text
-- Thinking: always on
-- Input: `$0.30`
-- Output: `$1.20`
-- Cache read: `$0.06`
-- Cache write: `$0.375`
+```json
+{
+  "model": "MiniMax-M3.1-Flash",
+  "max_tokens": 4096,
+  "output_config": { "effort": "max" },
+  "messages": [{ "role": "user", "content": "Explain this function." }]
+}
+```
 
-## Request Routing
+Example OpenAI body sent to the hub's `/v1/chat/completions` endpoint:
 
-Use `MiniMax-M3` or `MiniMax-M2.7` as the requested model ID. If the provider's allowed model list is configured, use exact-match entries for both IDs and keep both models available for routing. Existing model redirect rules can still map an application-specific name to either target model without changing the upstream provider URL.
+```json
+{
+  "model": "MiniMax-M3.1-Flash",
+  "max_completion_tokens": 4096,
+  "reasoning_effort": "max",
+  "messages": [{ "role": "user", "content": "Explain this function." }]
+}
+```
+
+Use the model-pricing settings and current provider prices for billing. Gateway prices and free-route availability can differ from the direct API.
+
+## References
+
+- [MiniMax models](https://platform.minimax.io/docs/guides/models-intro)
+- [Anthropic API compatibility and thinking controls](https://platform.minimax.io/docs/api-reference/text-anthropic-api)
+- [OpenAI API compatibility and thinking controls](https://platform.minimax.io/docs/api-reference/text-openai-api)
+- [Current pricing](https://platform.minimax.io/docs/pricing/overview)
+- [China API overview](https://platform.minimaxi.com/docs/api-reference/api-overview)
