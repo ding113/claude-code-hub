@@ -119,7 +119,7 @@ export function ModelMultiSelect({
   catalogScope = "chat",
 }: ModelMultiSelectProps) {
   const t = useTranslations("settings.providers.form.modelSelect");
-  const tPrices = useTranslations("settings.prices");
+  const _tPrices = useTranslations("settings.prices");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modelSource, setModelSource] = useState<ModelSource>("loading");

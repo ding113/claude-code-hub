@@ -1,7 +1,7 @@
 {
-  "pageTitle": "Панель реального времени - Claude Code Hub",
-  "pageDescription": "Большой экран мониторинга в реальном времени Claude Code Hub",
-  "title": "CLAUDE CODE HUB",
+  "pageTitle": "Панель реального времени - CC Hub",
+  "pageDescription": "Большой экран мониторинга в реальном времени CC Hub",
+  "title": "CC HUB",
   "subtitle": "МОНИТОР ДАННЫХ В РЕАЛЬНОМ ВРЕМЕНИ",
   "metrics": {
     "concurrent": "Параллельные подключения",

@@ -173,6 +173,56 @@ describe("v1 usage log endpoints", () => {
     expect(getUsageLogsBatchMock).not.toHaveBeenCalled();
   });
 
+  test("preserves source session identity mappings in list responses", async () => {
+    getUsageLogsMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        logs: [{ id: 1, model: "claude" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        sourceSessionIdsByIdentity: {
+          "offset:identity": ["offset-source-a", "offset-source-b"],
+        },
+      },
+    });
+    getUsageLogsBatchMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        logs: [{ id: 2, model: "codex" }],
+        nextCursor: null,
+        hasMore: false,
+        sourceSessionIdsByIdentity: {
+          "cursor:identity": ["cursor-source-a", "cursor-source-b"],
+        },
+      },
+    });
+
+    const offset = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?page=1&pageSize=20",
+      headers,
+    });
+    expect(offset.response.status).toBe(200);
+    expect(offset.json).toMatchObject({
+      sourceSessionIdsByIdentity: {
+        "offset:identity": ["offset-source-a", "offset-source-b"],
+      },
+    });
+
+    const cursor = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15",
+      headers,
+    });
+    expect(cursor.response.status).toBe(200);
+    expect(cursor.json).toMatchObject({
+      sourceSessionIdsByIdentity: {
+        "cursor:identity": ["cursor-source-a", "cursor-source-b"],
+      },
+    });
+  });
+
   test("reads stats filters lists and session suggestions", async () => {
     const stats = await callV1Route({
       method: "GET",
@@ -260,6 +310,47 @@ describe("v1 usage log endpoints", () => {
       actualResponseModelMismatch: true,
       format: "csv",
     });
+  });
+
+  test("passes the Replay filter through list, stats, and export requests", async () => {
+    const list = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15&replayFilter=replay",
+      headers,
+    });
+    expect(list.response.status).toBe(200);
+    expect(getUsageLogsBatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 15, replayFilter: "replay" })
+    );
+
+    const stats = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs/stats?replayFilter=non-replay",
+      headers,
+    });
+    expect(stats.response.status).toBe(200);
+    expect(getUsageLogsStatsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayFilter: "non-replay" })
+    );
+
+    const asyncExport = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/usage-logs/exports",
+      headers: { ...headers, Prefer: "respond-async" },
+      body: { replayFilter: "replay" },
+    });
+    expect(asyncExport.response.status).toBe(202);
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({
+      replayFilter: "replay",
+      format: "csv",
+    });
+
+    const invalid = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?replayFilter=invalid",
+      headers,
+    });
+    expect(invalid.response.status).toBe(400);
   });
 
   test("keeps global usage-log metadata admin-only", async () => {

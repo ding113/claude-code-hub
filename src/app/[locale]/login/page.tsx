@@ -202,7 +202,7 @@ function LoginPageContent() {
   const isLoading = status === "submitting" || status === "success";
 
   return (
-    <div className="relative min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
+    <div className="relative flex min-h-[var(--cch-viewport-height,100vh)] flex-col overflow-x-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
       {/* Fullscreen Loading Overlay */}
       {isLoading && (
         <div
@@ -252,7 +252,7 @@ function LoginPageContent() {
       </div>
 
       {/* Main Layout */}
-      <div className="flex min-h-[var(--cch-viewport-height,100vh)]">
+      <div className="flex flex-1">
         {/* Brand Panel - Desktop Only */}
         <motion.aside
           data-testid="login-brand-panel"
@@ -304,7 +304,9 @@ function LoginPageContent() {
                     <CardTitle className="text-2xl font-bold tracking-tight">
                       {t("form.title")}
                     </CardTitle>
-                    <CardDescription className="text-base">{t("form.description")}</CardDescription>
+                    <CardDescription className="text-base text-balance">
+                      {t("form.description")}
+                    </CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
@@ -340,7 +342,6 @@ function LoginPageContent() {
                             id="apiKey"
                             ref={apiKeyInputRef}
                             type={showPassword ? "text" : "password"}
-                            placeholder={t("placeholders.apiKeyExample")}
                             value={apiKey}
                             onChange={(e) => setApiKey(e.target.value)}
                             className="pl-9 pr-10"
@@ -406,12 +407,19 @@ function LoginPageContent() {
       </div>
 
       {/* Page Footer */}
-      <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-1 px-4 pb-4 pt-2">
         <p
           data-testid="login-site-title-footer"
           className="text-center text-xs text-muted-foreground"
         >
           {siteTitle}
+        </p>
+
+        <p
+          data-testid="login-disclaimer"
+          className="max-w-md px-4 text-center text-[11px] leading-relaxed text-balance text-muted-foreground/80 lg:max-w-lg"
+        >
+          {t("brand.disclaimer")}
         </p>
 
         {versionInfo?.current ? (

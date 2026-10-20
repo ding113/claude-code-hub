@@ -15,6 +15,7 @@ const storeSessionInfoMock = vi.fn(async () => undefined);
 const generateSessionIdMock = vi.fn();
 
 const trackSessionMock = vi.fn(async () => undefined);
+const affinityLookupMock = vi.fn(async () => null);
 
 vi.mock("@/lib/config", () => ({
   getCachedSystemSettings: () => getCachedSystemSettingsMock(),
@@ -39,6 +40,10 @@ vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
     trackSession: trackSessionMock,
   },
+}));
+
+vi.mock("@/app/v1/_lib/proxy/affinity/affinity-store", () => ({
+  getAffinityStore: () => ({ lookup: affinityLookupMock }),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -89,13 +94,26 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     shouldPersistSessionDebugArtifacts() {
       return !this.highConcurrencyModeEnabled;
     },
+    shouldPersistSessionRequestArtifacts() {
+      return true;
+    },
     shouldTrackSessionObservability() {
       return !this.highConcurrencyModeEnabled;
     },
 
     sessionId: null,
-    setSessionId(id: string) {
+    allowSingleTurnProviderReuse: false,
+    affinity: null,
+    sessionIdentityMetadata: null,
+    setSessionId(id: string, options?: { allowSingleTurnProviderReuse?: boolean }) {
       this.sessionId = id;
+      this.allowSingleTurnProviderReuse = options?.allowSingleTurnProviderReuse === true;
+    },
+    setSessionIdentityMetadata(metadata: unknown) {
+      this.sessionIdentityMetadata = metadata;
+    },
+    getSessionIdentityMetadata() {
+      return this.sessionIdentityMetadata;
     },
     setRequestSequence(seq: number) {
       this.requestSequence = seq;
@@ -108,6 +126,9 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     },
     getMessagesLength() {
       return 1;
+    },
+    getOriginalModel() {
+      return this.request.model;
     },
     getEndpointPolicy() {
       return resolveEndpointPolicy("/v1/messages");
@@ -129,10 +150,62 @@ beforeEach(() => {
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: true,
     enableClaudeMetadataUserIdInjection: true,
+    affinityIgnoreClientSessionId: false,
   });
 });
 
 describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
+  test("Replay 之前为保留前缀的客户端 Session 建立 key-bound public identity", async () => {
+    const ProxySessionGuard = await loadGuard();
+    getOrCreateSessionIdMock.mockResolvedValueOnce("pfx:client-controlled");
+    const session = createMockSession({ isWarmupRequest: () => true });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(session.getSessionIdentityMetadata()).toMatchObject({
+      identity: expect.stringMatching(/^sid:[0-9a-f]{32}$/),
+      kind: "session_id",
+      fingerprint: null,
+    });
+  });
+
+  test("Replay 之前把 prefix affinity identity 归一到已命中的 conversation root", async () => {
+    const ProxySessionGuard = await loadGuard();
+    getCachedSystemSettingsMock.mockResolvedValueOnce({
+      enableHighConcurrencyMode: false,
+      interceptAnthropicWarmupRequests: true,
+      enableClaudeMetadataUserIdInjection: true,
+      affinityIgnoreClientSessionId: true,
+    });
+    affinityLookupMock.mockResolvedValueOnce({
+      hint: { providerId: 42, matchedFp: "matched", matchedIndex: 1 },
+      identityFp: "root-fingerprint",
+      generation: "v3:test-root",
+    });
+    const messages = [{ role: "user", content: "hello" }];
+    const session = createMockSession({
+      request: {
+        message: { model: "claude-sonnet-4", messages },
+        model: "claude-sonnet-4",
+      } as ProxySession["request"],
+      getMessages: () => messages,
+      isWarmupRequest: () => true,
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(affinityLookupMock).toHaveBeenCalledTimes(1);
+    expect(session.getSessionIdentityMetadata()).toMatchObject({
+      identity: expect.stringMatching(/^pfx:[0-9a-f]{16}:root-fingerprint$/),
+      kind: "prefix_affinity",
+      fingerprint: "root-fingerprint",
+    });
+    expect(session.affinity).toMatchObject({
+      identityFp: "root-fingerprint",
+      generation: "v3:test-root",
+    });
+  });
+
   test("当 warmup 且开关开启时，不应调用 SessionTracker.trackSession", async () => {
     const ProxySessionGuard = await loadGuard();
     const session = createMockSession({ isWarmupRequest: () => true });
@@ -220,6 +293,41 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     );
   });
 
+  test("超限请求跳过 request body/messages，但仍保留轻量 before 快照", async () => {
+    const ProxySessionGuard = await loadGuard();
+    const structuredCloneSpy = vi.spyOn(globalThis, "structuredClone");
+    const getMessages = vi.fn(() => [{ role: "user", content: "oversized" }]);
+    const session = createMockSession({
+      headers: new Headers({ "content-type": "application/json" }),
+      request: {
+        message: { model: "claude-sonnet-4-5-20250929", messages: ["oversized"] },
+        model: "claude-sonnet-4-5-20250929",
+      } as ProxySession["request"],
+      getMessages,
+      shouldPersistSessionRequestArtifacts: () => false,
+      isWarmupRequest: () => false,
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(structuredCloneSpy).not.toHaveBeenCalled();
+    expect(storeSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(storeSessionMessagesMock).not.toHaveBeenCalled();
+    expect(storeSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith(
+      "session_assigned",
+      "before",
+      {
+        headers: { "content-type": "application/json" },
+        meta: {
+          clientUrl: "http://localhost/v1/messages",
+          upstreamUrl: null,
+          method: "POST",
+        },
+      },
+      1
+    );
+  });
+
   test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应使用最终 sessionId 补全 user_id", async () => {
     const ProxySessionGuard = await loadGuard();
     extractClientSessionIdMock.mockImplementation((requestMessage: Record<string, unknown>) => {
@@ -260,6 +368,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
       /^user_[a-f0-9]{64}_account__session_session_assigned$/
     );
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_legacy_seed");
+    expect((session as any).allowSingleTurnProviderReuse).toBe(true);
   });
 
   test("Claude 无客户端 session 时，不应预生成 session 写回请求体，而应回填已分配 session", async () => {
@@ -302,6 +411,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     });
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], null);
     expect(generateSessionIdMock).not.toHaveBeenCalled();
+    expect((session as any).allowSingleTurnProviderReuse).toBe(false);
   });
 
   test("当 warmup 请求会被拦截时，不应补全 Claude metadata.user_id", async () => {

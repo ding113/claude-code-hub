@@ -243,69 +243,239 @@ describe("ProxyForwarder - raw passthrough fallback parity", () => {
     vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
   });
 
-  test.each([
-    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-    V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-  ])("%s 失败时应允许跨 provider fallback，但仍保持 no-circuit", async (pathname) => {
-    vi.useFakeTimers();
+  test.each([V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS, V1_ENDPOINT_PATHS.RESPONSES_COMPACT])(
+    "%s 失败时应允许跨 provider fallback，但仍保持 no-circuit",
+    async (pathname) => {
+      vi.useFakeTimers();
 
-    try {
-      const session = createSession(new URL(`https://example.com${pathname}`));
-      const provider = createProvider({
-        providerType: "claude",
-        providerVendorId: 123,
-        maxRetryAttempts: 3,
-      });
-      session.setProvider(provider);
-
-      mocks.getPreferredProviderEndpoints.mockResolvedValue([
-        makeEndpoint({
-          id: 1,
-          vendorId: 123,
+      try {
+        const session = createSession(new URL(`https://example.com${pathname}`));
+        const provider = createProvider({
           providerType: "claude",
-          url: "https://ep1.example.com",
-        }),
-        makeEndpoint({
-          id: 2,
-          vendorId: 123,
-          providerType: "claude",
-          url: "https://ep2.example.com",
-        }),
-      ]);
+          providerVendorId: 123,
+          maxRetryAttempts: 3,
+        });
+        session.setProvider(provider);
 
-      const doForward = vi.spyOn(
-        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
-        "doForward"
-      );
-      const selectAlternative = vi.spyOn(
-        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
-        "selectAlternative"
-      );
+        mocks.getPreferredProviderEndpoints.mockResolvedValue([
+          makeEndpoint({
+            id: 1,
+            vendorId: 123,
+            providerType: "claude",
+            url: "https://ep1.example.com",
+          }),
+          makeEndpoint({
+            id: 2,
+            vendorId: 123,
+            providerType: "claude",
+            url: "https://ep2.example.com",
+          }),
+        ]);
 
-      doForward.mockImplementation(async () => {
-        throw new ProxyError("upstream failed", 500);
-      });
+        const doForward = vi.spyOn(
+          ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+          "doForward"
+        );
+        const selectAlternative = vi.spyOn(
+          ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+          "selectAlternative"
+        );
 
-      const sendPromise = ProxyForwarder.send(session);
-      let caughtError: Error | null = null;
-      sendPromise.catch((error) => {
-        caughtError = error as Error;
-      });
-      await vi.runAllTimersAsync();
+        doForward.mockImplementation(async () => {
+          throw new ProxyError("upstream failed", 500);
+        });
 
-      expect(caughtError).toBeInstanceOf(ProxyError);
-      expect(doForward).toHaveBeenCalledTimes(1);
-      expect(selectAlternative).toHaveBeenCalledTimes(1);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
+        const sendPromise = ProxyForwarder.send(session);
+        let caughtError: Error | null = null;
+        sendPromise.catch((error) => {
+          caughtError = error as Error;
+        });
+        await vi.runAllTimersAsync();
+
+        expect(caughtError).toBeInstanceOf(ProxyError);
+        expect(doForward).toHaveBeenCalledTimes(1);
+        expect(selectAlternative).toHaveBeenCalledTimes(1);
+        expect(mocks.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     }
-  });
+  );
 });
 
 describe("ProxyForwarder - retry limit enforcement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test("local DB admission overload should not retry or penalize Provider and endpoint circuits", async () => {
+    const session = createSession();
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      maxRetryAttempts: 3,
+    });
+    session.setProvider(provider);
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([
+      makeEndpoint({
+        id: 1,
+        vendorId: 123,
+        providerType: "claude",
+        url: "https://ep1.example.com",
+      }),
+    ]);
+
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(5 as ErrorCategory);
+    const admissionCause = Object.assign(new Error("Database pool data is full"), {
+      name: "DbPoolAdmissionError",
+      code: "DB_POOL_ADMISSION_EXCEEDED",
+      pool: "data",
+      maxOutstanding: 32,
+    });
+    const wrappedError = new Error("Failed query", { cause: admissionCause });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockRejectedValue(wrappedError);
+
+    await expect(ProxyForwarder.send(session)).rejects.toBeDefined();
+
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider.id,
+        endpointId: 1,
+        reason: "system_error",
+        attemptNumber: 1,
+      }),
+    ]);
+  });
+
+  test("provider-local model 404 skips same-provider retries and switches Provider", async () => {
+    const session = createSession();
+    const provider1 = createProvider({
+      id: 1,
+      name: "provider-without-model",
+      providerVendorId: null,
+      maxRetryAttempts: 3,
+    });
+    const provider2 = createProvider({
+      id: 2,
+      name: "provider-with-model",
+      providerVendorId: null,
+    });
+    session.setProvider(provider1);
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([]);
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.RESOURCE_NOT_FOUND);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    const selectAlternative = vi.spyOn(
+      ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+      "selectAlternative"
+    );
+    const providerLocal404 = new ProxyError(
+      'Model "gpt-5.6-sol" is not supported by any configured account in this group',
+      404,
+      {
+        body: '{"error":{"type":"model_not_found","message":"invalid request: not supported by any configured account in this group"}}',
+        providerId: provider1.id,
+        providerName: provider1.name,
+      }
+    );
+
+    doForward.mockRejectedValueOnce(providerLocal404).mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": "2" },
+      })
+    );
+    selectAlternative.mockResolvedValueOnce(provider2);
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(selectAlternative).toHaveBeenCalledTimes(1);
+    expect(selectAlternative).toHaveBeenCalledWith(session, [provider1.id]);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider1.id,
+        reason: "resource_not_found",
+        attemptNumber: 1,
+      }),
+      expect.objectContaining({ id: provider2.id, reason: "retry_success", attemptNumber: 1 }),
+    ]);
+  });
+
+  test("upstream storage-capacity 400 should retry, record failure, and switch provider", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider1 = createProvider({
+        id: 1,
+        name: "storage-limited-provider",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "fallback-provider",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(provider1);
+
+      const storageError = new ProxyError("invalid request: upstream storage failure", 400, {
+        body: '{"error":{"message":"disk storage creation failed: failed to write to temp file; disk free-space floor reached"}}',
+        providerId: provider1.id,
+        providerName: provider1.name,
+      });
+
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as {
+          selectAlternative: (...args: unknown[]) => unknown;
+        },
+        "selectAlternative"
+      );
+      selectAlternative.mockResolvedValueOnce(provider2).mockResolvedValueOnce(null);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(storageError).mockRejectedValueOnce(storageError);
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(selectAlternative).toHaveBeenCalledWith(session, [provider1.id]);
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, storageError);
+      expect(session.provider?.id).toBe(provider2.id);
+      expect(
+        session.getProviderChain().some((entry) => entry.reason === "client_error_non_retryable")
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("endpoints > maxRetry: should only use top N lowest-latency endpoints", async () => {

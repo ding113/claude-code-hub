@@ -1,9 +1,10 @@
 /**
  * Provider Availability Module
  *
- * This module provides availability monitoring based on request log data.
- * Availability is calculated only from finalized requests that already have a persisted
- * `statusCode`. In-flight / intermediate records are excluded upstream.
+ * Read path aggregates pre-projected 1-minute buckets (avail_bucket_1m / avail_current).
+ * Write path finalization still relies on message_request.statusCode: a DB trigger enqueues
+ * outbox events, and the in-process projection worker increments the buckets.
+ * In-flight / intermediate records never enter the projection.
  *
  * 1. HTTP Status Check: 2xx/3xx = success (green), other finalized HTTP status codes = failure (red)
  *
@@ -15,6 +16,7 @@
 
 export {
   AvailabilityQueryValidationError,
+  CURRENT_PROVIDER_STATUS_WINDOW_MINUTES,
   calculateAvailabilityScore,
   classifyRequestStatus,
   determineOptimalBucketSize,

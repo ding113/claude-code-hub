@@ -1,3 +1,4 @@
+import { isCountTokensEndpointPath } from "./endpoint-paths";
 import type { ProxySession } from "./session";
 
 export const CLAUDE_CODE_KEYWORD_PREFIX = "claude-code";
@@ -114,6 +115,24 @@ const ENTRYPOINT_MAP: Record<string, string> = {
   "claude-code-github-action": "claude-code-gh-action",
 };
 
+function resolveRequestPathname(session: ProxySession): string | null {
+  if (typeof session.getEndpoint === "function") {
+    return session.getEndpoint();
+  }
+
+  const pathname = session.requestUrl?.pathname;
+  return typeof pathname === "string" ? pathname : null;
+}
+
+function isCountTokensRequest(session: ProxySession): boolean {
+  if (typeof session.isCountTokensRequest === "function") {
+    return session.isCountTokensRequest();
+  }
+
+  const pathname = resolveRequestPathname(session);
+  return pathname !== null && isCountTokensEndpointPath(pathname);
+}
+
 function confirmClaudeCodeSignals(session: ProxySession): {
   confirmed: boolean;
   signals: string[];
@@ -148,8 +167,18 @@ function confirmClaudeCodeSignals(session: ProxySession): {
     supplementary.push("dangerous-browser-access");
   }
 
+  // count_tokens payloads intentionally omit metadata.user_id (Anthropic API + Claude Code CLI).
+  // Confirm with the 3 header signals so client restrictions do not false-reject these requests.
+  const hasHeaderSignals =
+    signals.includes("x-app-cli") &&
+    signals.includes("ua-prefix") &&
+    signals.includes("betas-present");
+  const confirmed = isCountTokensRequest(session)
+    ? hasHeaderSignals
+    : signals.includes("metadata-user-id") && hasHeaderSignals;
+
   return {
-    confirmed: signals.length === 4,
+    confirmed,
     signals,
     supplementary,
   };

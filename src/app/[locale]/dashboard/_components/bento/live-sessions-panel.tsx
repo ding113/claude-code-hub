@@ -30,7 +30,8 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
     status: session.status,
   });
 
-  const shortId = session.sessionId.slice(-6);
+  const displayIdentity = session.sessionFingerprint ?? session.sessionId;
+  const shortId = displayIdentity.slice(-6);
   const userName = session.userName || t("unknownUser");
 
   // Determine ping animation color based on status

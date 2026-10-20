@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_memory_admission" boolean DEFAULT false NOT NULL;

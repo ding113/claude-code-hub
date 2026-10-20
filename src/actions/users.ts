@@ -1,11 +1,11 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
+import { users as usersTable } from "@/drizzle/schema";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
@@ -14,6 +14,7 @@ import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions"
 import { clipStartByResetAt, resolveUser5hCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { getRedisClient } from "@/lib/redis";
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
+import type { UserStatisticsResetRecord } from "@/lib/user-statistics-reset/types";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
@@ -1344,7 +1345,7 @@ export async function addUser(data: {
 
     // 权限检查：只有管理员可以添加用户
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -1546,7 +1547,7 @@ export async function createUserOnly(data: {
 
     // Permission check: only admin can add users
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -1883,7 +1884,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2018,7 +2019,7 @@ export async function renewUser(
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2094,7 +2095,7 @@ export async function toggleUserEnabled(userId: number, enabled: boolean): Promi
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2234,7 +2235,7 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2259,7 +2260,7 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
 
     if (requiresRedisForFixed5h) {
       const redis = getRedisClient();
-      if (!redis || redis.status !== "ready") {
+      if (redis?.status !== "ready") {
         return {
           ok: false,
           error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
@@ -2338,17 +2339,20 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
 }
 
 /**
- * Reset ALL user statistics (logs + Redis cache + sessions)
- * This is IRREVERSIBLE - deletes all messageRequest logs for the user
+ * Queue an irreversible reset of logs and cost caches created before the request cutoff.
+ * Active Session state is intentionally preserved.
  *
  * Admin only.
  */
-export async function resetUserAllStatistics(userId: number): Promise<ActionResult> {
+export async function resetUserAllStatistics(
+  userId: number
+): Promise<ActionResult<UserStatisticsResetRecord>> {
+  let enqueueStarted = false;
   try {
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2361,96 +2365,25 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
       return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
-    // Get user's keys
     const keys = await findKeyList(userId);
-    const keyIds = keys.map((k) => k.id);
-    const keyHashes = keys.map((k) => k.key);
-    const requiresRedisForFixed5h =
-      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
-      keys.some(
-        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
-      );
-
-    if (requiresRedisForFixed5h) {
-      const redis = getRedisClient();
-      if (!redis || redis.status !== "ready") {
-        return {
-          ok: false,
-          error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
-          errorCode: ERROR_CODES.OPERATION_FAILED,
-        };
-      }
-    }
-
-    // 1. Delete all messageRequest logs for this user
-    // Atomic: delete logs + ledger + clear costResetAt in a single transaction
-    await db.transaction(async (tx) => {
-      await tx.delete(messageRequest).where(eq(messageRequest.userId, userId));
-      await tx.delete(usageLedger).where(eq(usageLedger.userId, userId));
-      await tx
-        .update(usersTable)
-        .set({ costResetAt: null, limit5hCostResetAt: null, updatedAt: new Date() })
-        .where(and(eq(usersTable.id, userId), isNull(usersTable.deletedAt)));
+    const { enqueueUserStatisticsReset } = await import("@/lib/user-statistics-reset/reset-queue");
+    enqueueStarted = true;
+    const reset = await enqueueUserStatisticsReset(userId, {
+      fixed5hKeyIds: keys.map((key) => key.id),
     });
-    // Invalidate auth cache outside transaction (Redis, not DB)
-    await invalidateCachedUser(userId).catch(() => {});
-
-    // 2. Clear Redis cache (cost keys + active sessions)
-    try {
-      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-      const cacheResult = await clearUserCostCache({
-        userId,
-        keyIds,
-        keyHashes,
-        includeActiveSessions: true,
-      });
-      if (!cacheResult) {
-        logger.error("Reset user statistics committed DB changes without Redis cleanup", {
-          userId,
-          requiresRedisForFixed5h,
-        });
-        return {
-          ok: false,
-          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
-          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
-        };
-      }
-
-      logger.info("Reset user statistics - Redis cache cleared", {
-        userId,
-        keyCount: keyIds.length,
-        ...cacheResult,
-      });
-      if (cacheResult.cleanupFailed) {
-        return {
-          ok: false,
-          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
-          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
-        };
-      }
-    } catch (error) {
-      logger.error("Failed to clear Redis cache during user statistics reset", {
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return {
-        ok: false,
-        error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
-        errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
-      };
-    }
-
-    logger.info("Reset all user statistics", { userId, keyCount: keyIds.length });
-    revalidatePath("/dashboard/users");
-
-    return { ok: true };
+    logger.info("Queued user statistics reset", {
+      userId,
+      resetId: reset.resetId,
+      status: reset.status,
+    });
+    return { ok: true, data: reset };
   } catch (error) {
     logger.error("Failed to reset all user statistics:", error);
     const tError = await getTranslations("errors");
     return {
       ok: false,
-      error: tError("OPERATION_FAILED"),
-      errorCode: ERROR_CODES.OPERATION_FAILED,
+      error: tError(enqueueStarted ? "CONNECTION_FAILED" : "OPERATION_FAILED"),
+      errorCode: enqueueStarted ? ERROR_CODES.CONNECTION_FAILED : ERROR_CODES.OPERATION_FAILED,
     };
   }
 }

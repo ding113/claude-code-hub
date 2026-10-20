@@ -1,6 +1,6 @@
 # GitHub Release Notes 生成 Prompt
 
-你是 Claude Code Hub 项目的发布说明撰写专家。请根据变更报告生成适合 GitHub Release 的发布说明。
+你是 CC Hub 项目的发布说明撰写专家。请根据变更报告生成适合 GitHub Release 的发布说明。
 
 ## 变更报告
 
@@ -23,7 +23,7 @@
 ### 2. 格式模板
 
 ```markdown
-## Claude Code Hub {{ VERSION }}
+## CC Hub {{ VERSION }}
 
 {{ SUMMARY }}
 

@@ -8,10 +8,15 @@ import {
   Coins,
   Eye,
   FileCode,
+  Filter,
+  Gauge,
   Globe,
   MapPin,
+  MemoryStick,
   Network,
   Pencil,
+  Repeat,
+  Route,
   Terminal,
   Thermometer,
   Trophy,
@@ -19,7 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -40,22 +45,33 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
-import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
+import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone-shared";
 import {
   shouldWarnQuotaDbRefreshIntervalTooHigh,
   shouldWarnQuotaDbRefreshIntervalTooLow,
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
+import { DISCOVERY_FIELD_LIMITS } from "@/lib/validation/discovery-settings";
+import {
+  REPLAY_CACHE_TTL_INVALID_ERROR_CODE,
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
+  StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
+  /** Read-only runtime value; SESSION_TTL is not a persisted system setting. */
+  sessionTtlSeconds?: number;
+  /** Read-only env fallback used while replayEnabled remains null. */
+  replayDefaultEnabled?: boolean;
   initialSettings: Pick<
     SystemSettings,
     | "siteTitle"
@@ -65,12 +81,21 @@ interface SystemSettingsFormProps {
     | "codexPriorityBillingSource"
     | "billNonSuccessfulRequests"
     | "billHedgeLosers"
+    | "legacyHedgeMaxInFlight"
+    | "discoveryEnabled"
+    | "discoveryConcurrency"
+    | "maxDiscoveryRounds"
+    | "discoverySlaMs"
+    | "stickySlaMs"
+    | "racingTotalTimeoutMs"
+    | "stickyTimeoutCooldownMs"
     | "timezone"
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
     | "enableOpenaiResponsesWebsocket"
     | "enableHighConcurrencyMode"
+    | "enableMemoryAdmission"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
     | "enableBillingHeaderRectifier"
@@ -80,6 +105,11 @@ interface SystemSettingsFormProps {
     | "enableGeminiFunctionIdRectifier"
     | "allowNonConversationEndpointProviderFallback"
     | "fakeStreamingWhitelist"
+    | "streamGateMode"
+    | "affinityIgnoreClientSessionId"
+    | "replayEnabled"
+    | "replayCacheTtlMinutes"
+    | "cacheEffectivenessEnabled"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -107,9 +137,15 @@ function formatIpExtractionConfig(config: IpExtractionConfig): string {
 }
 
 const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
+type DiscoveryNumberValue = number | "";
 
-export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
+export function SystemSettingsForm({
+  initialSettings,
+  sessionTtlSeconds = 300,
+  replayDefaultEnabled = true,
+}: SystemSettingsFormProps) {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations("settings.config.form");
   const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
@@ -130,6 +166,26 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.billNonSuccessfulRequests
   );
   const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
+  const [legacyHedgeMaxInFlight, setLegacyHedgeMaxInFlight] = useState<DiscoveryNumberValue>(
+    initialSettings.legacyHedgeMaxInFlight ?? 2
+  );
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(initialSettings.discoveryEnabled);
+  const [discoveryConcurrency, setDiscoveryConcurrency] = useState<DiscoveryNumberValue>(
+    initialSettings.discoveryConcurrency
+  );
+  const [maxDiscoveryRounds, setMaxDiscoveryRounds] = useState<DiscoveryNumberValue>(
+    initialSettings.maxDiscoveryRounds
+  );
+  const [discoverySlaMs, setDiscoverySlaMs] = useState<DiscoveryNumberValue>(
+    initialSettings.discoverySlaMs
+  );
+  const [stickySlaMs, setStickySlaMs] = useState<DiscoveryNumberValue>(initialSettings.stickySlaMs);
+  const [racingTotalTimeoutMs, setRacingTotalTimeoutMs] = useState<DiscoveryNumberValue>(
+    initialSettings.racingTotalTimeoutMs
+  );
+  const [stickyTimeoutCooldownMs, setStickyTimeoutCooldownMs] = useState<DiscoveryNumberValue>(
+    initialSettings.stickyTimeoutCooldownMs
+  );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -143,6 +199,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
     initialSettings.enableHighConcurrencyMode
+  );
+  const [enableMemoryAdmission, setEnableMemoryAdmission] = useState(
+    initialSettings.enableMemoryAdmission
   );
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
     initialSettings.interceptAnthropicWarmupRequests
@@ -167,6 +226,21 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       model: entry.model,
       groupTags: [...entry.groupTags],
     }))
+  );
+  const [streamGateMode, setStreamGateMode] = useState<StreamGateSettingMode>(
+    initialSettings.streamGateMode
+  );
+  const [affinityIgnoreClientSessionId, setAffinityIgnoreClientSessionId] = useState(
+    initialSettings.affinityIgnoreClientSessionId
+  );
+  // null = 跟随环境变量：未触碰开关时按 null 原样保存，
+  // 避免无关字段的保存把覆写写死为布尔值；仅用户切换后才落显式值
+  const [replayEnabled, setReplayEnabled] = useState<boolean | null>(initialSettings.replayEnabled);
+  const [replayCacheTtlMinutes, setReplayCacheTtlMinutes] = useState(
+    String(initialSettings.replayCacheTtlMinutes)
+  );
+  const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState<boolean | null>(
+    initialSettings.cacheEffectivenessEnabled
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -227,6 +301,42 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
 
     if (!siteTitle.trim()) {
       toast.error(t("siteTitleRequired"));
+      return;
+    }
+
+    const legacyHedgeMaxInFlightValue = Number(legacyHedgeMaxInFlight);
+    if (
+      !Number.isSafeInteger(legacyHedgeMaxInFlightValue) ||
+      legacyHedgeMaxInFlightValue < 1 ||
+      legacyHedgeMaxInFlightValue > 4
+    ) {
+      toast.error(t("legacyHedgeMaxInFlightInvalid"));
+      return;
+    }
+
+    const discoveryConfig = {
+      discoveryConcurrency: Number(discoveryConcurrency),
+      maxDiscoveryRounds: Number(maxDiscoveryRounds),
+      discoverySlaMs: Number(discoverySlaMs),
+      stickySlaMs: Number(stickySlaMs),
+      racingTotalTimeoutMs: Number(racingTotalTimeoutMs),
+      stickyTimeoutCooldownMs: Number(stickyTimeoutCooldownMs),
+    };
+    const discoverySettingsInvalid = Object.entries(discoveryConfig).some(([field, value]) => {
+      const [min, max] = DISCOVERY_FIELD_LIMITS[field as keyof typeof DISCOVERY_FIELD_LIMITS];
+      return !Number.isSafeInteger(value) || value < min || value > max;
+    });
+    if (discoveryEnabled && discoverySettingsInvalid) {
+      toast.error(t("discoverySettingsInvalid"));
+      return;
+    }
+    if (
+      discoveryEnabled &&
+      discoveryConfig.racingTotalTimeoutMs <
+        discoveryConfig.stickySlaMs +
+          discoveryConfig.maxDiscoveryRounds * discoveryConfig.discoverySlaMs
+    ) {
+      toast.error(t("discoveryWindowInvalid"));
       return;
     }
 
@@ -311,18 +421,27 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         codexPriorityBillingSource,
         billNonSuccessfulRequests,
         billHedgeLosers,
+        legacyHedgeMaxInFlight: legacyHedgeMaxInFlightValue,
+        discoveryEnabled,
+        ...(discoveryEnabled ? discoveryConfig : {}),
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
         enableHttp2,
         enableOpenaiResponsesWebsocket,
         enableHighConcurrencyMode,
+        enableMemoryAdmission,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
         enableResponseInputRectifier,
         allowNonConversationEndpointProviderFallback,
         fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
+        streamGateMode,
+        affinityIgnoreClientSessionId,
+        replayEnabled,
+        replayCacheTtlMinutes: Number(replayCacheTtlMinutes),
+        cacheEffectivenessEnabled,
         enableThinkingBudgetRectifier,
         enableThinkingEffortConflictRectifier,
         enableGeminiFunctionIdRectifier,
@@ -341,7 +460,15 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       });
 
       if (!result.ok) {
-        toast.error(result.error || t("saveFailed"));
+        const errorMessage =
+          result.errorCode === "DISCOVERY_WINDOW_INVALID"
+            ? t("discoveryWindowInvalid")
+            : result.errorCode === "DISCOVERY_SETTINGS_INVALID"
+              ? t("discoverySettingsInvalid")
+              : result.errorCode === REPLAY_CACHE_TTL_INVALID_ERROR_CODE
+                ? t("replayCacheTtlInvalid")
+                : result.error || t("saveFailed");
+        toast.error(errorMessage);
         return;
       }
 
@@ -353,12 +480,21 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
         setBillHedgeLosers(result.data.billHedgeLosers);
+        setLegacyHedgeMaxInFlight(result.data.legacyHedgeMaxInFlight);
+        setDiscoveryEnabled(result.data.discoveryEnabled);
+        setDiscoveryConcurrency(result.data.discoveryConcurrency);
+        setMaxDiscoveryRounds(result.data.maxDiscoveryRounds);
+        setDiscoverySlaMs(result.data.discoverySlaMs);
+        setStickySlaMs(result.data.stickySlaMs);
+        setRacingTotalTimeoutMs(result.data.racingTotalTimeoutMs);
+        setStickyTimeoutCooldownMs(result.data.stickyTimeoutCooldownMs);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
         setEnableOpenaiResponsesWebsocket(result.data.enableOpenaiResponsesWebsocket);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
+        setEnableMemoryAdmission(result.data.enableMemoryAdmission);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);
@@ -372,6 +508,11 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             groupTags: [...entry.groupTags],
           }))
         );
+        setStreamGateMode(result.data.streamGateMode);
+        setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
+        setReplayEnabled(result.data.replayEnabled ?? null);
+        setReplayCacheTtlMinutes(String(result.data.replayCacheTtlMinutes));
+        setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? null);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableGeminiFunctionIdRectifier(result.data.enableGeminiFunctionIdRectifier);
@@ -531,7 +672,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             <SelectItem value="__auto__">{t("timezoneAuto")}</SelectItem>
             {COMMON_TIMEZONES.map((tz) => (
               <SelectItem key={tz} value={tz}>
-                {getTimezoneLabel(tz)}
+                {getTimezoneLabel(tz, locale)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -636,6 +777,147 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           />
         </div>
 
+        {/* Legacy streaming hedge concurrency */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="legacy-hedge-max-in-flight" className="text-sm font-medium">
+                  {t("legacyHedgeMaxInFlight")}
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("legacyHedgeMaxInFlightTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("legacyHedgeMaxInFlightTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("legacyHedgeMaxInFlightDesc")}
+              </p>
+            </div>
+            <Input
+              id="legacy-hedge-max-in-flight"
+              type="number"
+              min={1}
+              max={4}
+              step={1}
+              value={legacyHedgeMaxInFlight}
+              onChange={(event) =>
+                setLegacyHedgeMaxInFlight(
+                  event.target.value === "" ? "" : Number(event.target.value)
+                )
+              }
+              disabled={isPending}
+              className={`${inputClassName} w-24 shrink-0`}
+            />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+                <Zap className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{t("discoveryEnabled")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("discoveryEnabledDesc")}</p>
+              </div>
+            </div>
+            <Switch
+              id="discovery-enabled"
+              aria-label={t("discoveryEnabled")}
+              checked={discoveryEnabled}
+              onCheckedChange={setDiscoveryEnabled}
+              disabled={isPending}
+            />
+          </div>
+          {discoveryEnabled ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    [
+                      "discoveryConcurrency",
+                      discoveryConcurrency,
+                      setDiscoveryConcurrency,
+                      ...DISCOVERY_FIELD_LIMITS.discoveryConcurrency,
+                    ],
+                    [
+                      "maxDiscoveryRounds",
+                      maxDiscoveryRounds,
+                      setMaxDiscoveryRounds,
+                      ...DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds,
+                    ],
+                    [
+                      "discoverySlaMs",
+                      discoverySlaMs,
+                      setDiscoverySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.discoverySlaMs,
+                    ],
+                    [
+                      "stickySlaMs",
+                      stickySlaMs,
+                      setStickySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.stickySlaMs,
+                    ],
+                    [
+                      "racingTotalTimeoutMs",
+                      racingTotalTimeoutMs,
+                      setRacingTotalTimeoutMs,
+                      ...DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs,
+                    ],
+                    [
+                      "stickyTimeoutCooldownMs",
+                      stickyTimeoutCooldownMs,
+                      setStickyTimeoutCooldownMs,
+                      ...DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs,
+                    ],
+                  ] as const
+                ).map(([key, value, setter, min, max]) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label htmlFor={`discovery-${key}`} className="text-xs">
+                      {t(key)}
+                    </Label>
+                    <Input
+                      id={`discovery-${key}`}
+                      type="number"
+                      min={min}
+                      max={max}
+                      required
+                      value={value === 0 ? "" : value}
+                      onChange={(event) =>
+                        setter(event.target.value === "" ? "" : Number(event.target.value))
+                      }
+                      disabled={isPending}
+                      className={inputClassName}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-foreground">{t("stickyBindingTtl")}</span>
+                  <span className="font-mono text-muted-foreground">{sessionTtlSeconds}s</span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {t("stickyBindingTtlDesc")}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("discoveryWindowDesc")}</p>
+            </>
+          ) : null}
+        </div>
+
         {/* Verbose Provider Error */}
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
           <div className="flex items-start gap-3">
@@ -734,6 +1016,28 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-high-concurrency-mode"
             checked={enableHighConcurrencyMode}
             onCheckedChange={(checked) => setEnableHighConcurrencyMode(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Memory Admission */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-violet-500/10 text-violet-400 shrink-0">
+              <MemoryStick className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("enableMemoryAdmission")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableMemoryAdmissionDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-memory-admission"
+            aria-label={t("enableMemoryAdmission")}
+            checked={enableMemoryAdmission}
+            onCheckedChange={(checked) => setEnableMemoryAdmission(checked)}
             disabled={isPending}
           />
         </div>
@@ -918,6 +1222,131 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="allow-non-conversation-endpoint-provider-fallback"
             checked={allowNonConversationEndpointProviderFallback}
             onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Stream Content Gate Mode */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
+              <Filter className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("streamGateMode")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("streamGateModeDesc")}</p>
+            </div>
+          </div>
+          <div className="pl-11">
+            <Select
+              value={streamGateMode}
+              onValueChange={(value) => setStreamGateMode(value as StreamGateSettingMode)}
+              disabled={isPending}
+            >
+              <SelectTrigger id="stream-gate-mode" className={selectTriggerClassName}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">{t("streamGateModeOptions.off")}</SelectItem>
+                <SelectItem value="shadow">{t("streamGateModeOptions.shadow")}</SelectItem>
+                <SelectItem value="enforce">{t("streamGateModeOptions.enforce")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Affinity: Ignore Client Session ID */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 shrink-0">
+              <Route className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("affinityIgnoreClientSessionId")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("affinityIgnoreClientSessionIdDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="affinity-ignore-client-session-id"
+            aria-label={t("affinityIgnoreClientSessionId")}
+            checked={affinityIgnoreClientSessionId}
+            onCheckedChange={(checked) => setAffinityIgnoreClientSessionId(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* F2 Request Replay */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4 hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                <Repeat className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{t("replayEnabled")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("replayEnabledDesc")}</p>
+              </div>
+            </div>
+            <Switch
+              id="replay-enabled"
+              aria-label={t("replayEnabled")}
+              checked={replayEnabled ?? replayDefaultEnabled}
+              onCheckedChange={(checked) => setReplayEnabled(checked)}
+              disabled={isPending}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-end">
+            <div>
+              <Label htmlFor="replay-cache-ttl-minutes">{t("replayCacheTtlMinutes")}</Label>
+              <p className="mt-1 text-base/6 text-muted-foreground sm:text-xs">
+                {t("replayCacheTtlMinutesDesc")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                id="replay-cache-ttl-minutes"
+                name="replayCacheTtlMinutes"
+                type="number"
+                min={REPLAY_CACHE_TTL_MINUTES_MIN}
+                max={REPLAY_CACHE_TTL_MINUTES_MAX}
+                step={1}
+                required
+                value={replayCacheTtlMinutes}
+                onChange={(event) => setReplayCacheTtlMinutes(event.target.value)}
+                disabled={isPending}
+                className={`${inputClassName} max-sm:text-base`}
+              />
+              <p className="text-base text-muted-foreground shrink-0 sm:text-xs">
+                {t("replayCacheTtlMinutesUnit")}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* F3b Cache Effectiveness Simulation */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+              <Gauge className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("cacheEffectivenessEnabled")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("cacheEffectivenessEnabledDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="cache-effectiveness-enabled"
+            aria-label={t("cacheEffectivenessEnabled")}
+            checked={cacheEffectivenessEnabled ?? true}
+            onCheckedChange={(checked) => setCacheEffectivenessEnabled(checked)}
             disabled={isPending}
           />
         </div>

@@ -824,6 +824,88 @@ describe("extractUsageMetrics", () => {
   });
 
   describe("openai-compatible cached_tokens subset normalization", () => {
+    it("should keep top-level cache creation disjoint while subtracting cached input", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          cache_creation_input_tokens: 200,
+          input_tokens_details: {
+            cached_tokens: 300,
+            cache_write_tokens: 50,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("should keep TTL-derived cache creation disjoint", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 200,
+          },
+          input_tokens_details: {
+            cached_tokens: 300,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_creation_5m_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("should subtract nested cache_write_tokens without cached_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          input_tokens_details: {
+            cache_write_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(800);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBeUndefined();
+    });
+
+    it("should keep nested cache_write_tokens disjoint for providers outside the allow-list", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          input_tokens_details: {
+            cache_write_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.input_tokens).toBe(1000);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+    });
+
+    it("should ignore exponent-overflow cache buckets during input normalization", () => {
+      const response =
+        '{"usage":{"input_tokens":1000,"cache_read_input_tokens":1e400,"input_tokens_details":{"cache_write_tokens":1e400}}}';
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(1000);
+    });
+
     it("should subtract Chat Completions cached_tokens from input_tokens (non-stream)", () => {
       const response = JSON.stringify({
         usage: {
@@ -861,6 +943,134 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics?.input_tokens).toBe(146);
       expect(result.usageMetrics?.cache_read_input_tokens).toBe(2176);
       expect(result.usageMetrics?.output_tokens).toBe(1158);
+    });
+
+    it("should extract Responses cache_write_tokens and exclude both cache buckets from input", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 240951,
+          input_tokens_details: {
+            cached_tokens: 240128,
+            cache_write_tokens: 740,
+          },
+          output_tokens: 58,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "codex");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(83);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(740);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(240128);
+      expect(result.usageMetrics?.output_tokens).toBe(58);
+    });
+
+    it("should extract Chat Completions cache_write_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 2006,
+          completion_tokens: 300,
+          prompt_tokens_details: {
+            cached_tokens: 1920,
+            cache_write_tokens: 40,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(46);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(40);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(1920);
+    });
+
+    it("should extract cache_write_tokens from an SSE final usage chunk", () => {
+      const sse = [
+        'data: {"id":"chatcmpl-cache-write","choices":[{"index":0,"delta":{"content":"Hi"}}]}',
+        "",
+        'data: {"id":"chatcmpl-cache-write","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2006,"completion_tokens":300,"prompt_tokens_details":{"cached_tokens":1920,"cache_write_tokens":40}}}',
+        "",
+        "data: [DONE]",
+      ].join("\n");
+
+      const result = parseUsageFromResponseText(sse, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(46);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(40);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(1920);
+      expect(result.usageMetrics?.output_tokens).toBe(300);
+    });
+
+    it("should preserve top-level cache_creation_input_tokens over nested cache_write_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          cache_creation_input_tokens: 0,
+          input_tokens_details: {
+            cached_tokens: 300,
+            cache_write_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(0);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("should not infer cache-write tokens when cache_write_tokens is absent", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 240951,
+          input_tokens_details: {
+            cached_tokens: 240128,
+          },
+          output_tokens: 58,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "codex");
+
+      expect(result.usageMetrics?.input_tokens).toBe(823);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBeUndefined();
+    });
+
+    it("should ignore invalid nested cache_write_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          input_tokens_details: {
+            cached_tokens: 300,
+            cache_write_tokens: -1,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBeUndefined();
+    });
+
+    it("should clamp ordinary input at zero when cache buckets exceed total input", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 100,
+          input_tokens_details: {
+            cached_tokens: 80,
+            cache_write_tokens: 50,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "codex");
+
+      expect(result.usageMetrics?.input_tokens).toBe(0);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(50);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(80);
     });
 
     it("should subtract cached_tokens from input_tokens in SSE final usage chunk", () => {

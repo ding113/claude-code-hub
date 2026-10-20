@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ZodError } from "zod";
 import { locales } from "@/i18n/config";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
+import { DEFAULT_SETTINGS } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
@@ -14,6 +16,14 @@ import {
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import {
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+  getDiscoveryValidationErrorCode,
+} from "@/lib/validation/discovery-settings";
+import {
+  getReplayCacheTtlValidationErrorCode,
+  REPLAY_CACHE_TTL_INVALID_ERROR_CODE,
+} from "@/lib/validation/replay-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
@@ -21,14 +31,24 @@ import type {
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
+  StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
+function systemSettingsValidationErrorCode(error: unknown): string | null {
+  if (!(error instanceof ZodError)) return null;
+  return (
+    getDiscoveryValidationErrorCode(error.issues) ??
+    getReplayCacheTtlValidationErrorCode(error.issues) ??
+    null
+  );
+}
+
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问系统设置" };
     }
 
@@ -64,6 +84,14 @@ export async function saveSystemSettings(formData: {
   codexPriorityBillingSource?: CodexPriorityBillingSource;
   billNonSuccessfulRequests?: boolean;
   billHedgeLosers?: boolean;
+  legacyHedgeMaxInFlight?: number;
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -84,6 +112,12 @@ export async function saveSystemSettings(formData: {
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
   fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
+  streamGateMode?: StreamGateSettingMode;
+  affinityIgnoreClientSessionId?: boolean;
+  replayEnabled?: boolean | null;
+  replayCacheTtlMinutes?: number;
+  cacheEffectivenessEnabled?: boolean | null;
+  enableMemoryAdmission?: boolean;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -104,12 +138,36 @@ export async function saveSystemSettings(formData: {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
     before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
+    const effectiveDiscoveryWindow = {
+      discoverySlaMs:
+        validated.discoverySlaMs ?? before?.discoverySlaMs ?? DEFAULT_SETTINGS.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs ?? before?.stickySlaMs ?? DEFAULT_SETTINGS.stickySlaMs,
+      maxDiscoveryRounds:
+        validated.maxDiscoveryRounds ??
+        before?.maxDiscoveryRounds ??
+        DEFAULT_SETTINGS.maxDiscoveryRounds,
+      racingTotalTimeoutMs:
+        validated.racingTotalTimeoutMs ??
+        before?.racingTotalTimeoutMs ??
+        DEFAULT_SETTINGS.racingTotalTimeoutMs,
+    };
+    if (
+      effectiveDiscoveryWindow.racingTotalTimeoutMs <
+      effectiveDiscoveryWindow.stickySlaMs +
+        effectiveDiscoveryWindow.maxDiscoveryRounds * effectiveDiscoveryWindow.discoverySlaMs
+    ) {
+      return {
+        ok: false,
+        error: "Discovery window validation failed.",
+        errorCode: DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+      };
+    }
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
@@ -118,6 +176,14 @@ export async function saveSystemSettings(formData: {
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
       billNonSuccessfulRequests: validated.billNonSuccessfulRequests,
       billHedgeLosers: validated.billHedgeLosers,
+      legacyHedgeMaxInFlight: validated.legacyHedgeMaxInFlight,
+      discoveryEnabled: validated.discoveryEnabled,
+      discoveryConcurrency: validated.discoveryConcurrency,
+      maxDiscoveryRounds: validated.maxDiscoveryRounds,
+      discoverySlaMs: validated.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs,
+      racingTotalTimeoutMs: validated.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: validated.stickyTimeoutCooldownMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
@@ -139,6 +205,12 @@ export async function saveSystemSettings(formData: {
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,
       fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
+      streamGateMode: validated.streamGateMode,
+      affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
+      replayEnabled: validated.replayEnabled,
+      replayCacheTtlMinutes: validated.replayCacheTtlMinutes,
+      cacheEffectivenessEnabled: validated.cacheEffectivenessEnabled,
+      enableMemoryAdmission: validated.enableMemoryAdmission,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,
@@ -157,10 +229,6 @@ export async function saveSystemSettings(formData: {
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
-    const { invalidateProviderSelectorSystemSettingsCache } = await import(
-      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
-    );
-    invalidateProviderSelectorSystemSettingsCache();
 
     if (validated.timezone !== undefined) {
       await Promise.all([
@@ -239,7 +307,14 @@ export async function saveSystemSettings(formData: {
     return { ok: true, data: { ...updated, publicStatusProjectionWarningCode } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
-    const message = error instanceof Error ? error.message : "更新系统设置失败";
+    const validationErrorCode = systemSettingsValidationErrorCode(error);
+    const message = validationErrorCode
+      ? validationErrorCode === REPLAY_CACHE_TTL_INVALID_ERROR_CODE
+        ? "Replay cache TTL validation failed."
+        : "Discovery settings validation failed."
+      : error instanceof Error
+        ? error.message
+        : "更新系统设置失败";
     emitActionAudit({
       category: "system_settings",
       action: "system_settings.update",
@@ -249,6 +324,10 @@ export async function saveSystemSettings(formData: {
       success: false,
       errorMessage: "UPDATE_FAILED",
     });
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      error: message,
+      ...(validationErrorCode ? { errorCode: validationErrorCode } : {}),
+    };
   }
 }

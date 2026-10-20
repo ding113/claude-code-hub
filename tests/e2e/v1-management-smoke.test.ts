@@ -20,7 +20,7 @@ run("v1 management REST API live smoke", () => {
     expect(openapi.headers.get("X-API-Version")).toBe("1.0.0");
     await expect(openapi.json()).resolves.toMatchObject({
       openapi: "3.1.0",
-      info: { title: "Claude Code Hub Management API", version: "1.0.0" },
+      info: { title: "CC Hub Management API", version: "1.0.0" },
     });
   });
 

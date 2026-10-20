@@ -152,6 +152,62 @@ describe("saveSystemSettings", () => {
     );
   });
 
+  it("accepts and forwards the Replay cache TTL", async () => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: 30 });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: 30 })
+    );
+  });
+
+  it.each([5, 120])("accepts Replay cache TTL boundary %s", async (value) => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: value })
+    );
+  });
+
+  it.each([4, 121, 30.5])("rejects invalid Replay cache TTL %s", async (value) => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Replay cache TTL validation failed.",
+      errorCode: "REPLAY_CACHE_TTL_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a structured error code for invalid Discovery field ranges", async () => {
+    const result = await saveSystemSettings({ discoveryConcurrency: 33 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Discovery settings validation failed.",
+      errorCode: "DISCOVERY_SETTINGS_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves the structured Discovery window error code from schema validation", async () => {
+    const result = await saveSystemSettings({
+      discoverySlaMs: 10_000,
+      stickySlaMs: 20_000,
+      maxDiscoveryRounds: 2,
+      racingTotalTimeoutMs: 30_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Discovery settings validation failed.",
+      errorCode: "DISCOVERY_WINDOW_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("should invalidate system settings cache after successful save", async () => {
     await saveSystemSettings({ siteTitle: "New Title" });
 
@@ -363,5 +419,19 @@ describe("saveSystemSettings", () => {
         enableHighConcurrencyMode: true,
       })
     );
+  });
+
+  it("should pass enableMemoryAdmission through validation and save, then invalidate the cache", async () => {
+    const result = await saveSystemSettings({
+      enableMemoryAdmission: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableMemoryAdmission: true,
+      })
+    );
+    expect(invalidateSystemSettingsCacheMock).toHaveBeenCalledTimes(1);
   });
 });

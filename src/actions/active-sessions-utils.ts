@@ -19,19 +19,26 @@ export function summarizeTerminateSessionsBatch(
 ): BatchTerminationSummary {
   const uniqueRequestedIds = Array.from(new Set(requestedSessionIds));
 
-  const sessionIdSet = new Set(sessionsData.map((session) => session.sessionId));
-  const missingSessionIds = uniqueRequestedIds.filter((id) => !sessionIdSet.has(id));
+  const claimedRequestedIds = new Set<string>();
 
   const allowedSessions: AggregateSessionStatsEntry[] = [];
   const unauthorizedSessions: AggregateSessionStatsEntry[] = [];
 
   for (const session of sessionsData) {
+    const requestedIds = session.requestedSessionIds?.length
+      ? session.requestedSessionIds
+      : [session.sessionId];
+    for (const requestedId of requestedIds) {
+      claimedRequestedIds.add(requestedId);
+    }
     if (isAdmin || session.userId === currentUserId) {
       allowedSessions.push(session);
     } else {
       unauthorizedSessions.push(session);
     }
   }
+
+  const missingSessionIds = uniqueRequestedIds.filter((id) => !claimedRequestedIds.has(id));
 
   return {
     uniqueRequestedIds,

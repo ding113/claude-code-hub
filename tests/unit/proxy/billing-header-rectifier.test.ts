@@ -56,13 +56,12 @@ describe("rectifyBillingHeader", () => {
   });
 
   test("system array with billing header mixed with real prompts - only removes billing header blocks", () => {
-    const message: Record<string, unknown> = {
-      system: [
-        { type: "text", text: "You are a helpful assistant." },
-        { type: "text", text: "x-anthropic-billing-header: cc_version=2.1.36; cch=1;" },
-        { type: "text", text: "Follow instructions carefully." },
-      ],
-    };
+    const originalSystem = [
+      { type: "text", text: "You are a helpful assistant." },
+      { type: "text", text: "x-anthropic-billing-header: cc_version=2.1.36; cch=1;" },
+      { type: "text", text: "Follow instructions carefully." },
+    ];
+    const message: Record<string, unknown> = { system: originalSystem };
 
     const result = rectifyBillingHeader(message);
 
@@ -72,6 +71,8 @@ describe("rectifyBillingHeader", () => {
       { type: "text", text: "You are a helpful assistant." },
       { type: "text", text: "Follow instructions carefully." },
     ]);
+    expect(message.system).not.toBe(originalSystem);
+    expect(originalSystem).toHaveLength(3);
   });
 
   test("system as plain string that IS a billing header - deletes system field", () => {

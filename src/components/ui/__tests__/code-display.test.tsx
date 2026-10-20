@@ -329,4 +329,31 @@ describe("CodeDisplay", () => {
     expect(container.textContent).toContain(dashboardMessages.sessions.codeDisplay.hardLimit.title);
     unmount();
   });
+
+  test("sse keeps pretty event view for content over the pretty-mode char cap", () => {
+    // 请求回显帧场景：单个 SSE 事件即可超过 100K 字符，事件视图不得降级为 raw
+    const hugeEcho = `event: response.created\ndata: {"payload":"${"x".repeat(150_000)}"}\n\n`;
+    const sse = `${hugeEcho}event: response.output_text.delta\ndata: {"delta":"hi"}\n\n`;
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={sse} language="sse" fileName="stream.sse" />
+    );
+
+    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(2);
+    unmount();
+  });
+
+  test("sse ignores the line cap and renders events beyond the max-lines limit", () => {
+    // 多 data 行事件轻松超过文本行数上限；SSE 视图不得因行数上限整体拒绝渲染
+    const dataLines = Array.from({ length: 300 }, (_, i) => `data: line-${i}`).join("\n");
+    const sse = `event: big\n${dataLines}\n\n`;
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={sse} language="sse" fileName="long.sse" maxLines={100} />
+    );
+
+    expect(container.textContent).not.toContain(
+      dashboardMessages.sessions.codeDisplay.hardLimit.title
+    );
+    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(1);
+    unmount();
+  });
 });

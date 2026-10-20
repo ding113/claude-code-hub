@@ -297,7 +297,11 @@ describe("RateLimitService - other quota paths", () => {
 
     await RateLimitService.trackUserDailyCost(1, 1.25, "00:00", "rolling", { requestId: 123 });
 
-    expect(redisClientRef.eval).toHaveBeenCalled();
+    expect(redisClientRef.pipeline).toHaveBeenCalledTimes(1);
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
+    expect(
+      pipelineCalls.some((call) => call[0] === "eval" && call[3] === "user:1:cost_daily_rolling")
+    ).toBe(true);
   });
 
   it("checkUserRPM：达到上限时应拦截", async () => {
@@ -362,6 +366,43 @@ describe("RateLimitService - other quota paths", () => {
 
     const result = await RateLimitService.getCurrentCostBatch([], new Map());
     expect(result.size).toBe(0);
+  });
+
+  it("settleLeaseBudgets：应通过单次 Redis 结算返回 12 个显式窗口结果", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([
+      0,
+      JSON.stringify(Array.from({ length: 12 }, (_, index) => [1, 100 - index])),
+    ]);
+
+    const result = await RateLimitService.settleLeaseBudgets({
+      requestId: 7001,
+      cost: 0.75,
+      entities: {
+        key: { id: 11 },
+        user: { id: 22 },
+        provider: { id: 33 },
+      },
+    });
+
+    expect(result.status).toBe("settled");
+    expect(result.settlements).toHaveLength(12);
+    expect(result.settlements.map(({ entityType, window }) => `${entityType}:${window}`)).toEqual([
+      "key:5h",
+      "key:daily",
+      "key:weekly",
+      "key:monthly",
+      "user:5h",
+      "user:daily",
+      "user:weekly",
+      "user:monthly",
+      "provider:5h",
+      "provider:daily",
+      "provider:weekly",
+      "provider:monthly",
+    ]);
+    expect(redisClientRef.eval).toHaveBeenCalledTimes(1);
   });
 
   it("getCurrentCostBatch：Redis 非 ready 时应返回默认 0", async () => {
@@ -520,25 +561,26 @@ describe("RateLimitService - other quota paths", () => {
     });
 
     expect(
-      redisClientRef.eval.mock.calls.some(
-        (call: unknown[]) => String(call[2]) === "key:1:cost_5h_fixed"
+      pipelineCalls.some(
+        (call: unknown[]) => call[0] === "eval" && String(call[3]) === "key:1:cost_5h_fixed"
       )
     ).toBe(true);
     expect(
-      redisClientRef.eval.mock.calls.some(
-        (call: unknown[]) => String(call[2]) === "provider:9:cost_5h_fixed"
+      pipelineCalls.some(
+        (call: unknown[]) => call[0] === "eval" && String(call[3]) === "provider:9:cost_5h_fixed"
       )
     ).toBe(true);
     expect(
-      redisClientRef.eval.mock.calls.some(
-        (call: unknown[]) => String(call[2]) === "user:7:cost_5h_fixed"
+      pipelineCalls.some(
+        (call: unknown[]) => call[0] === "eval" && String(call[3]) === "user:7:cost_5h_fixed"
       )
     ).toBe(true);
     expect(
-      redisClientRef.eval.mock.calls.some((call: unknown[]) =>
-        String(call[2]).includes("cost_5h_rolling")
+      pipelineCalls.some(
+        (call: unknown[]) => call[0] === "eval" && String(call[3]).includes("cost_5h_rolling")
       )
     ).toBe(false);
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
   });
 
   it("trackCost：fixed 模式应写入 key/provider 的 daily+weekly+monthly（STRING）", async () => {
@@ -553,8 +595,9 @@ describe("RateLimitService - other quota paths", () => {
       createdAtMs: nowMs,
     });
 
-    // 5h 的 Lua 脚本至少会执行两次（key/provider）
-    expect(redisClientRef.eval).toHaveBeenCalled();
+    // 5h Lua 与固定窗口命令均进入同一个 pipeline。
+    expect(pipelineCalls.filter((c) => c[0] === "eval").length).toBeGreaterThanOrEqual(2);
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
     expect(pipelineCalls.filter((c) => c[0] === "incrbyfloat").length).toBeGreaterThanOrEqual(4);
     expect(pipelineCalls.filter((c) => c[0] === "expire").length).toBeGreaterThanOrEqual(4);
   });
@@ -569,9 +612,99 @@ describe("RateLimitService - other quota paths", () => {
       createdAtMs: nowMs,
     });
 
-    const evalArgs = redisClientRef.eval.mock.calls.map((c: unknown[]) => String(c[2]));
+    const evalArgs = pipelineCalls
+      .filter((c) => c[0] === "eval")
+      .map((c: unknown[]) => String(c[3]));
     expect(evalArgs.some((k) => k === "key:1:cost_daily_rolling")).toBe(true);
     expect(evalArgs.some((k) => k === "provider:9:cost_daily_rolling")).toBe(true);
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
+  });
+
+  it("trackCost：应把 Key、Provider 与 User 的真实消费合并为一个 pipeline", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const options = {
+      userId: 7,
+      key5hResetMode: "rolling" as const,
+      keyResetMode: "fixed" as const,
+      keyResetTime: "00:00",
+      provider5hResetMode: "fixed" as const,
+      providerResetMode: "rolling" as const,
+      providerResetTime: "03:30",
+      user5hResetMode: "rolling" as const,
+      userResetMode: "rolling" as const,
+      userResetTime: "06:45",
+      requestId: 123,
+      createdAtMs: nowMs,
+    };
+
+    await RateLimitService.trackCost(1, 9, "sess", 1.25, options);
+
+    expect(redisClientRef.pipeline).toHaveBeenCalledTimes(1);
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
+    expect(pipelineCalls.filter((call) => call[0] === "exec")).toHaveLength(1);
+
+    const evalKeys = pipelineCalls
+      .filter((call) => call[0] === "eval")
+      .map((call) => String(call[3]));
+    expect(evalKeys).toEqual([
+      "key:1:cost_5h_rolling",
+      "provider:9:cost_5h_fixed",
+      "user:7:cost_5h_rolling",
+      "provider:9:cost_daily_rolling",
+      "user:7:cost_daily_rolling",
+    ]);
+
+    const fixedCounterKeys = pipelineCalls
+      .filter((call) => call[0] === "incrbyfloat")
+      .map((call) => String(call[1]));
+    expect(fixedCounterKeys).toEqual([
+      "key:1:cost_daily_0000",
+      "key:1:cost_weekly",
+      "key:1:cost_monthly",
+      "provider:9:cost_weekly",
+      "provider:9:cost_monthly",
+    ]);
+    expect(fixedCounterKeys.some((key) => key.startsWith("user:7:cost_weekly"))).toBe(false);
+    expect(fixedCounterKeys.some((key) => key.startsWith("user:7:cost_monthly"))).toBe(false);
+  });
+
+  it("trackCost：pipeline 单命令失败时应逐项记录并继续 fail-open", async () => {
+    const { logger } = await import("@/lib/logger");
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const pipeline = makePipeline();
+    pipeline.exec.mockResolvedValueOnce([[new Error("pipeline boom"), null]]);
+    redisClientRef.pipeline.mockReturnValueOnce(pipeline);
+
+    await expect(
+      RateLimitService.trackCost(1, 9, "sess", 1.25, {
+        key5hResetMode: "fixed",
+        provider5hResetMode: "fixed",
+        keyResetMode: "fixed",
+        providerResetMode: "fixed",
+        requestId: 123,
+        createdAtMs: nowMs,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "[RateLimit] Cost pipeline command failed",
+      expect.objectContaining({ commandIndex: 0, error: "pipeline boom" })
+    );
+  });
+
+  it("trackCost：Redis 非 ready 时不应创建 pipeline 或发送命令", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    redisClientRef.status = "connecting";
+
+    await RateLimitService.trackCost(1, 9, "sess", 1.25, {
+      userId: 7,
+      requestId: 123,
+      createdAtMs: nowMs,
+    });
+
+    expect(redisClientRef.pipeline).not.toHaveBeenCalled();
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
   });
 
   it("getCurrentCostBatch：pipeline.exec 返回 null 时应返回默认值", async () => {

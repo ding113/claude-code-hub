@@ -24,7 +24,7 @@ export default async function ClientVersionsPage({
   const t = await getTranslations({ locale, namespace: "settings" });
   const session = await getSession();
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return redirect({ href: "/login", locale });
   }
 

@@ -74,7 +74,7 @@ function createMockOverview() {
 function createMockSettings() {
   return {
     id: 1,
-    siteTitle: "Claude Code Hub",
+    siteTitle: "CC Hub",
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",

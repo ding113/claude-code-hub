@@ -1,5 +1,7 @@
+import type { RequestCacheMetricAvailability } from "@/lib/cache-effectiveness/request-metrics";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 
@@ -13,14 +15,26 @@ export interface TabSharedProps {
   errorMessage: string | null;
   /** Provider decision chain */
   providerChain: ProviderChainItem[] | null;
+  /** Versioned routing trace for Discovery and legacy routing decisions */
+  routingTrace?: RoutingTraceV1 | null;
   /** Session ID */
   sessionId: string | null;
+  /** Physical Session source for request-scoped readback */
+  sourceSessionId?: string | null;
+  /** Canonical identity kind used to distinguish Prefix ID from Session ID */
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   /** Request sequence number within session */
   requestSequence?: number | null;
+  /** Database request ID used to select an exact request */
+  requestId?: number | null;
   /** Block type (e.g., "sensitive_word", "warmup") */
   blockedBy?: string | null;
   /** Block reason (JSON string) */
   blockedReason?: string | null;
+  /** Whether this audit row was served by Request Replay */
+  isReplay?: boolean;
+  /** Source terminal request copied into this Replay audit row */
+  replaySourceRequestId?: number | null;
   /** Original model before redirect */
   originalModel?: string | null;
   /** Current model after redirect */
@@ -53,6 +67,18 @@ export interface TabSharedProps {
   cacheReadInputTokens?: number | null;
   /** Cache TTL applied */
   cacheTtlApplied?: string | null;
+  /** Theoretical longest-prefix cache token estimate */
+  theoreticalCacheTokens?: number | null;
+  /** Whether the request is eligible for the cache-effectiveness window */
+  cacheScoreEligible?: boolean | null;
+  /** Exclusion reason when the request is not eligible */
+  cacheScoreExcludedReason?: string | null;
+  /** Input-side cache denominator */
+  cacheInputTotal?: number | null;
+  actualCacheRate?: number | null;
+  theoreticalCacheRate?: number | null;
+  requestCacheCoefficientBp?: number | null;
+  requestCacheMetricAvailability?: RequestCacheMetricAvailability;
   /** Whether swap cache TTL billing was applied */
   swapCacheTtlApplied?: boolean | null;
   /** Total cost in USD */
@@ -69,8 +95,10 @@ export interface TabSharedProps {
   context1mApplied?: boolean | null;
   /** Total request duration in ms */
   durationMs?: number | null;
-  /** Time to first byte in ms */
-  ttfbMs?: number | null;
+  /** Time to first token in ms */
+  ttftMs?: number | null;
+  /** Time to first byte in ms (null on rows persisted before it was recorded) */
+  firstByteMs?: number | null;
 }
 
 /**
@@ -111,65 +139,20 @@ export interface MetadataTabProps extends TabSharedProps {
 /**
  * Parse blocked reason JSON string
  */
-export function parseBlockedReason(
-  blockedReason: string | null | undefined
-): { word?: string; matchType?: string; matchedText?: string } | null {
+export function parseBlockedReason(blockedReason: string | null | undefined): {
+  word?: string;
+  matchType?: string;
+  matchedText?: string;
+  // F2 replay_serve audit payload
+  source?: string;
+  replayId?: string;
+} | null {
   if (!blockedReason) return null;
   try {
     return JSON.parse(blockedReason);
   } catch {
     return null;
   }
-}
-
-/**
- * Calculate output tokens per second
- */
-export function calculateOutputRate(
-  outputTokens: number | null | undefined,
-  durationMs: number | null | undefined,
-  ttfbMs: number | null | undefined
-): number | null {
-  if (
-    outputTokens === null ||
-    outputTokens === undefined ||
-    outputTokens <= 0 ||
-    durationMs === null ||
-    durationMs === undefined ||
-    ttfbMs === null ||
-    ttfbMs === undefined ||
-    ttfbMs >= durationMs
-  ) {
-    return null;
-  }
-  const seconds = (durationMs - ttfbMs) / 1000;
-  if (seconds <= 0) return null;
-  return outputTokens / seconds;
-}
-
-/**
- * Determine if output rate should be hidden due to blocked streaming request.
- * Rule: Hide when generationTimeMs / durationMs < 0.1 AND outputRate > 5000
- * This indicates TTFB is very close to total duration with abnormally high tok/s.
- */
-export function shouldHideOutputRate(
-  outputRate: number | null,
-  durationMs: number | null | undefined,
-  ttfbMs: number | null | undefined
-): boolean {
-  if (
-    outputRate == null ||
-    !Number.isFinite(outputRate) ||
-    durationMs == null ||
-    durationMs <= 0 ||
-    ttfbMs == null
-  ) {
-    return false;
-  }
-  const generationTimeMs = durationMs - ttfbMs;
-  if (generationTimeMs <= 0) return false;
-  const ratio = generationTimeMs / durationMs;
-  return ratio < 0.1 && outputRate > 5000;
 }
 
 /**

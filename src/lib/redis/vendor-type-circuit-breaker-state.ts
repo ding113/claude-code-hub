@@ -1,6 +1,10 @@
 import "server-only";
 
 import { logger } from "@/lib/logger";
+import {
+  getProxyRuntimeSettings,
+  resolveRedisRetentionTtlSeconds,
+} from "@/lib/system-settings/proxy-runtime";
 import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
 
@@ -85,10 +89,11 @@ export async function saveVendorTypeCircuitState(
   }
 
   try {
+    await getProxyRuntimeSettings();
     const key = getStateKey(vendorId, providerType);
     const data = serializeState(state);
     await redis.hset(key, data);
-    await redis.expire(key, STATE_TTL_SECONDS);
+    await redis.expire(key, resolveRedisRetentionTtlSeconds(STATE_TTL_SECONDS));
   } catch (error) {
     logger.warn("[VendorTypeCircuitState] Failed to save to Redis", {
       vendorId,

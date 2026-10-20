@@ -69,7 +69,7 @@ export default async function PublicStatusGroupPage({
         generatedAt: t("statusPage.public.generatedAt"),
         history: t("statusPage.public.history"),
         availability: t("statusPage.public.availability"),
-        ttfb: t("statusPage.public.ttfb"),
+        ttft: t("statusPage.public.ttft"),
         freshnessWindow: t("statusPage.public.freshnessWindow"),
         fresh: t("statusPage.public.fresh"),
         stale: t("statusPage.public.stale"),
@@ -92,7 +92,7 @@ export default async function PublicStatusGroupPage({
         },
         tooltip: {
           availability: t("statusPage.public.tooltip.availability"),
-          ttfb: t("statusPage.public.tooltip.ttfb"),
+          ttft: t("statusPage.public.tooltip.ttft"),
           tps: t("statusPage.public.tooltip.tps"),
           historyAriaLabel: t("statusPage.public.tooltip.historyAriaLabel"),
         },

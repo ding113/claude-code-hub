@@ -65,7 +65,7 @@ const DEFAULT_FAKE_STREAMING_MODELS: { model: string; groupTags: string[] }[] = 
 function createSettings(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
-    siteTitle: "Claude Code Hub",
+    siteTitle: "CC Hub",
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
@@ -134,14 +134,14 @@ describe("fake streaming whitelist system setting", () => {
 
       const fromNullField = toSystemSettings({
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         fakeStreamingWhitelist: null,
       });
       expect(fromNullField.fakeStreamingWhitelist).toEqual(DEFAULT_FAKE_STREAMING_MODELS);
 
       const fromMissingField = toSystemSettings({
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
       });
       expect(fromMissingField.fakeStreamingWhitelist).toEqual(DEFAULT_FAKE_STREAMING_MODELS);
     });
@@ -151,7 +151,7 @@ describe("fake streaming whitelist system setting", () => {
 
       const result = toSystemSettings({
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         fakeStreamingWhitelist: [],
       });
 
@@ -168,7 +168,7 @@ describe("fake streaming whitelist system setting", () => {
 
       const result = toSystemSettings({
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         fakeStreamingWhitelist: persisted,
       });
 

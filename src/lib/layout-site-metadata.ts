@@ -1,6 +1,5 @@
 import { logger } from "@/lib/logger";
-
-const FALLBACK_SITE_TITLE = "Claude Code Hub";
+import { DEFAULT_SITE_TITLE as FALLBACK_SITE_TITLE } from "@/lib/site-title";
 
 export async function resolveDefaultSiteMetadataSource(): Promise<{
   siteTitle: string;

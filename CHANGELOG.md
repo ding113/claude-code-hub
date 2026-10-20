@@ -4,6 +4,39 @@
 
 ---
 
+## Unreleased
+
+### 新增
+
+- Langfuse 流式请求还原完整最终输出（Claude / OpenAI Chat Completions / Responses / Gemini），避免把原始 SSE 文本当作 generation output
+- Langfuse 将客户端原始请求头写入 generation `client_metadata`（凭据中间打码）
+- 支持 `LANGFUSE_TRACING_ENVIRONMENT` / `LANGFUSE_RELEASE` 传入 LangfuseSpanProcessor
+- 供应商自定义请求头支持动态模板：可用 `{{header.Name}}` 复制入站请求头，`{{session.id}}` 写入 Session ID，`{{session.client_id}}` 写入客户端 Session ID；来源缺失时跳过该头
+
+### 优化
+
+- Langfuse trace 名称改为 `user:shortModel`，去掉供应商前缀
+- 按 Langfuse JS SDK v5 在 `propagateAttributes` 内创建 observation
+- 大请求/响应体 1 MiB 截断，并在异步发送前快照，避免观测路径拖住完整 body
+
+### 修复
+
+- 修复上游响应流发生 error 后 Node/Undici body 未完成销毁的问题：Node-to-Web adapter 和 demand-driven pump
+  现在在源流错误终态显式取消、销毁底层流，并为异步 destroy error 保留有界保护；同时将 raw body 的兜底错误监听改为一次性监听，
+  避免 HTTP/2 reset、客户端断开和竞速取消路径长期保留 socket 与 ArrayBuffer backing store (#1430)
+- 修复客户端断开后的后台计费 drain 继续累加完整响应正文导致的高并发内存放大：断线后切换到有界计量观察器，
+  仅保留 usage、终止标记、模型与协议错误等结算证据，拿到终态即取消上游；Replay owner 在预算内继续保存完整
+  客户端可见流，Replay 预算不足时降级到 metering，新增共享进程级并发与带权保留容量预算，覆盖通用流与 Gemini 透传路径 (#1430)
+- 修复 Replay owner 在客户端断线后保留完整流正文和 300 秒传输资源导致的内存失控：限制 Redis
+  write-behind backlog，Replay 失效后按断线起点恢复 60 秒 drain，并为 Redis session response body
+  增加默认 5 MiB 的可配置存储上限，避免大 SSE 正文及 before/after 快照放大内存和持久化压力；
+  三份 response body 的物理存储去重由 #1415 跟踪 (#1408)
+- 修复 Anthropic 请求级拒绝（`stop_reason=refusal` 且无内容块）被流式内容门控判为 `empty_stream` 并伪造 502、
+  重试切商并计入供应商熔断的问题：门控、Discovery 竞速、非流式空响应检测与 fake-streaming 校验统一把 refusal
+  视为可交付结果原样透传；门控本地错误体与日志新增上游真实状态 `upstream_status_code` 与熔断计入标记 (#1491)
+
+---
+
 ## v0.8.7 (2026-06-14)
 
 ### 新增

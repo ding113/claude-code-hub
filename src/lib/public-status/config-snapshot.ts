@@ -1,5 +1,5 @@
 import { getRedisClient } from "@/lib/redis";
-import { normalizeSiteTitle } from "@/lib/site-title";
+import { DEFAULT_SITE_TITLE, normalizeSiteTitle } from "@/lib/site-title";
 import {
   buildPublicStatusConfigSnapshotKey,
   buildPublicStatusConfigVersionPointerKey,
@@ -225,7 +225,7 @@ export async function publishPublicStatusConfigSnapshot(input: {
     input.snapshot ??
     buildPublicStatusConfigSnapshot({
       configVersion: `cfg-${Date.now()}`,
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: `${DEFAULT_SITE_TITLE} Status`,
       siteDescription: DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION,
       timeZone: null,
       defaultIntervalMinutes: 5,

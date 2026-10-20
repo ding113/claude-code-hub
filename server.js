@@ -36,10 +36,8 @@ const dev = isNextDevMode(process.env.NODE_ENV);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);
 
-// Loopback target for the in-process WS->HTTP tunnel. When the public bind
-// hostname is a wildcard (0.0.0.0 / ::), tunnel via 127.0.0.1; otherwise use
-// the configured hostname so we still hit the local listener even when bound
-// to a specific interface.
+// 供导出 helper 独立运行时使用的兼容回退目标。实际服务会为每个进程创建私有
+// loopback listener，确保 cluster 中的 WebSocket 连接不会隧道到其他 worker。
 const INTERNAL_TUNNEL_HOST =
   hostname === "0.0.0.0" || hostname === "::" || hostname === "*" ? "127.0.0.1" : hostname;
 
@@ -60,6 +58,14 @@ const RESERVED_INTERNAL_HEADER_PREFIX = "x-cch-";
 // bytes to make a misbehaving / malicious client a bounded-memory event.
 const MAX_PENDING_FRAMES = 64;
 const MAX_PENDING_BYTES = 64 * 1024 * 1024; // 64 MiB across all queued frames
+const MAX_PENDING_OUTBOUND_BYTES = 1024 * 1024; // 1 MiB per client WebSocket
+// Internal HTTP responses ultimately become one outbound WS frame per event.
+// Bound aggregation at the same layer instead of first materializing a body
+// that safeSend can never accept.
+const MAX_INTERNAL_RESPONSE_BODY_BYTES = MAX_PENDING_OUTBOUND_BYTES;
+const MAX_INTERNAL_SSE_EVENT_CHARACTERS = MAX_PENDING_OUTBOUND_BYTES;
+const REQUEST_BODY_DRAIN_TIMEOUT_MS = 30_000;
+const OUTBOUND_SEND_TIMEOUT_MS = 30_000;
 
 // Maximum payload size for any single inbound WS frame. The default `ws`
 // limit is 100 MiB. We pick 32 MiB to accommodate Codex requests that ship
@@ -88,16 +94,137 @@ function log(level, msg, extra) {
   }
 }
 
-function safeSend(ws, data) {
-  try {
-    if (ws.readyState === 1 /* OPEN */) {
-      ws.send(typeof data === "string" ? data : JSON.stringify(data));
-      return true;
+const outboundSendStates = new WeakMap();
+
+function invalidateOutboundSends(ws, options = {}) {
+  const state = outboundSendStates.get(ws);
+  if (!state) return;
+  state.active = false;
+  state.generation += 1;
+  if (state.callbackDeadlineId) clearTimeout(state.callbackDeadlineId);
+  state.callbackDeadlineId = null;
+  state.pending.length = 0;
+  state.pendingBytes = 0;
+  state.inFlight = false;
+  if (options.destroyResponses) {
+    for (const response of state.pressuredResponses) {
+      if (!response.destroyed) response.destroy();
     }
-  } catch (err) {
-    log("warn", "ws_send_failed", { error: String(err) });
   }
-  return false;
+  state.pressuredResponses.clear();
+  outboundSendStates.delete(ws);
+}
+
+function failOutboundSends(ws, state, failure) {
+  if (!state.active) return;
+  log("warn", "ws_send_failed", {
+    reason: failure.reason,
+    error: failure.error ? String(failure.error) : undefined,
+  });
+  invalidateOutboundSends(ws, { destroyResponses: true });
+  if (failure.onFailure) {
+    failure.onFailure(failure.reason);
+    return;
+  }
+  try {
+    ws.close(1011, failure.reason);
+  } catch (err) {
+    log("warn", "ws_client_close_failed", { error: String(err) });
+  }
+}
+
+function flushOutboundSends(ws, state) {
+  if (!state.active || state.inFlight) return;
+  const next = state.pending.shift();
+  if (!next) {
+    for (const response of state.pressuredResponses) response.resume();
+    state.pressuredResponses.clear();
+    return;
+  }
+  if (ws.readyState !== 1 /* OPEN */) {
+    failOutboundSends(ws, state, {
+      reason: "outbound_socket_closed",
+      onFailure: next.onFailure,
+    });
+    return;
+  }
+
+  state.inFlight = true;
+  const generation = state.generation;
+  state.callbackDeadlineId = setTimeout(() => {
+    failOutboundSends(ws, state, {
+      reason: "outbound_send_timeout",
+      onFailure: next.onFailure,
+    });
+  }, OUTBOUND_SEND_TIMEOUT_MS);
+  try {
+    ws.send(next.payload, (err) => {
+      if (!state.active || state.generation !== generation) return;
+      if (state.callbackDeadlineId) clearTimeout(state.callbackDeadlineId);
+      state.callbackDeadlineId = null;
+      state.inFlight = false;
+      state.pendingBytes -= next.bytes;
+      if (err) {
+        failOutboundSends(ws, state, {
+          reason: "outbound_send_error",
+          error: err,
+          onFailure: next.onFailure,
+        });
+        return;
+      }
+      next.onSuccess?.();
+      flushOutboundSends(ws, state);
+    });
+  } catch (err) {
+    failOutboundSends(ws, state, {
+      reason: "outbound_send_error",
+      error: err,
+      onFailure: next.onFailure,
+    });
+  }
+}
+
+function safeSend(ws, data, options = {}) {
+  if (ws.readyState !== 1 /* OPEN */) {
+    options.onFailure?.("outbound_socket_closed");
+    return false;
+  }
+  const payload = typeof data === "string" ? data : JSON.stringify(data);
+  const bytes = Buffer.byteLength(payload, "utf8");
+  let state = outboundSendStates.get(ws);
+  if (!state) {
+    state = {
+      active: true,
+      generation: 0,
+      inFlight: false,
+      callbackDeadlineId: null,
+      pending: [],
+      pendingBytes: 0,
+      pressuredResponses: new Set(),
+    };
+    outboundSendStates.set(ws, state);
+  }
+  if (options.response) {
+    options.response.pause();
+    state.pressuredResponses.add(options.response);
+  }
+  if (!state.active || state.pendingBytes + bytes > MAX_PENDING_OUTBOUND_BYTES) {
+    failOutboundSends(ws, state, {
+      reason: "outbound_backpressure",
+      onFailure: options.onFailure,
+    });
+    return false;
+  }
+
+  state.pending.push({
+    payload,
+    bytes,
+    onSuccess: options.onSuccess,
+    onFailure: options.onFailure,
+  });
+  state.pendingBytes += bytes;
+  flushOutboundSends(ws, state);
+  return true;
 }
 
 function emitErrorEvent(ws, code, message) {
@@ -124,7 +251,7 @@ function sanitizedRequestPath(rawUrl) {
   }
 }
 
-async function handleWebSocketConnection(ws, req) {
+async function handleWebSocketConnection(ws, req, internalHttpTarget) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
   const responsesWsSessionId = randomUUID();
@@ -132,21 +259,31 @@ async function handleWebSocketConnection(ws, req) {
   const pending = [];
   let pendingBytes = 0;
   let closed = false;
+  let closing = false;
+  let turnSequence = 0;
   // Track the in-flight internal HTTP ClientRequest so we can abort it when
   // the client WebSocket disconnects mid-stream — otherwise the SSE consumer
   // (and provider concurrency / breaker counters) keep running for minutes.
   let currentInternalReq = null;
+  let currentInternalRes = null;
+  let currentTurnSettle = null;
 
   const abortCurrentInternalReq = () => {
-    if (!currentInternalReq) return;
     const reqToDestroy = currentInternalReq;
     currentInternalReq = null;
     try {
-      if (!reqToDestroy.destroyed) {
+      if (reqToDestroy && !reqToDestroy.destroyed) {
         reqToDestroy.destroy();
       }
     } catch {
       // ignore
+    }
+    const resToDestroy = currentInternalRes;
+    currentInternalRes = null;
+    try {
+      if (resToDestroy && !resToDestroy.destroyed) resToDestroy.destroy();
+    } catch {
+      currentInternalRes = null;
     }
   };
 
@@ -176,8 +313,11 @@ async function handleWebSocketConnection(ws, req) {
   const finalize = () => {
     if (closed) return;
     closed = true;
+    currentTurnSettle?.();
+    currentTurnSettle = null;
     abortCurrentInternalReq();
     dropPendingFrames();
+    invalidateOutboundSends(ws);
     cleanupUpstreamWsSession();
   };
 
@@ -199,8 +339,11 @@ async function handleWebSocketConnection(ws, req) {
       return;
     }
     closed = true;
+    currentTurnSettle?.();
+    currentTurnSettle = null;
     abortCurrentInternalReq();
     dropPendingFrames();
+    invalidateOutboundSends(ws);
     cleanupUpstreamWsSession();
     log("info", "ws_client_close_initiated", { code, reason });
     try {
@@ -208,6 +351,14 @@ async function handleWebSocketConnection(ws, req) {
     } catch (err) {
       log("warn", "ws_client_close_failed", { error: String(err) });
     }
+  };
+  const sendErrorAndClose = (error, close) => {
+    if (closed || closing) return;
+    closing = true;
+    abortCurrentInternalReq();
+    dropPendingFrames();
+    const finish = () => requestClose(close.code, close.reason);
+    safeSend(ws, { type: "error", error }, { onSuccess: finish, onFailure: finish });
   };
 
   ws.on("close", finalize);
@@ -218,12 +369,46 @@ async function handleWebSocketConnection(ws, req) {
     finalize();
   });
 
-  const processFrame = async (raw) => {
-    if (closed) return;
+  const processFrame = async (queuedFrame) => {
+    if (closed || closing) return;
+    // drain() 会在整个上游生成期间等待本 Promise。立即清空队列项里的大字符串，
+    // 避免同一请求同时被 drain 局部变量和解析后的请求对象重复保留。
+    let raw = queuedFrame.text;
+    queuedFrame.text = "";
+    const turnId = ++turnSequence;
+    let turnActive = true;
+    let turnReq = null;
+    let turnRes = null;
+    let turnSettle = null;
+    const destroyLateResource = (resource) => {
+      try {
+        if (resource && !resource.destroyed) resource.destroy();
+      } catch {
+        // ignore late transport cleanup errors
+      }
+    };
+    const registerTurnResource = (clientReq, clientRes, settleTurn) => {
+      if (closed || closing || !turnActive) {
+        destroyLateResource(clientReq);
+        destroyLateResource(clientRes);
+        return false;
+      }
+      turnReq = clientReq;
+      turnRes = clientRes || turnRes;
+      currentInternalReq = clientReq;
+      if (clientRes) currentInternalRes = clientRes;
+      if (typeof settleTurn === "function") {
+        turnSettle = settleTurn;
+        currentTurnSettle = settleTurn;
+      }
+      return true;
+    };
 
     if (typeof raw !== "string") {
-      emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      requestClose(1003, "binary_not_supported");
+      sendErrorAndClose(
+        { code: "invalid_frame_type", message: "Only text WebSocket frames are supported" },
+        { code: 1003, reason: "binary_not_supported" }
+      );
       return;
     }
 
@@ -253,8 +438,8 @@ async function handleWebSocketConnection(ws, req) {
       return;
     }
 
-    const { type: _type, ...rawBody } = frame;
-    const body = { ...rawBody };
+    delete frame.type;
+    let body = frame;
     // body.model wins over query; only fill from query when body lacks a model
     // (LiteLLM/other compat). Drop transport-only fields.
     if (queryModel && (body.model === undefined || body.model === null || body.model === "")) {
@@ -263,22 +448,33 @@ async function handleWebSocketConnection(ws, req) {
 
     log("info", "ws_request_started", {
       model: typeof body.model === "string" ? body.model : null,
-      payloadBytes: Buffer.byteLength(raw, "utf8"),
+      payloadBytes: queuedFrame.bytes,
       hasPreviousResponseId: typeof body.previous_response_id === "string",
     });
 
-    await forwardToInternalHttp(
+    // forwardToInternalHttp 会在返回 Promise 前同步完成 JSON 序列化。随后便可
+    // 释放原始 WS 文本和解析对象，不能让几十 MiB 的请求跟随整段响应存活。
+    const forwarding = forwardToInternalHttp(
       ws,
       req,
       body,
       responsesWsSessionId,
-      (clientReq) => {
-        currentInternalReq = clientReq;
-      },
-      requestClose
+      registerTurnResource,
+      requestClose,
+      internalHttpTarget
     );
-    if (!closed) {
-      currentInternalReq = null;
+    raw = "";
+    frame = null;
+    body = null;
+
+    try {
+      await forwarding;
+    } finally {
+      turnActive = false;
+      if (currentInternalReq === turnReq) currentInternalReq = null;
+      if (currentInternalRes === turnRes) currentInternalRes = null;
+      if (currentTurnSettle === turnSettle) currentTurnSettle = null;
+      log("debug", "ws_turn_resources_released", { turnId });
     }
   };
 
@@ -286,30 +482,34 @@ async function handleWebSocketConnection(ws, req) {
     if (inFlight) return;
     const next = pending.shift();
     if (next === undefined) return;
-    pendingBytes -= Buffer.byteLength(next, "utf8");
+    pendingBytes -= next.bytes;
     if (pendingBytes < 0) pendingBytes = 0;
     inFlight = true;
     try {
       await processFrame(next);
     } finally {
       inFlight = false;
-      if (pending.length > 0 && !closed) {
+      if (pending.length > 0 && !closed && !closing) {
         void drain().catch((err) => {
           log("error", "ws_drain_failed", {
             error: String(err && err.message ? err.message : err),
           });
-          emitErrorEvent(ws, "internal_error", "Failed to process queued request");
-          requestClose(1011, "internal_error");
+          sendErrorAndClose(
+            { code: "internal_error", message: "Failed to process queued request" },
+            { code: 1011, reason: "internal_error" }
+          );
         });
       }
     }
   };
 
   ws.on("message", (data, isBinary) => {
-    if (closed) return;
+    if (closed || closing) return;
     if (isBinary) {
-      emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      requestClose(1003, "binary_not_supported");
+      sendErrorAndClose(
+        { code: "invalid_frame_type", message: "Only text WebSocket frames are supported" },
+        { code: 1003, reason: "binary_not_supported" }
+      );
       return;
     }
     const text = data.toString("utf8");
@@ -320,18 +520,22 @@ async function handleWebSocketConnection(ws, req) {
         pendingBytes,
         attemptedFrameSize: size,
       });
-      emitErrorEvent(ws, "too_many_requests", "Pending frame limit exceeded");
-      requestClose(1008, "too_many_requests");
+      sendErrorAndClose(
+        { code: "too_many_requests", message: "Pending frame limit exceeded" },
+        { code: 1008, reason: "too_many_requests" }
+      );
       return;
     }
-    pending.push(text);
+    pending.push({ text, bytes: size });
     pendingBytes += size;
     void drain().catch((err) => {
       log("error", "ws_drain_failed", {
         error: String(err && err.message ? err.message : err),
       });
-      emitErrorEvent(ws, "internal_error", "Failed to process request");
-      requestClose(1011, "internal_error");
+      sendErrorAndClose(
+        { code: "internal_error", message: "Failed to process request" },
+        { code: 1011, reason: "internal_error" }
+      );
     });
   });
 }
@@ -342,7 +546,8 @@ async function forwardToInternalHttp(
   body,
   responsesWsSessionId,
   registerInternalReq,
-  requestClose
+  requestClose,
+  internalHttpTarget
 ) {
   // requestClose(code, reason) initiates the WebSocket closing handshake AND
   // synchronously marks the client connection closed so the caller's pending
@@ -408,18 +613,35 @@ async function forwardToInternalHttp(
   // Force streaming so we can translate SSE events to WS frames incrementally.
   // The upstream pipeline will strip transport-only fields (stream, background)
   // before forwarding to upstream WebSocket.
-  const bodyForHttp = { ...body, stream: true };
+  let bodyForHttp = { ...body, stream: true };
+  body = null;
   delete bodyForHttp.background;
 
-  const payload = Buffer.from(JSON.stringify(bodyForHttp), "utf8");
+  let payload = Buffer.from(JSON.stringify(bodyForHttp), "utf8");
+  bodyForHttp = null;
   internalHeaders["content-length"] = String(payload.length);
 
   await new Promise((resolve) => {
+    let cleanupRequestBody = () => {};
+    let turnFinished = false;
+    const forceSettleTurn = () => {
+      if (turnFinished) return false;
+      turnFinished = true;
+      cleanupRequestBody();
+      resolve();
+      return true;
+    };
+    const tunnelTarget =
+      internalHttpTarget &&
+      typeof internalHttpTarget.hostname === "string" &&
+      Number.isInteger(internalHttpTarget.port)
+        ? internalHttpTarget
+        : { hostname: INTERNAL_TUNNEL_HOST, port };
     const req = http.request(
       {
         method: "POST",
-        hostname: INTERNAL_TUNNEL_HOST,
-        port,
+        hostname: tunnelTarget.hostname,
+        port: tunnelTarget.port,
         path: "/v1/responses",
         headers: internalHeaders,
       },
@@ -427,20 +649,78 @@ async function forwardToInternalHttp(
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
         let responseSettled = false;
+        let responseBodyEnded = false;
+        let terminalSendAcknowledged = false;
+        let terminalFailureQueued = false;
         const settleResponse = () => {
           if (responseSettled) return false;
+          if (!responseBodyEnded || !terminalSendAcknowledged) return false;
           responseSettled = true;
+          turnFinished = true;
+          cleanupRequestBody();
           resolve();
           return true;
+        };
+        const acknowledgeTerminalSend = () => {
+          terminalSendAcknowledged = true;
+          settleResponse();
+        };
+        const forceSettleResponse = () => {
+          if (responseSettled) return false;
+          responseSettled = true;
+          return forceSettleTurn();
+        };
+        if (typeof registerInternalReq === "function") {
+          const accepted = registerInternalReq(req, res, forceSettleResponse);
+          if (accepted === false) {
+            forceSettleResponse();
+            return;
+          }
+        }
+        const settleAndClose = (reason) => {
+          initiateClose(1011, reason);
+          forceSettleResponse();
+        };
+        const sendFatalError = (code, message, closeReason) => {
+          if (responseSettled || terminalFailureQueued) return false;
+          terminalFailureQueued = true;
+          const sent = safeSend(
+            ws,
+            { type: "error", error: { code, message } },
+            {
+              response: res,
+              onSuccess: () => settleAndClose(closeReason),
+              onFailure: settleAndClose,
+            }
+          );
+          if (!sent) settleAndClose(closeReason);
+          return sent;
         };
 
         if (!isSse) {
           // Upstream returned non-stream JSON (e.g. error response). Collect
           // and emit as a single terminal event.
           const chunks = [];
-          res.on("data", (c) => chunks.push(c));
+          let responseBytes = 0;
+          res.on("data", (chunk) => {
+            if (responseSettled || terminalFailureQueued) return;
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            if (responseBytes + bytes.byteLength > MAX_INTERNAL_RESPONSE_BODY_BYTES) {
+              chunks.length = 0;
+              sendFatalError(
+                "internal_response_too_large",
+                "Internal JSON response exceeded the WebSocket response limit",
+                "internal_response_too_large"
+              );
+              if (!res.destroyed) res.destroy();
+              return;
+            }
+            responseBytes += bytes.byteLength;
+            chunks.push(bytes);
+          });
           res.on("end", () => {
-            if (responseSettled) return;
+            if (responseSettled || terminalFailureQueued) return;
+            responseBodyEnded = true;
             const text = Buffer.concat(chunks).toString("utf8");
             let parsed;
             try {
@@ -450,47 +730,52 @@ async function forwardToInternalHttp(
             }
             const isHttpError = !!(res.statusCode && res.statusCode >= 400);
             if (isHttpError) {
-              safeSend(ws, {
-                type: "error",
-                status: res.statusCode,
-                error:
-                  typeof parsed === "object" && parsed && parsed.error
-                    ? parsed.error
-                    : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
-              });
+              safeSend(
+                ws,
+                {
+                  type: "error",
+                  status: res.statusCode,
+                  error:
+                    typeof parsed === "object" && parsed && parsed.error
+                      ? parsed.error
+                      : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
+                },
+                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
+              );
               log("info", "ws_terminal_event_sent", {
                 type: "error",
                 source: "json",
                 status: res.statusCode,
               });
             } else {
-              safeSend(ws, {
-                type: "response.completed",
-                response: parsed,
-              });
+              safeSend(
+                ws,
+                { type: "response.completed", response: parsed },
+                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
+              );
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
             }
-            settleResponse();
           });
           res.on("error", (err) => {
-            if (responseSettled) return;
-            emitErrorEvent(
-              ws,
+            if (responseSettled || terminalFailureQueued) return;
+            sendFatalError(
               "internal_response_error",
-              String(err && err.message ? err.message : err)
+              String(err && err.message ? err.message : err),
+              "internal_response_error"
             );
-            initiateClose(1011, "internal_response_error");
-            settleResponse();
           });
           res.on("close", () => {
-            if (responseSettled) return;
-            emitErrorEvent(
-              ws,
+            if (responseSettled || terminalFailureQueued) return;
+            if (responseBodyEnded || res.complete) {
+              responseBodyEnded = true;
+              settleResponse();
+              return;
+            }
+            sendFatalError(
               "internal_response_closed",
-              "Internal response closed before a complete JSON body was received"
+              "Internal response closed before a complete JSON body was received",
+              "internal_response_closed"
             );
-            initiateClose(1011, "internal_response_closed");
-            settleResponse();
           });
           return;
         }
@@ -499,89 +784,140 @@ async function forwardToInternalHttp(
         // Accept both LF (`\n\n`) and CRLF (`\r\n\r\n`) event separators since
         // upstreams in the wild emit either form.
         let buffer = "";
+        let delimiterScanOffset = 0;
         let sawTerminal = false;
         let terminalEventType = null;
-        const EVENT_DELIMITER = /\r?\n\r?\n/;
+        const EVENT_DELIMITER = /\r?\n\r?\n/g;
         const failIfUnsettled = (code, message, closeReason) => {
           if (responseSettled) return;
-          if (!sawTerminal) {
-            emitErrorEvent(ws, code, message);
-            initiateClose(1011, closeReason);
+          if (sawTerminal) {
+            // A terminal protocol event is authoritative. Once the internal
+            // transport closes, wait only for its WS send acknowledgement;
+            // otherwise this persistent connection would retain inFlight
+            // ownership forever when close/error arrives before `end`.
+            responseBodyEnded = true;
+            settleResponse();
+            return;
           }
-          settleResponse();
+          sendFatalError(code, message, closeReason);
         };
 
-        const flushEvents = () => {
-          const parts = buffer.split(EVENT_DELIMITER);
-          // Last part may be a partial event still arriving — keep it buffered.
-          buffer = parts.pop() ?? "";
-          for (const chunk of parts) {
-            const lines = chunk.split(/\r?\n/);
+        const failOversizedSseEvent = () => {
+          buffer = "";
+          delimiterScanOffset = 0;
+          sendFatalError(
+            "internal_sse_event_too_large",
+            "Internal SSE event exceeded the WebSocket response limit",
+            "internal_sse_event_too_large"
+          );
+          if (!res.destroyed) res.destroy();
+        };
+        const processEvent = (eventChunk) => {
+            const lines = eventChunk.split(/\r?\n/);
             const dataLines = [];
             for (const line of lines) {
               if (line.startsWith("data:")) {
-                // Trim CR / leading whitespace so trailing \r from CRLF lines
-                // doesn't end up inside the payload.
-                dataLines.push(line.slice(5).trim());
+                // SSE removes at most one optional space after the colon.
+                // Payload whitespace is data and must otherwise remain intact.
+                const data = line.slice(5);
+                dataLines.push(data.startsWith(" ") ? data.slice(1) : data);
               }
             }
-            if (dataLines.length === 0) continue;
+            if (dataLines.length === 0) return;
             const dataText = dataLines.join("\n");
             if (dataText.trim() === "[DONE]") {
               if (!sawTerminal) {
                 // Some upstreams close SSE with [DONE] without a preceding
                 // response.completed. Synthesize one so the client sees a
                 // clean terminal event.
-                safeSend(ws, { type: "response.completed", response: null });
+                safeSend(ws, { type: "response.completed", response: null }, {
+                  response: res,
+                  onSuccess: acknowledgeTerminalSend,
+                  onFailure: settleAndClose,
+                });
                 sawTerminal = true;
               }
-              continue;
+              return;
             }
             let event;
             try {
               event = JSON.parse(dataText);
             } catch {
               // Not JSON; forward as raw string event.
-              safeSend(ws, { type: "response.output_text.delta", delta: dataText });
-              continue;
+              safeSend(ws, { type: "response.output_text.delta", delta: dataText }, {
+                response: res,
+                onFailure: settleAndClose,
+              });
+              return;
             }
-            safeSend(ws, event);
-            if (event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type)) {
+            const isTerminalEvent =
+              event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type);
+            safeSend(ws, event, {
+              response: res,
+              onSuccess: isTerminalEvent ? acknowledgeTerminalSend : undefined,
+              onFailure: settleAndClose,
+            });
+            if (isTerminalEvent) {
               sawTerminal = true;
               terminalEventType = event.type;
               log("info", "ws_terminal_event_sent", { type: event.type, source: "sse" });
             }
+        };
+
+        const flushEvents = () => {
+          // buffer 通常只保留一个未完成事件。从上次尾部附近继续扫描，避免一字节
+          // HTTP chunk 每次都重扫持续增长的事件；保留三个字符以覆盖跨块 CRLF 分隔符。
+          EVENT_DELIMITER.lastIndex = delimiterScanOffset;
+          let eventStart = 0;
+          let delimiter;
+          while ((delimiter = EVENT_DELIMITER.exec(buffer)) !== null) {
+            if (delimiter.index - eventStart > MAX_INTERNAL_SSE_EVENT_CHARACTERS) {
+              failOversizedSseEvent();
+              return false;
+            }
+            processEvent(buffer.slice(eventStart, delimiter.index));
+            eventStart = EVENT_DELIMITER.lastIndex;
+            if (responseSettled || terminalFailureQueued) break;
           }
+          if (eventStart > 0) buffer = buffer.slice(eventStart);
+          EVENT_DELIMITER.lastIndex = 0;
+          delimiterScanOffset = Math.max(0, buffer.length - 3);
+          if (buffer.length > MAX_INTERNAL_SSE_EVENT_CHARACTERS) {
+            failOversizedSseEvent();
+            return false;
+          }
+          return true;
         };
 
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
-          if (responseSettled) return;
+          if (responseSettled || terminalFailureQueued) return;
           buffer += chunk;
           flushEvents();
         });
         res.on("end", () => {
-          if (responseSettled) return;
+          if (responseSettled || terminalFailureQueued) return;
+          responseBodyEnded = true;
           // Flush any remaining buffered event
-          if (buffer.trim().length > 0) {
+          if (buffer.length > 0) {
             buffer += "\n\n";
-            flushEvents();
+            if (!flushEvents()) return;
           }
           if (!sawTerminal) {
-            emitErrorEvent(
-              ws,
+            sendFatalError(
               "stream_ended_without_terminal",
-              "Upstream stream ended before emitting a terminal response event"
+              "Upstream stream ended before emitting a terminal response event",
+              "stream_ended_without_terminal"
             );
-            initiateClose(1011, "stream_ended_without_terminal");
           } else {
             // OpenAI Responses WebSocket mode is persistent: after a terminal
             // event, the same client connection can send the next
             // response.create. Do not close here; only fatal transport/protocol
             // errors initiate a close handshake.
             log("info", "ws_turn_completed", { terminalEventType });
+            settleResponse();
           }
-          settleResponse();
+          if (!sawTerminal) return;
         });
         res.on("error", (err) => {
           failIfUnsettled(
@@ -591,6 +927,11 @@ async function forwardToInternalHttp(
           );
         });
         res.on("close", () => {
+          if (responseBodyEnded || res.complete) {
+            responseBodyEnded = true;
+            settleResponse();
+            return;
+          }
           failIfUnsettled(
             "internal_response_closed",
             "Internal response closed before emitting a terminal response event",
@@ -600,27 +941,134 @@ async function forwardToInternalHttp(
       }
     );
 
-    req.on("error", (err) => {
-      // ECONNRESET when we destroy() the request on client disconnect is
-      // expected; downgrade to debug to avoid noisy logs in normal traffic.
-      const errCode = err && (err.code || err.name);
-      const isAbort = errCode === "ECONNRESET" || errCode === "ERR_STREAM_PREMATURE_CLOSE";
-      if (!isAbort) {
-        emitErrorEvent(
-          ws,
-          "internal_request_error",
-          String(err && err.message ? err.message : err)
-        );
+    if (typeof registerInternalReq === "function") {
+      const accepted = registerInternalReq(req, null, forceSettleTurn);
+      if (accepted === false) {
+        if (!req.destroyed) req.destroy();
+        forceSettleTurn();
+        return;
+      }
+    }
+
+    const handleRequestError = (err) => {
+      if (turnFinished) {
+        return;
+      }
+      turnFinished = true;
+      cleanupRequestBody();
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
         initiateClose(1011, "internal_request_error");
+        resolve();
+      };
+      const sent = safeSend(
+        ws,
+        {
+          type: "error",
+          error: {
+            code: "internal_request_error",
+            message: String(err && err.message ? err.message : err),
+          },
+        },
+        { onSuccess: finish, onFailure: finish }
+      );
+      if (!sent) finish();
+    };
+    req.on("error", handleRequestError);
+    let requestEnded = false;
+    let requestBodyFinished = false;
+    let requestBodyDeadlineId = null;
+    const clearRequestBodyListeners = () => {
+      req.removeListener("drain", finishRequestBody);
+      req.removeListener("close", abandonRequestBody);
+      req.removeListener("error", abandonRequestBody);
+      req.removeListener("abort", abandonRequestBody);
+      if (requestBodyDeadlineId) {
+        clearTimeout(requestBodyDeadlineId);
+        requestBodyDeadlineId = null;
+      }
+    };
+    const endRequestOnce = () => {
+      if (requestEnded) return;
+      requestEnded = true;
+      req.end();
+    };
+    const finishRequestBody = () => {
+      if (requestBodyFinished) return;
+      requestBodyFinished = true;
+      clearRequestBodyListeners();
+      endRequestOnce();
+    };
+    const abandonRequestBody = () => {
+      if (requestBodyFinished) return;
+      requestBodyFinished = true;
+      clearRequestBodyListeners();
+      if (!turnFinished) {
+        turnFinished = true;
+        const finish = () => {
+          initiateClose(1011, "internal_request_body_closed");
+          resolve();
+        };
+        const sent = safeSend(
+          ws,
+          {
+            type: "error",
+            error: {
+              code: "internal_request_body_closed",
+              message: "Internal request body closed before it was fully written",
+            },
+          },
+          { onSuccess: finish, onFailure: finish }
+        );
+        if (!sent) finish();
+        return;
       }
       resolve();
-    });
-
-    if (typeof registerInternalReq === "function") {
-      registerInternalReq(req);
+    };
+    const expireRequestBody = () => {
+      if (requestBodyFinished) return;
+      requestBodyFinished = true;
+      clearRequestBodyListeners();
+      turnFinished = true;
+      if (!req.destroyed) req.destroy();
+      const finish = () => {
+        initiateClose(1011, "internal_request_drain_timeout");
+        resolve();
+      };
+      const sent = safeSend(
+        ws,
+        {
+          type: "error",
+          error: {
+            code: "internal_request_drain_timeout",
+            message: "Internal request body remained backpressured past its deadline",
+          },
+        },
+        { onSuccess: finish, onFailure: finish }
+      );
+      if (!sent) finish();
+    };
+    cleanupRequestBody = () => {
+      if (requestBodyFinished) return;
+      requestBodyFinished = true;
+      clearRequestBodyListeners();
+      if (!requestEnded && !req.destroyed) req.destroy();
+    };
+    const requestBodyAccepted = req.write(payload);
+    // ClientRequest 已同步取得 Buffer 所有权；本地不应在等待整段响应期间
+    // 再保留一份大请求体。即使 write() 返回 false，Node 的写队列也持有它。
+    payload = null;
+    if (requestBodyAccepted) {
+      finishRequestBody();
+    } else {
+      req.once("drain", finishRequestBody);
+      req.once("close", abandonRequestBody);
+      req.once("error", abandonRequestBody);
+      req.once("abort", abandonRequestBody);
+      requestBodyDeadlineId = setTimeout(expireRequestBody, REQUEST_BODY_DRAIN_TIMEOUT_MS);
     }
-    req.write(payload);
-    req.end();
   });
 }
 
@@ -628,6 +1076,53 @@ function isResponsesWsUpgrade(req) {
   if (!req.url) return false;
   const parsed = parse(req.url);
   return parsed.pathname === WS_PATH;
+}
+
+function listenServer(server, options) {
+  return new Promise((resolve, reject) => {
+    const handleError = (error) => {
+      server.off("listening", handleListening);
+      reject(error);
+    };
+    const handleListening = () => {
+      server.off("error", handleError);
+      resolve(server.address());
+    };
+    server.once("error", handleError);
+    server.once("listening", handleListening);
+    server.listen(options);
+  });
+}
+
+async function listenOnPrivateLoopback(server) {
+  // node:cluster 下必须设置 `exclusive: true`，否则即使监听 port 0，也可能
+  // 由主进程代理并与其他 worker 共享。
+  const address = await listenServer(server, {
+    host: "127.0.0.1",
+    port: 0,
+    exclusive: true,
+  });
+  if (!address || typeof address === "string" || !Number.isInteger(address.port)) {
+    throw new Error("Private loopback listener returned an invalid address");
+  }
+  return { hostname: "127.0.0.1", port: address.port };
+}
+
+function notifyMulticoreReady() {
+  if (process.env.CCH_MULTICORE_ACTIVE !== "1" || typeof process.send !== "function") return;
+  try {
+    // IPC 消息刻意保持极小；请求字节和解析后的对象绝不跨越主进程/worker 通道。
+    const { WORKER_READY_MESSAGE_TYPE } = require("./server-lib/multicore");
+    process.send({
+      type: WORKER_READY_MESSAGE_TYPE,
+      workerIndex: Number(process.env.CCH_MULTICORE_WORKER_INDEX),
+      pid: process.pid,
+    });
+  } catch (error) {
+    log("error", "multicore_ready_notification_failed", {
+      error: String(error && error.message ? error.message : error),
+    });
+  }
 }
 
 async function main() {
@@ -677,8 +1172,24 @@ async function main() {
   const app = nextFactory({ dev, hostname, port });
   const handler = app.getRequestHandler();
   await app.prepare();
+  // 基础加载完成后再建立单进程/worker 预算；与 Next bundle 通过 Symbol 共享实例。
+  const { getMemoryGovernor } = require("./server-lib/memory-governor");
+  const memoryGovernor = getMemoryGovernor();
+  const { getSpoolBudget } = require("./server-lib/spool-directory");
+  const memoryIdentity = { pid: process.pid, workerIndex: Number(process.env.CCH_MULTICORE_WORKER_INDEX || 0) };
+  log("info", "worker_memory_ready", { ...memoryIdentity, ...memoryGovernor.snapshot() });
+  const memoryStatsTimer = setInterval(() => {
+    // Next bundle 首次处理代理请求后才注册；用于定位响应已结束却仍被后台所有者占用的请求内存。
+    const requestMemory = globalThis[Symbol.for("cch.requestMemoryStats")]?.();
+    log("info", "worker_memory_stats", { ...memoryIdentity, ...memoryGovernor.snapshot(), requestMemory, processMemory: process.memoryUsage(), spool: getSpoolBudget() });
+  }, 30000);
+  memoryStatsTimer.unref();
+  if (process.env.CCH_MULTICORE_BACKGROUND_OWNER !== "0") {
+    const { startSpoolCleanup } = require("./server-lib/spool-directory");
+    startSpoolCleanup({ onError: (error) => log("warn", "spool_cleanup_failed", { error: String(error) }) });
+  }
 
-  const server = http.createServer(async (req, res) => {
+  const requestListener = async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
       await handler(req, res, parsedUrl);
@@ -691,7 +1202,13 @@ async function main() {
         res.end("Internal Server Error");
       }
     }
-  });
+  };
+
+  // WebSocket frame 必须重新进入持有客户端连接和持久上游会话的同一个 worker。
+  // 私有独占 listener 无需经 IPC 复制请求正文即可保证这一不变量。
+  const internalServer = http.createServer(requestListener);
+  const internalHttpTarget = await listenOnPrivateLoopback(internalServer);
+  const server = http.createServer(requestListener);
 
   let wss = null;
   if (WebSocketServer) {
@@ -704,7 +1221,7 @@ async function main() {
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
         log("info", "ws_client_connected", { path: sanitizedRequestPath(req.url) });
-        handleWebSocketConnection(ws, req).catch((err) => {
+        handleWebSocketConnection(ws, req, internalHttpTarget).catch((err) => {
           log("error", "ws_handler_error", {
             error: String(err && err.message ? err.message : err),
           });
@@ -722,16 +1239,24 @@ async function main() {
     });
   }
 
-  server.listen(port, hostname, () => {
-    log("info", "server_listening", {
-      hostname,
-      port,
-      internalTunnelHost: INTERNAL_TUNNEL_HOST,
-      wsEnabled: !!WebSocketServer,
-    });
-  });
+  try {
+    await listenServer(server, { port, host: hostname });
+  } catch (error) {
+    internalServer.close();
+    throw error;
+  }
 
-  registerOrchestratedShutdown(server, wss);
+  registerOrchestratedShutdown(server, wss, [internalServer]);
+  log("info", "server_listening", {
+    hostname,
+    port,
+    internalTunnelHost: internalHttpTarget.hostname,
+    internalTunnelPort: internalHttpTarget.port,
+    wsEnabled: !!WebSocketServer,
+    workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+    workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? "1",
+  });
+  notifyMulticoreReady();
 }
 
 // Graceful shutdown orchestration. Lives here (not in instrumentation.ts) because
@@ -739,14 +1264,14 @@ async function main() {
 //
 // Sequence (bounded by SHUTDOWN_HARD_EXIT_MS as the final safety net):
 //   1. Mark shutdown flag    -> /api/health/ready returns 503 -> Service drains
-//   2. server.close()        -> stop accepting; in-flight HTTP finishes
+//   2. server.close()        -> stop accepting public and private HTTP
 //   3. wss.close()           -> reject new WS upgrades
 //   4. Wait for drain        -> bounded by SHUTDOWN_DRAIN_MS
-//   5. runApplicationCleanup -> Redis / Langfuse / msg buffer / schedulers; bounded
-//      by SHUTDOWN_CLEANUP_MS. Inside cleanup, asyncTaskManager.cleanupAll() runs
-//      LAST so streaming responses had a chance to finish during step 4.
-//   6. process.exit(0)
-function registerOrchestratedShutdown(server, wss) {
+//   5. runApplicationCleanup -> abort + join tasks, flush writer, close DB pools,
+//      then release non-critical resources. SHUTDOWN_CLEANUP_MS is a soft warning;
+//      the referenced hard watchdog is the final bound for critical barriers.
+//   6. Success logs shutdown_complete and exits 0; cleanup failure exits 1.
+function registerOrchestratedShutdown(server, wss, auxiliaryServers = []) {
   let shuttingDown = false;
 
   // Positive integer parser: `Number("0") || default` would silently coerce an
@@ -770,13 +1295,12 @@ function registerOrchestratedShutdown(server, wss) {
     shuttingDown = true;
     log("info", "shutdown_received", { signal, drainMs, cleanupMs, hardExitMs });
 
-    // Final safety: even if every step below hangs, this terminates the process.
-    // .unref() so the timer itself doesn't keep the event loop alive.
+    // Final safety: even if every step below hangs, this referenced timer keeps
+    // the process alive until it can terminate with a truthful non-zero status.
     const hardExit = setTimeout(() => {
       log("error", "shutdown_hard_exit_watchdog", { hardExitMs });
       process.exit(1);
     }, hardExitMs);
-    if (typeof hardExit.unref === "function") hardExit.unref();
 
     // 1. Flip readiness BEFORE closing the listener so probes already in flight
     //    see 503 and the Service starts removing this pod from endpoints.
@@ -788,46 +1312,69 @@ function registerOrchestratedShutdown(server, wss) {
     }
 
     // 2 + 3. Stop accepting new connections.
-    const closeServer = new Promise((resolve) => {
+    const servers = Array.from(
+      new Set([server, ...(Array.isArray(auxiliaryServers) ? auxiliaryServers : [])].filter(Boolean))
+    );
+    const closeServers = Promise.all(
+      servers.map(
+        (serverHandle, index) =>
+          new Promise((resolve) => {
+            try {
+              serverHandle.close((err) => {
+                if (err) {
+                  log("warn", "shutdown_server_close_error", {
+                    serverKind: index === 0 ? "public" : "auxiliary",
+                    error: String(err && err.message ? err.message : err),
+                  });
+                }
+                resolve();
+              });
+            } catch (err) {
+              log("warn", "shutdown_server_close_threw", {
+                serverKind: index === 0 ? "public" : "auxiliary",
+                error: String(err && err.message ? err.message : err),
+              });
+              resolve();
+            }
+          })
+      )
+    );
+
+    const closeWss = new Promise((resolve) => {
+      if (!wss || typeof wss.close !== "function") {
+        resolve();
+        return;
+      }
+
       try {
-        server.close((err) => {
-          if (err) {
-            log("warn", "shutdown_server_close_error", {
-              error: String(err && err.message ? err.message : err),
-            });
-          }
+        if (wss.close.length === 0) {
+          wss.close();
           resolve();
-        });
+          return;
+        }
+        wss.close(() => resolve());
       } catch (err) {
-        log("warn", "shutdown_server_close_threw", {
+        log("warn", "shutdown_wss_close_error", {
           error: String(err && err.message ? err.message : err),
         });
         resolve();
       }
     });
-    if (wss && typeof wss.close === "function") {
-      try {
-        wss.close();
-      } catch (err) {
-        log("warn", "shutdown_wss_close_error", {
-          error: String(err && err.message ? err.message : err),
-        });
-      }
-    }
+    const closeTransports = Promise.all([closeServers, closeWss]);
 
-    // 4. Bounded drain — server.close() resolves only after every in-flight
-    //    connection completes; we cap it so a stuck client can't hold us forever.
+    // 4. Bounded drain — HTTP and WebSocket close only settle after every in-flight
+    //    connection completes; we cap them so a stuck client can't hold us forever.
     //    Clearing the timer on natural close avoids a misleading
     //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
     await Promise.race([
-      closeServer,
+      closeTransports,
       new Promise((resolve) => {
         const t = setTimeout(() => {
           log("warn", "shutdown_drain_timeout", { drainMs });
           resolve();
         }, drainMs);
         if (typeof t.unref === "function") t.unref();
-        closeServer.finally(() => clearTimeout(t));
+        closeTransports.finally(() => clearTimeout(t));
       }),
     ]);
 
@@ -839,11 +1386,15 @@ function registerOrchestratedShutdown(server, wss) {
         log("warn", "shutdown_cleanup_unavailable", {
           reason: "lifecycle_globals_not_bound",
         });
+        process.exit(1);
+        return;
       }
     } catch (err) {
-      log("warn", "shutdown_cleanup_error", {
+      log("error", "shutdown_cleanup_error", {
         error: String(err && err.message ? err.message : err),
       });
+      process.exit(1);
+      return;
     }
 
     log("info", "shutdown_complete", { signal });
@@ -857,13 +1408,18 @@ function registerOrchestratedShutdown(server, wss) {
 
 // Exposed for tests; not part of the long-lived server entrypoint.
 module.exports = {
+  main,
   sanitizedRequestPath,
   isNextDevMode,
   handleWebSocketConnection,
   forwardToInternalHttp,
+  listenServer,
+  listenOnPrivateLoopback,
+  notifyMulticoreReady,
   registerOrchestratedShutdown,
   WS_MAX_PAYLOAD_BYTES,
   MAX_PENDING_BYTES,
+  MAX_PENDING_OUTBOUND_BYTES,
 };
 
 if (require.main === module) {

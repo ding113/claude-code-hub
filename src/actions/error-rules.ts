@@ -43,7 +43,7 @@ function validateOverrideStatusCodeRange(statusCode: number | null | undefined):
 export async function listErrorRules(): Promise<repo.ErrorRule[]> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.warn("[ErrorRulesAction] Unauthorized access attempt");
       return [];
     }
@@ -77,7 +77,7 @@ export async function createErrorRuleAction(data: {
 }): Promise<ActionResult<repo.ErrorRule>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -228,7 +228,7 @@ export async function updateErrorRuleAction(
 ): Promise<ActionResult<repo.ErrorRule>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -361,7 +361,7 @@ export async function updateErrorRuleAction(
 export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -423,7 +423,7 @@ export async function refreshCacheAction(): Promise<
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -495,7 +495,7 @@ export async function testErrorRuleAction(input: { message: string }): Promise<
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -615,7 +615,7 @@ export async function testErrorRuleAction(input: { message: string }): Promise<
 export async function getCacheStats() {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return null;
     }
 

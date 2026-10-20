@@ -43,6 +43,12 @@ const returningMock = vi.fn();
 const onConflictDoNothingMock = vi.fn();
 const setMock = vi.fn();
 const deleteWhereMock = vi.fn();
+const pubsubHarness = vi.hoisted(() => ({
+  callback: null as ((message: string) => void) | null,
+  cleanup: vi.fn(),
+  publish: vi.fn(),
+  subscribe: vi.fn(),
+}));
 
 function createQuery<T>(result: T, whereArgs?: unknown[]) {
   const query: any = Promise.resolve(result);
@@ -100,6 +106,20 @@ vi.mock("@/drizzle/schema", () => ({
   },
 }));
 
+vi.mock("@/lib/redis/pubsub", () => ({
+  CHANNEL_PROVIDER_GROUPS_UPDATED: "cch:cache:provider_groups:updated",
+  publishCacheInvalidation: pubsubHarness.publish,
+  subscribeCacheInvalidation: pubsubHarness.subscribe,
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
 function fakeRow(
   overrides: Partial<{
     id: number;
@@ -121,10 +141,22 @@ function fakeRow(
 }
 
 describe("provider-groups repository", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { disposeGroupMultiplierCache } = await import(
+      "@/lib/cache/provider-group-multiplier-cache"
+    );
+    disposeGroupMultiplierCache();
     vi.resetModules();
     vi.clearAllMocks();
     resetChainMocks();
+    pubsubHarness.callback = null;
+    pubsubHarness.publish.mockResolvedValue(undefined);
+    pubsubHarness.subscribe.mockImplementation(
+      async (_channel: string, callback: (message: string) => void) => {
+        pubsubHarness.callback = callback;
+        return pubsubHarness.cleanup;
+      }
+    );
   });
 
   describe("getGroupCostMultiplier", () => {
@@ -197,6 +229,130 @@ describe("provider-groups repository", () => {
       const second = await getGroupCostMultiplier("flip");
       expect(second).toBe(4.0);
       expect(selectMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    });
+
+    it("invalidates a cached multiplier when another process publishes an update", async () => {
+      selectMock
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "remote", costMultiplier: "1.5000" })])
+        )
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "remote", costMultiplier: "4.0000" })])
+        );
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      const { ensureGroupMultiplierCacheSubscription } = await import(
+        "@/lib/cache/provider-group-multiplier-cache"
+      );
+      invalidateGroupMultiplierCache();
+      await ensureGroupMultiplierCacheSubscription();
+
+      expect(await getGroupCostMultiplier("remote")).toBe(1.5);
+      expect(await getGroupCostMultiplier("remote")).toBe(1.5);
+      expect(selectMock).toHaveBeenCalledTimes(1);
+
+      pubsubHarness.callback?.("updated");
+      expect(await getGroupCostMultiplier("remote")).toBe(4);
+      expect(selectMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not re-cache an old in-flight query after an invalidation event", async () => {
+      let resolveOldQuery: ((rows: ReturnType<typeof fakeRow>[]) => void) | undefined;
+      const oldQuery: any = new Promise<ReturnType<typeof fakeRow>[]>((resolve) => {
+        resolveOldQuery = resolve;
+      });
+      oldQuery.from = vi.fn(() => oldQuery);
+      oldQuery.where = vi.fn(() => oldQuery);
+
+      selectMock
+        .mockImplementationOnce(() => oldQuery)
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "racing", costMultiplier: "4.0000" })])
+        );
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      const { ensureGroupMultiplierCacheSubscription } = await import(
+        "@/lib/cache/provider-group-multiplier-cache"
+      );
+      invalidateGroupMultiplierCache();
+      await ensureGroupMultiplierCacheSubscription();
+
+      const oldResult = getGroupCostMultiplier("racing");
+      expect(selectMock).toHaveBeenCalledTimes(1);
+      pubsubHarness.callback?.("updated");
+      resolveOldQuery?.([fakeRow({ name: "racing", costMultiplier: "1.5000" })]);
+      expect(await oldResult).toBe(1.5);
+
+      expect(await getGroupCostMultiplier("racing")).toBe(4);
+      expect(selectMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("bounds the per-process multiplier cache entry count", async () => {
+      const {
+        GROUP_MULTIPLIER_CACHE_MAX_ENTRIES,
+        getGroupMultiplierCacheVersion,
+        invalidateGroupMultiplierCache,
+        readCachedGroupMultiplier,
+        writeCachedGroupMultiplier,
+      } = await import("@/lib/cache/provider-group-multiplier-cache");
+      invalidateGroupMultiplierCache();
+      const version = getGroupMultiplierCacheVersion();
+
+      for (let index = 0; index <= GROUP_MULTIPLIER_CACHE_MAX_ENTRIES; index++) {
+        writeCachedGroupMultiplier(`group-${index}`, index, version);
+      }
+
+      expect(readCachedGroupMultiplier("group-0")).toBeUndefined();
+      expect(readCachedGroupMultiplier(`group-${GROUP_MULTIPLIER_CACHE_MAX_ENTRIES}`)).toBe(
+        GROUP_MULTIPLIER_CACHE_MAX_ENTRIES
+      );
+    });
+
+    it("expires entries and rejects writes from an invalidated query version", async () => {
+      const {
+        getGroupMultiplierCacheVersion,
+        invalidateGroupMultiplierCache,
+        readCachedGroupMultiplier,
+        writeCachedGroupMultiplier,
+      } = await import("@/lib/cache/provider-group-multiplier-cache");
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+      invalidateGroupMultiplierCache();
+      const oldVersion = getGroupMultiplierCacheVersion();
+
+      expect(writeCachedGroupMultiplier("expiring", 2, oldVersion)).toBe(true);
+      now.mockReturnValue(61_001);
+      expect(readCachedGroupMultiplier("expiring")).toBeUndefined();
+
+      invalidateGroupMultiplierCache();
+      expect(writeCachedGroupMultiplier("stale", 3, oldVersion)).toBe(false);
+      expect(readCachedGroupMultiplier("stale")).toBeUndefined();
+      now.mockRestore();
+    });
+
+    it("backs off subscription retries after a connection failure", async () => {
+      pubsubHarness.subscribe.mockRejectedValueOnce(new Error("subscriber unavailable"));
+      const { ensureGroupMultiplierCacheSubscription } = await import(
+        "@/lib/cache/provider-group-multiplier-cache"
+      );
+
+      expect(await ensureGroupMultiplierCacheSubscription()).toBe(false);
+      expect(await ensureGroupMultiplierCacheSubscription()).toBe(false);
+      expect(pubsubHarness.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it("backs off when Redis subscription is unavailable without throwing", async () => {
+      pubsubHarness.subscribe.mockResolvedValueOnce(null);
+      const { ensureGroupMultiplierCacheSubscription } = await import(
+        "@/lib/cache/provider-group-multiplier-cache"
+      );
+
+      expect(await ensureGroupMultiplierCacheSubscription()).toBe(false);
+      expect(await ensureGroupMultiplierCacheSubscription()).toBe(false);
+      expect(pubsubHarness.subscribe).toHaveBeenCalledTimes(1);
     });
 
     it("resolves comma-separated groups by taking the first matching parsed group from a single query", async () => {
@@ -277,6 +433,26 @@ describe("provider-groups repository", () => {
       expect(count).toBe(1);
       expect(whereArgs).toHaveLength(1);
       expect(sqlToString(whereArgs[0]).toLowerCase()).toContain("deleted");
+    });
+  });
+
+  describe("ensureProviderGroupsExist", () => {
+    it("publishes group creation invalidation after the insert completes", async () => {
+      let finishInsert: (() => void) | undefined;
+      onConflictDoNothingMock.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishInsert = resolve;
+          })
+      );
+
+      const { ensureProviderGroupsExist } = await import("@/repository/provider-groups");
+      const operation = ensureProviderGroupsExist(["new-group"]);
+      expect(pubsubHarness.publish).not.toHaveBeenCalled();
+
+      finishInsert?.();
+      await operation;
+      expect(pubsubHarness.publish).toHaveBeenCalledWith("cch:cache:provider_groups:updated");
     });
   });
 

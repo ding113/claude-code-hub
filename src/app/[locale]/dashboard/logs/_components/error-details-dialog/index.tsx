@@ -11,6 +11,7 @@ import { hasSessionMessages } from "@/lib/api-client/v1/actions/active-sessions"
 import { cn } from "@/lib/utils";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 import { LogicTraceTab, PerformanceTab, SummaryTab } from "./components";
@@ -19,10 +20,16 @@ interface ErrorDetailsDialogProps {
   statusCode: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
+  routingTrace?: RoutingTraceV1 | null;
   sessionId: string | null;
+  sourceSessionId?: string | null;
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   requestSequence?: number | null;
+  requestId?: number | null;
   blockedBy?: string | null;
   blockedReason?: string | null;
+  isReplay?: boolean;
+  replaySourceRequestId?: number | null;
   originalModel?: string | null;
   currentModel?: string | null;
   actualResponseModel?: string | null;
@@ -39,6 +46,14 @@ interface ErrorDetailsDialogProps {
   cacheCreation1hInputTokens?: number | null;
   cacheReadInputTokens?: number | null;
   cacheTtlApplied?: string | null;
+  theoreticalCacheTokens?: number | null;
+  cacheScoreEligible?: boolean | null;
+  cacheScoreExcludedReason?: string | null;
+  cacheInputTotal?: number | null;
+  actualCacheRate?: number | null;
+  theoreticalCacheRate?: number | null;
+  requestCacheCoefficientBp?: number | null;
+  requestCacheMetricAvailability?: import("@/lib/cache-effectiveness/request-metrics").RequestCacheMetricAvailability;
   swapCacheTtlApplied?: boolean | null;
   costUsd?: string | null;
   costMultiplier?: string | null;
@@ -47,7 +62,8 @@ interface ErrorDetailsDialogProps {
   hedgeLosers?: HedgeLoserBilling[] | null;
   context1mApplied?: boolean | null;
   durationMs?: number | null;
-  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  firstByteMs?: number | null;
   externalOpen?: boolean;
   onExternalOpenChange?: (open: boolean) => void;
   scrollToRedirect?: boolean;
@@ -63,10 +79,16 @@ export function ErrorDetailsDialog({
   statusCode,
   errorMessage,
   providerChain,
+  routingTrace,
   sessionId,
+  sourceSessionId,
+  sessionIdentityKind,
   requestSequence,
+  requestId,
   blockedBy,
   blockedReason,
+  isReplay = false,
+  replaySourceRequestId,
   originalModel,
   currentModel,
   actualResponseModel,
@@ -83,6 +105,14 @@ export function ErrorDetailsDialog({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  theoreticalCacheTokens,
+  cacheScoreEligible,
+  cacheScoreExcludedReason,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
@@ -91,7 +121,8 @@ export function ErrorDetailsDialog({
   hedgeLosers,
   context1mApplied,
   durationMs,
-  ttfbMs,
+  ttftMs,
+  firstByteMs,
   externalOpen,
   onExternalOpenChange,
   scrollToRedirect,
@@ -124,29 +155,38 @@ export function ErrorDetailsDialog({
   // Check if session has messages data
   useEffect(() => {
     if (open && sessionId) {
-      const requestId = ++messageCheckRequestIdRef.current;
+      const checkId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
-      hasSessionMessages(sessionId, requestSequence ?? undefined)
+      setHasMessages(false);
+      hasSessionMessages(
+        sessionId,
+        requestSequence ?? undefined,
+        sourceSessionId ?? undefined,
+        requestId ?? undefined
+      )
         .then((result) => {
-          if (requestId !== messageCheckRequestIdRef.current) return;
+          if (checkId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
             setHasMessages(result.data);
+          } else {
+            setHasMessages(false);
           }
         })
         .catch((err) => {
-          if (requestId !== messageCheckRequestIdRef.current) return;
+          if (checkId !== messageCheckRequestIdRef.current) return;
           console.error("Failed to check session messages:", err);
         })
         .finally(() => {
-          if (requestId === messageCheckRequestIdRef.current) {
+          if (checkId === messageCheckRequestIdRef.current) {
             setCheckingMessages(false);
           }
         });
     } else {
+      ++messageCheckRequestIdRef.current;
       setHasMessages(false);
       setCheckingMessages(false);
     }
-  }, [open, sessionId, requestSequence]);
+  }, [open, sessionId, requestSequence, sourceSessionId, requestId]);
 
   // Handle scrollToRedirect - switch to metadata tab when redirect info needs focus
   useEffect(() => {
@@ -212,10 +252,16 @@ export function ErrorDetailsDialog({
     statusCode,
     errorMessage,
     providerChain,
+    routingTrace,
     sessionId,
+    sourceSessionId,
+    sessionIdentityKind,
     requestSequence,
+    requestId,
     blockedBy,
     blockedReason,
+    isReplay,
+    replaySourceRequestId,
     originalModel,
     currentModel,
     actualResponseModel,
@@ -232,6 +278,14 @@ export function ErrorDetailsDialog({
     cacheCreation1hInputTokens,
     cacheReadInputTokens,
     cacheTtlApplied,
+    theoreticalCacheTokens,
+    cacheScoreEligible,
+    cacheScoreExcludedReason,
+    cacheInputTotal,
+    actualCacheRate,
+    theoreticalCacheRate,
+    requestCacheCoefficientBp,
+    requestCacheMetricAvailability,
     swapCacheTtlApplied,
     costUsd,
     costMultiplier,
@@ -240,7 +294,8 @@ export function ErrorDetailsDialog({
     hedgeLosers,
     context1mApplied,
     durationMs,
-    ttfbMs,
+    ttftMs,
+    firstByteMs,
   };
 
   return (
@@ -257,7 +312,14 @@ export function ErrorDetailsDialog({
         className="w-[95vw] sm:w-[480px] md:w-[540px] lg:w-[600px] xl:w-[640px] sm:max-w-none overflow-y-auto px-4 sm:px-6"
       >
         <SheetHeader className="pb-2">
-          <SheetTitle>{t("title")}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            {t("title")}
+            {isReplay && (
+              <Badge variant="outline" className="border-teal-600 text-teal-700 dark:text-teal-300">
+                {t("replayServe.title")}
+              </Badge>
+            )}
+          </SheetTitle>
         </SheetHeader>
 
         <div className="pb-8">

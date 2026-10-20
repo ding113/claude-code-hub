@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+const { fetchMock } = vi.hoisted(() => ({
+  fetchMock: vi.fn<typeof fetch>(),
+}));
+
 const getSessionMock = vi.fn();
 const executeProviderTestMock = vi.fn();
 const getPresetsForProviderMock = vi.fn();
@@ -77,6 +81,7 @@ vi.mock("@/lib/validation/provider-url", () => ({
 
 vi.mock("@/lib/proxy-agent", () => ({
   createProxyAgentForProvider: createProxyAgentForProviderMock,
+  fetchWithDispatcher: (...args: Parameters<typeof fetch>) => fetchMock(...args),
   isValidProxyUrl: vi.fn(() => true),
 }));
 
@@ -86,8 +91,6 @@ vi.mock("@/app/v1/_lib/gemini/auth", () => ({
     isJson: isJsonMock,
   },
 }));
-
-const fetchMock = vi.fn<typeof fetch>();
 
 describe("providers api test actions", () => {
   beforeEach(() => {

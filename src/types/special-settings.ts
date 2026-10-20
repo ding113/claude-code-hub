@@ -16,6 +16,8 @@ export type SpecialSetting =
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicEffortSpecialSetting
+  | CodexReasoningEffortSpecialSetting
+  | OpenAIReasoningEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | LongContextPricingSpecialSetting
@@ -87,6 +89,38 @@ export type AnthropicEffortSpecialSetting = {
   scope: "request";
   hit: boolean;
   effort: string;
+};
+
+/**
+ * Codex reasoning effort 请求参数审计
+ *
+ * 记录客户端发送给 Codex 供应商的 reasoning.effort；供应商级覆写后的值由
+ * provider_parameter_override 审计补充，使用记录可同时呈现请求值与实际转发值。
+ */
+export type CodexReasoningEffortSpecialSetting = {
+  type: "codex_reasoning_effort";
+  scope: "request";
+  hit: boolean;
+  effort: string;
+};
+
+/** OpenAI Chat Completions 请求体中思考强度（effort）的载体字段。 */
+export type OpenAIReasoningEffortFieldSource = "reasoning_effort" | "reasoning.effort";
+
+/**
+ * OpenAI Chat Completions reasoning effort 请求参数审计
+ *
+ * 记录 openai-compatible 供应商的 /v1/chat/completions 请求中客户端声明的思考强度；
+ * 兼容顶层 reasoning_effort 与嵌套 reasoning.effort 两种载体（source 标注来源字段），
+ * 便于排查客户端实际用哪种字段表达思考等级。
+ */
+export type OpenAIReasoningEffortSpecialSetting = {
+  type: "openai_reasoning_effort";
+  scope: "request";
+  hit: boolean;
+  effort: string;
+  /** 请求体中的载体字段：顶层 reasoning_effort 或嵌套 reasoning.effort。 */
+  source: OpenAIReasoningEffortFieldSource;
 };
 
 /**

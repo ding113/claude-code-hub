@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const serviceTs = readFileSync(resolve(process.cwd(), "src/lib/log-cleanup/service.ts"), "utf-8");
 const usersTs = readFileSync(resolve(process.cwd(), "src/actions/users.ts"), "utf-8");
+const resetServiceTs = readFileSync(
+  resolve(process.cwd(), "src/lib/user-statistics-reset/reset-service.ts"),
+  "utf-8"
+);
 
 describe("usage_ledger cleanup immunity", () => {
   it("log cleanup service never imports or queries usageLedger", () => {
@@ -21,21 +25,14 @@ describe("usage_ledger cleanup immunity", () => {
     expect(removeUserBody).not.toContain("db.delete(usageLedger)");
   });
 
-  it("resetUserAllStatistics deletes from both tables (inside transaction)", () => {
-    const resetMatch = usersTs.match(/export async function resetUserAllStatistics[\s\S]*?^}/m);
-    expect(resetMatch).not.toBeNull();
-    const resetBody = resetMatch![0];
-    expect(resetBody).toContain("tx.delete(messageRequest)");
-    expect(resetBody).toContain("tx.delete(usageLedger)");
+  it("the dedicated statistics reset service deletes both tables in batches", () => {
+    expect(resetServiceTs).toContain("DELETE FROM message_request");
+    expect(resetServiceTs).toContain("DELETE FROM usage_ledger");
+    expect(resetServiceTs).toContain("FOR UPDATE SKIP LOCKED");
   });
 
-  it("resetUserAllStatistics is the only usageLedger delete path in users.ts", () => {
-    // Transaction-based: tx.delete(usageLedger)
-    const allDeleteMatches = [...usersTs.matchAll(/\.delete\(usageLedger\)/g)];
-    expect(allDeleteMatches).toHaveLength(1);
-
-    const deleteIndex = usersTs.indexOf(".delete(usageLedger)");
-    const precedingChunk = usersTs.slice(Math.max(0, deleteIndex - 2000), deleteIndex);
-    expect(precedingChunk).toContain("resetUserAllStatistics");
+  it("users actions enqueue the reset instead of deleting usageLedger inline", () => {
+    expect(usersTs).not.toContain(".delete(usageLedger)");
+    expect(usersTs).toContain("enqueueUserStatisticsReset");
   });
 });

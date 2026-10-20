@@ -31,6 +31,7 @@ const redisMock = {
   status: "ready",
   setex: vi.fn().mockResolvedValue("OK"),
   get: vi.fn(),
+  del: vi.fn().mockResolvedValue(1),
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
@@ -49,10 +50,12 @@ vi.mock("@/lib/redis", () => ({
 // Mock config - we'll control STORE_SESSION_MESSAGES dynamically
 let mockStoreMessages = false;
 let mockStoreSessionResponseBody = true;
+let mockSessionResponseBodyMaxBytes = 1024 * 1024;
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
     STORE_SESSION_MESSAGES: mockStoreMessages,
     STORE_SESSION_RESPONSE_BODY: mockStoreSessionResponseBody,
+    SESSION_RESPONSE_BODY_MAX_BYTES: mockSessionResponseBodyMaxBytes,
     SESSION_TTL: 300,
   }),
 }));
@@ -65,11 +68,13 @@ describe("SessionManager - Redaction based on STORE_SESSION_MESSAGES", () => {
     vi.clearAllMocks();
     mockStoreMessages = false; // default: redact
     mockStoreSessionResponseBody = true; // default: store response body
+    mockSessionResponseBodyMaxBytes = 1024 * 1024;
   });
 
   afterEach(() => {
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
+    mockSessionResponseBodyMaxBytes = 1024 * 1024;
   });
 
   describe("storeSessionMessages", () => {
@@ -213,6 +218,37 @@ describe("SessionManager - Redaction based on STORE_SESSION_MESSAGES", () => {
       const [, , value] = redisMock.setex.mock.calls[0];
       // Non-JSON should be stored as-is (cannot redact)
       expect(value).toBe(nonJsonResponse);
+    });
+
+    it("should enforce the response body limit using UTF-8 bytes at the exact boundary", async () => {
+      mockSessionResponseBodyMaxBytes = 4;
+
+      await SessionManager.storeSessionResponse("sess_utf8_exact", "中a", 1);
+      expect(redisMock.setex).toHaveBeenCalledWith(
+        "session:sess_utf8_exact:req:1:response",
+        300,
+        "中a"
+      );
+
+      vi.clearAllMocks();
+      await SessionManager.storeSessionResponse("sess_utf8_over", "中ab", 1);
+
+      expect(redisMock.setex).not.toHaveBeenCalled();
+      expect(loggerMock.warn).toHaveBeenCalledWith(
+        "SessionManager: Skipped oversized session response body",
+        { context: "response", byteSize: 5, maxBytes: 4 }
+      );
+      expect(redisMock.del).toHaveBeenCalledWith("session:sess_utf8_over:req:1:response");
+    });
+
+    it("should remove a previously stored response when the replacement exceeds the limit", async () => {
+      mockSessionResponseBodyMaxBytes = 4;
+
+      await SessionManager.storeSessionResponse("sess_replace", "1234", 1);
+      await SessionManager.storeSessionResponse("sess_replace", "12345", 1);
+
+      expect(redisMock.setex).toHaveBeenCalledTimes(1);
+      expect(redisMock.del).toHaveBeenCalledWith("session:sess_replace:req:1:response");
     });
 
     it("should handle OpenAI choices format when STORE_SESSION_MESSAGES=false", async () => {

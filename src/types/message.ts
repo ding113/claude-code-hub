@@ -2,6 +2,7 @@ import type { Numeric } from "decimal.js-light";
 import type { CacheTtlApplied } from "./cache";
 import type { HedgeLoserBilling } from "./cost-breakdown";
 import type { ProviderType } from "./provider";
+import type { RoutingTraceV1 } from "./routing-trace";
 import type { SpecialSetting } from "./special-settings";
 
 /**
@@ -30,6 +31,7 @@ export interface ProviderChainItem {
     | "concurrent_limit_failed" // 并发限制失败
     | "request_success" // 修复：请求成功（首次）
     | "retry_success" // 重试成功
+    | "response_incomplete" // 上游按协议返回 incomplete，可计费但不是成功完成
     | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "resource_not_found" // 资源不存在（404），触发故障转移但不计入熔断器
@@ -47,14 +49,17 @@ export interface ProviderChainItem {
     | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
     | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未对输家计费）
     | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
-    | "client_abort"; // 客户端在响应完成前断开连接
+    | "client_abort" // 客户端在响应完成前断开连接
+    | "client_abort_no_first_byte" // 客户端在阈值后断开且该供应商未返回首字节
+    | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
 
   // === 选择方法（细化） ===
   selectionMethod?:
     | "session_reuse" // 会话复用
     | "weighted_random" // 加权随机
     | "group_filtered" // 分组筛选后随机
-    | "fail_open_fallback"; // Fail Open 降级
+    | "fail_open_fallback" // Fail Open 降级
+    | "prefix_affinity"; // 最长前缀亲和
 
   // 供应商配置（决策依据）
   priority?: number;
@@ -81,6 +86,9 @@ export interface ProviderChainItem {
   // 时间戳和尝试信息
   timestamp?: number;
   attemptNumber?: number; // 第几次尝试（用于标识重试）
+  // legacy Hedge / Discovery 写入：对应路由追踪里的 attemptId 与 round，请求详情据此精确对应尝试卡片
+  routingAttemptId?: string;
+  routingRound?: number;
 
   // 修复：新增成功时的状态码
   statusCode?: number;
@@ -245,6 +253,23 @@ export interface ProviderChainItem {
       | "ws_not_yet_implemented"
       | "ws_error_pre_first_event";
   };
+
+  // === F1 流式内容门控提交标记（enforce 提交成功时记录；高并发模式下省略） ===
+  streamGate?: {
+    frameIndex: number; // 触发提交的帧序号（1-based，含中性前缀帧）
+    chunkIndex: number; // 触发提交的帧所在网络 chunk 序号（1-based）
+    eventName: string | null; // 触发提交的 SSE event 名
+    bufferedBytes: number; // 提交时已缓冲的前缀字节数
+    echoExcludedBytes: number; // 被排除出字节计数的请求回显帧字节数
+    gateWaitMs: number; // 门控等待时长（首字节到提交）
+  };
+
+  // === F3a 亲和命中详情（reason === "affinity_hit" 时记录） ===
+  affinity?: {
+    matchedDepth: number | null; // 命中边界的消息深度（null = 无法定位）
+    matchedPrefixBytes: number | null; // 命中边界的规范化前缀字节数
+    matchedFp: string; // 命中的链式指纹（截断哈希）
+  };
 }
 
 /**
@@ -257,7 +282,8 @@ export interface MessageRequest {
   key: string;
   model?: string;
   durationMs?: number;
-  ttfbMs?: number | null;
+  ttftMs?: number | null; // 首 Token 时间（DB 列名为历史遗留的 ttfb_ms）
+  firstByteMs?: number | null; // 首字节时间（真 TTFB）
   costUsd?: string; // 单次请求费用（美元），保持高精度字符串表示
 
   // 供应商倍率（记录该请求使用的 cost_multiplier）
@@ -266,11 +292,25 @@ export interface MessageRequest {
   // Session ID（用于会话粘性和日志追踪）
   sessionId?: string;
 
+  // 活跃 Session 聚合 identity；保留 sessionId 作为物理请求/快照主键
+  sessionIdentity?: string;
+  sessionIdentityKind?: "session_id" | "prefix_affinity";
+  affinityScopeTag?: string | null;
+  affinityFingerprint?: string | null;
+  affinityFingerprintChain?: string[];
+
+  // Replay 审计标记与来源请求 provenance
+  isReplay?: boolean;
+  replaySourceRequestId?: number | null;
+
   // Request Sequence（Session 内请求序号）
   requestSequence?: number;
 
   // 上游决策链（记录尝试的供应商列表）
   providerChain?: ProviderChainItem[];
+
+  // 请求路由轨迹（Discovery/legacy 模式及调度生命周期）
+  routingTrace?: RoutingTraceV1 | null;
 
   // HTTP 状态码
   statusCode?: number;
@@ -342,11 +382,23 @@ export interface CreateMessageRequestData {
   // Session ID（用于会话粘性和日志追踪）
   session_id?: string;
 
+  // 活跃 Session 聚合 identity；保留 session_id 作为物理请求/快照主键
+  session_identity?: string;
+  session_identity_kind?: "session_id" | "prefix_affinity";
+  affinity_scope_tag?: string | null;
+  affinity_fingerprint?: string | null;
+  affinity_fingerprint_chain?: string[];
+  is_replay?: boolean;
+  replay_source_request_id?: number | null;
+
   // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
   request_sequence?: number;
 
   // 上游决策链
   provider_chain?: ProviderChainItem[];
+
+  // 请求路由轨迹
+  routing_trace?: RoutingTraceV1 | null;
 
   // HTTP 状态码
   status_code?: number;

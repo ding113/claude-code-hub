@@ -5,7 +5,14 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import {
+  type MigrationIndexPreflightExecutor,
+  runSessionReplayIndexPreflight,
+  runSessionReplayMigrationPlan,
+  SESSION_REPLAY_INDEX_SPECS,
+} from "@/lib/migrations/session-replay-index-preflight";
 
 const MIGRATION_ADVISORY_LOCK_NAME = "claude-code-hub:migrations";
 
@@ -140,6 +147,57 @@ async function repairDrizzleMigrationsCreatedAt(input: {
   });
 }
 
+function createMigrationIndexPreflightExecutor(
+  client: ReturnType<typeof postgres>
+): MigrationIndexPreflightExecutor {
+  return {
+    execute: async (sql) => {
+      await client.unsafe(sql);
+    },
+    inspectIndex: async (name) => {
+      const qualifiedName = `public."${name}"`;
+      const [row] = await client`
+        SELECT
+          c.oid IS NOT NULL AS exists,
+          COALESCE(i.indisvalid, false) AS valid,
+          obj_description(c.oid, 'pg_class') AS marker,
+          CASE WHEN c.oid IS NULL THEN NULL ELSE pg_get_indexdef(c.oid) END AS definition
+        FROM (SELECT to_regclass(${qualifiedName}) AS oid) resolved
+        LEFT JOIN pg_class c ON c.oid = resolved.oid
+        LEFT JOIN pg_index i ON i.indexrelid = c.oid
+      `;
+      return {
+        exists: row?.exists === true,
+        valid: row?.valid === true,
+        marker: typeof row?.marker === "string" ? row.marker : null,
+        definition: typeof row?.definition === "string" ? row.definition : null,
+      };
+    },
+  };
+}
+
+async function getLatestDrizzleMigrationCreatedAt(
+  client: ReturnType<typeof postgres>
+): Promise<number | null> {
+  const [row] = await client`
+    SELECT MAX(created_at) AS latest_created_at
+    FROM "drizzle"."__drizzle_migrations"
+  `;
+  const value = row?.latest_created_at;
+  const parsed =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function sessionReplayBaseTablesExist(client: ReturnType<typeof postgres>): Promise<boolean> {
+  const [row] = await client`
+    SELECT
+      to_regclass('public.message_request') IS NOT NULL AS message_request_exists,
+      to_regclass('public.usage_ledger') IS NOT NULL AS usage_ledger_exists
+  `;
+  return row?.message_request_exists === true && row?.usage_ledger_exists === true;
+}
+
 /**
  * 自动执行数据库迁移
  * 在生产环境启动时自动运行
@@ -159,15 +217,29 @@ export async function runMigrations() {
     logger.info("Waiting for database migration lock...");
     await migrationClient`SELECT pg_advisory_lock(hashtext(${MIGRATION_ADVISORY_LOCK_NAME}))`;
     logger.info("Database migration lock acquired");
+    await migrationClient`SET search_path TO public`;
 
     // 获取迁移文件路径
     const migrationsFolder = path.join(process.cwd(), "drizzle");
 
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
-
-    // 执行迁移
-    await migrate(db, { migrationsFolder });
+    const indexExecutor = createMigrationIndexPreflightExecutor(migrationClient);
+    const env = getEnvConfig();
+    const timeouts = {
+      lockTimeoutMs: env.MIGRATION_INDEX_LOCK_TIMEOUT_MS,
+      statementTimeoutMs: env.MIGRATION_INDEX_STATEMENT_TIMEOUT_MS,
+    };
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: await sessionReplayBaseTablesExist(migrationClient),
+      latestMigrationCreatedAt: await getLatestDrizzleMigrationCreatedAt(migrationClient),
+      migrate: () => migrate(db, { migrationsFolder }),
+      runIndexPreflight: (options) =>
+        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, {
+          ...options,
+          timeouts,
+        }),
+    });
 
     logger.info("Database migrations completed successfully");
   } catch (error) {

@@ -4,12 +4,12 @@ import { CSRF_HEADER, MANAGEMENT_API_VERSION } from "@/lib/api/v1/_shared/consta
 export const openApiDocumentConfig = {
   openapi: "3.1.0",
   info: {
-    title: "Claude Code Hub Management API",
+    title: "CC Hub Management API",
     version: MANAGEMENT_API_VERSION,
     description:
-      "REST management API for Claude Code Hub. This HTTP surface is mounted separately from the proxy /v1 API and the deprecated /api/actions API while intentionally reusing existing server-side business actions during migration.",
+      "REST management API for CC Hub. This HTTP surface is mounted separately from the proxy /v1 API and the deprecated /api/actions API while intentionally reusing existing server-side business actions during migration.",
     contact: {
-      name: "Claude Code Hub maintainers",
+      name: "CC Hub maintainers",
       url: "https://github.com/ding113/claude-code-hub/issues",
     },
     license: {

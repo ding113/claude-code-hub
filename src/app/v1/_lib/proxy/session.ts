@@ -1,7 +1,22 @@
 import type { Context } from "hono";
+import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
+import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
+import { loadRequestBody, retainRequestMemory } from "@/lib/body-store/request-body-store";
 import { logger } from "@/lib/logger";
-import { writeLiveChain } from "@/lib/redis/live-chain-store";
+import { onRequestMemoryForcedEnd, retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
+import {
+  deleteLiveChain,
+  type LiveProviderSnapshot,
+  writeLiveChain,
+  writeLiveRoutingTrace,
+} from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
+import {
+  getSessionRequestArtifactByteSize,
+  getSessionRequestArtifactMaxBytes,
+} from "@/lib/session-request-artifact-limit";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import {
   type ResolvedPricing,
   resolvePricingForModelRecords,
@@ -13,10 +28,22 @@ import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
 import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
+import {
+  ROUTING_TRACE_MAX_EVENTS,
+  ROUTING_TRACE_VERSION,
+  type RoutingTraceConfigV1,
+  type RoutingTraceEventV1,
+  type RoutingTraceMode,
+  type RoutingTraceRequestOutcome,
+  type RoutingTraceSummaryV1,
+  type RoutingTraceV1,
+} from "@/types/routing-trace";
+import type { SessionIdentityMetadata } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
 import type { User } from "@/types/user";
-import { isCountTokensEndpointPath } from "./endpoint-paths";
+import type { AffinityLookupResult } from "./affinity/affinity-store";
+import type { FingerprintChain } from "./affinity/fingerprint";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -29,7 +56,30 @@ import {
   type OpenAIImageRequestMetadata,
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
-import { decodeRequestBody } from "./request-body-codec";
+import type { ReplayIdentity } from "./replay/replay-identity";
+
+/** F2 Replay 的会话内状态：guard 阶段抢到 owner 租约后填充。 */
+export interface SessionReplayState {
+  identity: ReplayIdentity;
+  ownerToken: string;
+  role: "owner";
+}
+
+/** F3a 前缀亲和的会话内状态：指纹链计算一次，供提名、写回与缓存效果指标复用。 */
+export interface SessionAffinityState {
+  scopeTag: string;
+  chain: FingerprintChain;
+  /** 亲和提名成功并 setProvider 后填充；用于 failover 时定向写墓碑 */
+  nominatedProviderId: number | null;
+  /** 查找命中的边界指纹（未命中为 null） */
+  matchedFp: string | null;
+  /** 当前对话绑定所属的 identity root；后续 tip 写回保持该值。 */
+  identityFp: string | null;
+  /** lookup 捕获的 identity generation；终态写回必须以此做 CAS。 */
+  generation: string | null;
+  /** SessionGuard 已完成的 lookup，供 provider selector 复用，避免同一请求重复访问 Redis。 */
+  lookup: AffinityLookupResult | null;
+}
 
 /**
  * Classification of an auth failure, used to decide whether to record the
@@ -78,6 +128,7 @@ export interface ProxyRequestPayload {
 interface RequestBodyResult {
   requestMessage: Record<string, unknown>;
   requestBodyLog: string;
+  lazyLog?: boolean;
   requestBodyLogNote?: string;
   requestBodyBuffer?: ArrayBuffer;
   contentLength?: number | null;
@@ -108,8 +159,13 @@ export class ProxySession {
   provider: Provider | null;
   messageContext: MessageContext | null;
 
-  // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
-  ttfbMs: number | null = null;
+  // Time To First Token (ms). Streaming: first chunk handed to the response handler,
+  // which under an enforcing stream gate is the first *content* frame. Non-stream: equals durationMs.
+  ttftMs: number | null = null;
+
+  // Time To First Byte (ms). First body byte from the upstream, reported by the stream gate.
+  // Equals ttftMs whenever no gate ran (gate off/shadow, raw passthrough, non-SSE).
+  firstByteMs: number | null = null;
 
   // Timestamp when guard pipeline finished and forwarding started (epoch ms).
   forwardStartTime: number | null = null;
@@ -117,8 +173,27 @@ export class ProxySession {
   // Actual serialized request body sent to upstream (after all preprocessing).
   forwardedRequestBody: string | null = null;
 
+  /** 仅在请求内存被强制归还后调用：此时响应早已结束，正文不再属于任何受管额度。 */
+  dropRequestBodyAfterForcedMemoryRelease(): void {
+    this.request.buffer = undefined;
+    this.request.message = {};
+    this.request.log = "";
+    this.forwardedRequestBody = null;
+  }
+
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
+  // 派生上游会话头（x-opencode-session）用的种子：hedge/discovery 影子会话会清空 sessionId，
+  // 但上游的缓存亲和仍应跟随父请求，所以单独留一份不会被清空的副本。
+  upstreamSessionSeed: string | null = null;
+  // 客户端或补全器已建立连续身份时，单条增量请求也应参与供应商复用。
+  // 内容哈希/随机降级身份仍依赖上下文长度，避免相同短提示串到同一供应商会话。
+  private allowSingleTurnProviderReuse = false;
+
+  // Discovery lease conflicts must stay on a single upstream and must not
+  // mutate a binding owned by the in-flight discovery request.
+  private streamingHedgeDisabled = false;
+  private sessionBindingAllowed = true;
 
   // 客户端 IP（由 ProxyAuthenticator 按系统设置的 ip_extraction_config 解析后写入）
   clientIp: string | null = null;
@@ -130,6 +205,14 @@ export class ProxySession {
   originalFormat: ClientFormat = "claude";
   providerType: ProviderType | null = null;
 
+  // 最长前缀亲和状态（F3a 计算一次，供提名/写回/缓存效果指标复用）
+  affinity: SessionAffinityState | null = null;
+  private sessionIdentityMetadata: SessionIdentityMetadata | null = null;
+
+  // Replay 角色状态（F2 guard 阶段 claim owner 成功后填充，spool 由 handleStream 建立）
+  replayState: SessionReplayState | null = null;
+
+  private readonly managedEndpoint: string;
   private readonly endpointPolicy: EndpointPolicy;
 
   // 模型重定向追踪：保存原始模型名（重定向前）
@@ -147,6 +230,19 @@ export class ProxySession {
 
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
+  private liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+  private liveActiveProviderCounts = new Map<number, number>();
+
+  // Request-level routing observability. Discovery attempts live here rather
+  // than providerChain because providerChain is also a billing/retry contract.
+  private routingTrace: RoutingTraceV1 | null = null;
+  private routingTraceSummaryDraft: RoutingTraceSummaryV1 | null = null;
+  private liveChainDirty = false;
+  private liveRoutingTraceDirty = false;
+  private liveObservabilityFlushPromise: Promise<void> | null = null;
+  private liveObservabilityClosePromise: Promise<void> | null = null;
+  private liveObservabilityClosed = false;
+  private routingTraceTerminalLogged = false;
 
   // 上次选择的决策上下文（用于记录到 providerChain）
   private _lastSelectionContext?: ProviderChainItem["decisionContext"];
@@ -202,9 +298,15 @@ export class ProxySession {
    */
   private providersSnapshot: Provider[] | null = null;
 
-  // 本请求已通过 Provider 并发检查获得的引用。
-  // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
-  private providerSessionRefs = new Set<number>();
+  // 本请求已通过 Provider 并发检查获得的引用。tracked=true 表示这次
+  // acquire 同时创建了 Provider Session 基线；Sticky CAS 成功时只有
+  // 该引用可以保留，已有基线上的普通 attempt 引用必须在终态释放。
+  private providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
+
+  // Snapshot captured during provider selection. Discovery reuses this exact
+  // generation for timeout cleanup/finalization instead of performing a
+  // second read that could race with another request's binding update.
+  private sessionBindingSnapshot: SessionBindingSnapshot | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -233,7 +335,8 @@ export class ProxySession {
     this.messageContext = null;
     this.sessionId = null;
     this.providerChain = [];
-    this.endpointPolicy = resolveSessionEndpointPolicy(init.requestUrl);
+    this.managedEndpoint = resolveSessionManagedEndpoint(init.requestUrl, init.request.message);
+    this.endpointPolicy = resolveEndpointPolicy(this.managedEndpoint);
   }
 
   static async fromContext(c: Context): Promise<ProxySession> {
@@ -304,8 +407,9 @@ export class ProxySession {
       model: resolvedModel,
       imageRequestMetadata: bodyResult.imageRequestMetadata,
     };
+    if (bodyResult.lazyLog) setLazyRequestLog(request);
 
-    return new ProxySession({
+    const session = new ProxySession({
       startTime,
       method,
       requestUrl,
@@ -316,6 +420,9 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+    // 后台所有者卡住且宽限到期时，租约已被强制归还；同步丢弃正文引用，避免被卡住的闭包继续钉住内存。
+    onRequestMemoryForcedEnd(() => session.dropRequestBodyAfterForcedMemoryRelease());
+    return session;
   }
 
   /**
@@ -335,6 +442,13 @@ export class ProxySession {
     return original !== current;
   }
 
+  /**
+   * 客户端原始请求头（会话创建时的副本，不含请求过滤器后续修改）。
+   */
+  getOriginalHeaders(): Headers {
+    return this.originalHeaders;
+  }
+
   setAuthState(state: AuthState): void {
     this.authState = state;
     if (state.user) {
@@ -347,25 +461,97 @@ export class ProxySession {
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+    if (!this.liveActiveProviders) {
+      this.liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+    }
+    if (!this.liveActiveProviderCounts) {
+      this.liveActiveProviderCounts = new Map<number, number>();
+    }
+    this.liveActiveProviders.clear();
+    this.liveActiveProviderCounts.clear();
+    if (provider) {
+      this.liveActiveProviders.set(provider.id, { id: provider.id, name: provider.name });
+      this.liveActiveProviderCounts.set(provider.id, 1);
+    }
+    this.persistLiveChain();
   }
 
-  recordProviderSessionRef(providerId: number): void {
+  addLiveActiveProvider(provider: Pick<Provider, "id" | "name">): void {
+    if (!this.liveActiveProviders) {
+      this.liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+    }
+    if (!this.liveActiveProviderCounts) {
+      this.liveActiveProviderCounts = new Map<number, number>();
+    }
+    this.liveActiveProviders.set(provider.id, { id: provider.id, name: provider.name });
+    this.liveActiveProviderCounts.set(
+      provider.id,
+      (this.liveActiveProviderCounts.get(provider.id) ?? 0) + 1
+    );
+    this.persistLiveChain();
+  }
+
+  removeLiveActiveProvider(providerId: number): void {
+    const count = this.liveActiveProviderCounts?.get(providerId) ?? 0;
+    if (count <= 1) {
+      this.liveActiveProviderCounts?.delete(providerId);
+      if (this.liveActiveProviders?.delete(providerId)) this.persistLiveChain();
+      return;
+    }
+    this.liveActiveProviderCounts.set(providerId, count - 1);
+    this.persistLiveChain();
+  }
+
+  setSessionBindingSnapshot(snapshot: SessionBindingSnapshot | null): void {
+    this.sessionBindingSnapshot = snapshot;
+  }
+
+  getSessionBindingSnapshot(): SessionBindingSnapshot | null {
+    return this.sessionBindingSnapshot;
+  }
+
+  recordProviderSessionRef(providerId: number, options: { retainOnSuccess?: boolean } = {}): void {
     if (!this.providerSessionRefs) {
-      this.providerSessionRefs = new Set<number>();
+      this.providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
     }
 
     if (Number.isInteger(providerId) && providerId > 0) {
-      this.providerSessionRefs.add(providerId);
+      const refs = this.providerSessionRefs.get(providerId) ?? [];
+      refs.push({ retainOnSuccess: options.retainOnSuccess === true });
+      this.providerSessionRefs.set(providerId, refs);
     }
   }
 
   consumeProviderSessionRef(providerId: number): boolean {
-    if (!this.providerSessionRefs?.has(providerId)) {
-      return false;
-    }
-
-    this.providerSessionRefs.delete(providerId);
+    const refs = this.providerSessionRefs?.get(providerId);
+    if (!refs || refs.length === 0) return false;
+    refs.shift();
+    if (refs.length === 0) this.providerSessionRefs.delete(providerId);
     return true;
+  }
+
+  hasProviderSessionRef(providerId: number): boolean {
+    return (this.providerSessionRefs?.get(providerId)?.length ?? 0) > 0;
+  }
+
+  shouldRetainProviderSessionRefOnSuccess(providerId: number): boolean {
+    return this.providerSessionRefs?.get(providerId)?.[0]?.retainOnSuccess === true;
+  }
+
+  disableStreamingHedge(): void {
+    this.streamingHedgeDisabled = true;
+  }
+
+  isStreamingHedgeDisabled(): boolean {
+    return this.streamingHedgeDisabled === true;
+  }
+
+  setSessionBindingAllowed(allowed: boolean): void {
+    this.sessionBindingAllowed = allowed;
+  }
+
+  isSessionBindingAllowed(): boolean {
+    return this.sessionBindingAllowed !== false;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {
@@ -423,6 +609,22 @@ export class ProxySession {
     return !this.highConcurrencyModeEnabled;
   }
 
+  shouldPersistSessionRequestArtifacts(): boolean {
+    const byteSize = getSessionRequestArtifactByteSize(
+      this.request.message,
+      this.isOpenAIImageMultipartRequest() ? undefined : this.request.buffer?.byteLength
+    );
+    const maxBytes = getSessionRequestArtifactMaxBytes();
+    if (byteSize <= maxBytes) return true;
+
+    logger.warn("[ProxySession] Skipped oversized session request artifacts", {
+      byteSize,
+      maxBytes,
+      endpoint: this.getEndpoint(),
+    });
+    return false;
+  }
+
   shouldTrackSessionObservability(): boolean {
     return !this.highConcurrencyModeEnabled;
   }
@@ -457,20 +659,43 @@ export class ProxySession {
   }
 
   /**
-   * Record Time To First Byte (TTFB) for streaming responses.
+   * Record Time To First Token (TTFT) for streaming responses.
    *
-   * Definition: first body chunk received.
-   * Non-stream responses should persist TTFB as `durationMs` at finalize time.
+   * Definition: first body chunk handed to the response handler. With the stream content
+   * gate enforcing, that chunk is the first content frame, so this is TTFT, not TTFB.
+   * Non-stream responses should persist TTFT as `durationMs` at finalize time.
+   *
+   * Doubles as the TTFB fallback: paths where no gate ran never call `recordFirstByte`,
+   * and there TTFB and TTFT are the same moment.
    */
-  recordTtfb(): number {
-    if (this.ttfbMs !== null) {
-      return this.ttfbMs;
+  recordTtft(): number {
+    if (this.ttftMs !== null) {
+      return this.ttftMs;
     }
 
     const value = Math.max(0, Date.now() - this.startTime);
-    this.ttfbMs = value;
+    this.ttftMs = value;
+    if (this.firstByteMs === null) {
+      this.firstByteMs = value;
+    }
     this.persistLiveChain();
     return value;
+  }
+
+  /**
+   * Record Time To First Byte (TTFB) from an upstream first-byte timestamp.
+   *
+   * Callers must only commit the timestamp of the attempt that actually gets served —
+   * committing a failed attempt's first byte would understate TTFB and inflate the
+   * generation window that TPS divides by.
+   */
+  recordFirstByte(atEpochMs: number): void {
+    if (this.firstByteMs !== null) {
+      return;
+    }
+
+    this.firstByteMs = Math.max(0, atEpochMs - this.startTime);
+    this.persistLiveChain();
   }
 
   /**
@@ -486,8 +711,26 @@ export class ProxySession {
   /**
    * 设置 session ID
    */
-  setSessionId(sessionId: string): void {
+  setSessionId(sessionId: string, options: { allowSingleTurnProviderReuse?: boolean } = {}): void {
     this.sessionId = sessionId;
+    this.upstreamSessionSeed = sessionId;
+    this.allowSingleTurnProviderReuse = options.allowSingleTurnProviderReuse === true;
+  }
+
+  setSessionIdentityMetadata(metadata: SessionIdentityMetadata): void {
+    this.sessionIdentityMetadata = metadata;
+  }
+
+  getSessionIdentityMetadata(): SessionIdentityMetadata {
+    return (
+      this.sessionIdentityMetadata ?? {
+        identity: this.sessionId ?? "",
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      }
+    );
   }
 
   /**
@@ -571,15 +814,13 @@ export class ProxySession {
     return undefined;
   }
 
-  /**
-   * 是否应该复用 provider（基于 messages 长度）
-   */
+  /** 是否应该复用 provider。稳定 Session ID 支持只发送本轮增量的客户端。 */
   shouldReuseProvider(): boolean {
     if (this.isRawCrossProviderFallbackEnabled()) {
       return true;
     }
 
-    return this.getMessagesLength() > 1;
+    return this.allowSingleTurnProviderReuse || this.getMessagesLength() > 1;
   }
 
   /**
@@ -594,6 +835,7 @@ export class ProxySession {
         | "concurrent_limit_failed"
         | "request_success" // 修复：添加 request_success
         | "retry_success"
+        | "response_incomplete" // 协议完整抵达，但结果明确未完成
         | "retry_failed" // 供应商错误（已计入熔断器）
         | "system_error" // 系统/网络错误（不计入熔断器）
         | "resource_not_found" // 上游 404 错误（不计入熔断器，仅切换供应商）
@@ -611,14 +853,19 @@ export class ProxySession {
         | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
         | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未计费）
         | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其响应被后台拿回并计费
-        | "client_abort"; // 客户端在响应完成前断开连接
+        | "client_abort" // 客户端在响应完成前断开连接
+        | "client_abort_no_first_byte" // 客户端阈值后断开且供应商未返回首字节
+        | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
         | "group_filtered"
-        | "fail_open_fallback";
+        | "fail_open_fallback"
+        | "prefix_affinity";
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
+      routingAttemptId?: string; // 对应路由追踪的 attemptId
+      routingRound?: number; // 对应路由追踪的 round
       errorMessage?: string; // 错误信息（失败时记录）
       endpointId?: number | null;
       endpointUrl?: string;
@@ -633,6 +880,8 @@ export class ProxySession {
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
       rawCrossProviderFallbackEnabled?: boolean;
+      streamGate?: ProviderChainItem["streamGate"]; // F1 门控提交标记
+      affinity?: ProviderChainItem["affinity"]; // F3a 亲和命中详情
     }
   ): void {
     const item: ProviderChainItem = {
@@ -652,6 +901,8 @@ export class ProxySession {
       circuitState: metadata?.circuitState,
       timestamp: Date.now(),
       attemptNumber: metadata?.attemptNumber,
+      routingAttemptId: metadata?.routingAttemptId,
+      routingRound: metadata?.routingRound,
       errorMessage: metadata?.errorMessage, // 记录错误信息
       // 修复：记录新字段
       statusCode: metadata?.statusCode,
@@ -664,16 +915,21 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
       rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
+      streamGate: metadata?.streamGate,
+      affinity: metadata?.affinity,
     };
 
     // 避免重复添加同一个供应商
-    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber）
+    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber + routingAttemptId）
     const lastItem = this.providerChain[this.providerChain.length - 1];
     const shouldAdd =
       this.providerChain.length === 0 ||
       lastItem.id !== provider.id ||
       lastItem.reason !== metadata?.reason ||
-      (metadata?.attemptNumber !== undefined && lastItem.attemptNumber !== metadata.attemptNumber);
+      (metadata?.attemptNumber !== undefined &&
+        lastItem.attemptNumber !== metadata.attemptNumber) ||
+      (metadata?.routingAttemptId !== undefined &&
+        lastItem.routingAttemptId !== metadata.routingAttemptId);
 
     if (shouldAdd) {
       this.providerChain.push(item);
@@ -684,7 +940,256 @@ export class ProxySession {
   private persistLiveChain(): void {
     if (!this.sessionId || this.requestSequence == null) return;
     if (!this.shouldTrackSessionObservability()) return;
-    void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
+    if (this.liveObservabilityClosed) return;
+    this.liveChainDirty = true;
+    this.scheduleLiveObservabilityFlush();
+  }
+
+  private scheduleLiveObservabilityFlush(): void {
+    if (this.liveObservabilityClosed || this.liveObservabilityFlushPromise) return;
+    const flush = Promise.resolve().then(() => this.flushLiveObservability());
+    this.liveObservabilityFlushPromise = retainRequestMemoryUntil(
+      flush.finally(() => {
+        this.liveObservabilityFlushPromise = null;
+        if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
+          this.scheduleLiveObservabilityFlush();
+        }
+      }),
+      "live-observability-flush"
+    );
+  }
+
+  private async flushLiveObservability(): Promise<void> {
+    while (this.liveChainDirty || this.liveRoutingTraceDirty) {
+      const writeChain = this.liveChainDirty;
+      const writeRoutingTrace = this.liveRoutingTraceDirty && this.routingTrace !== null;
+      this.liveChainDirty = false;
+      this.liveRoutingTraceDirty = false;
+
+      const chain = writeChain ? structuredClone(this.providerChain) : null;
+      const activeProviders = writeChain
+        ? structuredClone([...this.liveActiveProviders.values()])
+        : null;
+      const routingTrace = writeRoutingTrace ? structuredClone(this.routingTrace) : null;
+      const writes: Promise<void>[] = [];
+      if (chain) {
+        writes.push(
+          writeLiveChain(
+            this.sessionId as string,
+            this.requestSequence as number,
+            chain,
+            activeProviders ?? []
+          )
+        );
+      }
+      if (routingTrace) {
+        writes.push(
+          writeLiveRoutingTrace(
+            this.sessionId as string,
+            this.requestSequence as number,
+            routingTrace
+          )
+        );
+      }
+
+      const results = await Promise.allSettled(writes);
+      for (const result of results) {
+        if (result.status === "rejected") {
+          logger.debug("[ProxySession] Failed to persist live routing observability", {
+            error: result.reason,
+          });
+        }
+      }
+    }
+  }
+
+  private persistLiveRoutingTrace(): void {
+    if (!this.sessionId || this.requestSequence == null || !this.routingTrace) return;
+    if (!this.shouldTrackSessionObservability()) return;
+    if (this.liveObservabilityClosed) return;
+    this.liveRoutingTraceDirty = true;
+    this.scheduleLiveObservabilityFlush();
+  }
+
+  private advanceRoutingTraceRevision(observedAt: number): void {
+    if (!this.routingTrace) return;
+    this.routingTrace.updatedAt = Math.max(observedAt, this.routingTrace.updatedAt + 1);
+  }
+
+  initializeRoutingTrace(options: {
+    mode: RoutingTraceMode;
+    discoveryEnabled: boolean;
+    eligible: boolean;
+    bypassReason?: string;
+    config?: RoutingTraceConfigV1;
+    startedAt?: number;
+  }): void {
+    const now = Date.now();
+    this.routingTrace = {
+      version: ROUTING_TRACE_VERSION,
+      mode: options.mode,
+      startedAt: options.startedAt ?? this.startTime,
+      updatedAt: now,
+      discoveryEnabled: options.discoveryEnabled,
+      eligible: options.eligible,
+      ...(options.bypassReason ? { bypassReason: options.bypassReason } : {}),
+      ...(options.config ? { config: structuredClone(options.config) } : {}),
+      events: [
+        {
+          type: "request_started",
+          at: now,
+          elapsedMs: Math.max(0, now - (options.startedAt ?? this.startTime)),
+          reason: options.bypassReason,
+        },
+      ],
+    };
+    this.persistLiveRoutingTrace();
+  }
+
+  appendRoutingTraceEvent(
+    event: Omit<RoutingTraceEventV1, "at" | "elapsedMs"> &
+      Partial<Pick<RoutingTraceEventV1, "at" | "elapsedMs">>
+  ): void {
+    if (!this.routingTrace) return;
+    const at = event.at ?? Date.now();
+    const normalized: RoutingTraceEventV1 = {
+      ...event,
+      at,
+      elapsedMs: event.elapsedMs ?? Math.max(0, at - this.routingTrace.startedAt),
+    };
+    let changed = false;
+    if (this.routingTrace.events.length < ROUTING_TRACE_MAX_EVENTS) {
+      this.routingTrace.events.push(normalized);
+      changed = true;
+    } else {
+      if (this.routingTrace.truncated !== true) {
+        this.routingTrace.truncated = true;
+        changed = true;
+      }
+      if (
+        normalized.type === "winner_committed" ||
+        normalized.type === "binding_finalized" ||
+        normalized.type === "request_finished"
+      ) {
+        const replaceIndex = this.routingTrace.events.findIndex(
+          (existing) =>
+            existing.type !== "winner_committed" &&
+            existing.type !== "binding_finalized" &&
+            existing.type !== "request_finished"
+        );
+        if (replaceIndex >= 0) this.routingTrace.events.splice(replaceIndex, 1);
+        else this.routingTrace.events.shift();
+        this.routingTrace.events.push(normalized);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.advanceRoutingTraceRevision(at);
+    this.persistLiveRoutingTrace();
+  }
+
+  setRoutingTraceSummary(summary: RoutingTraceSummaryV1): void {
+    if (!this.routingTrace) return;
+    // A first-byte winner is not a terminal success. Keep aggregate counters
+    // request-local until ResponseHandler completes stream validation.
+    this.routingTraceSummaryDraft = structuredClone(summary);
+  }
+
+  finalizeRoutingTrace(
+    statusCode: number,
+    outcome?: RoutingTraceRequestOutcome
+  ): RoutingTraceV1 | null {
+    if (!this.routingTrace) return null;
+    const resolvedOutcome =
+      outcome ??
+      (statusCode === 499
+        ? this.providerChain.at(-1)?.reason === "client_abort_no_first_byte"
+          ? "failed"
+          : "client_abort"
+        : this.routingTraceSummaryDraft?.outcome === "deadline" ||
+            this.routingTrace.summary?.outcome === "deadline"
+          ? "deadline"
+          : statusCode >= 200 && statusCode < 400
+            ? "success"
+            : "failed");
+    const now = Date.now();
+    const summaryBase = this.routingTraceSummaryDraft ?? this.routingTrace.summary;
+    if (summaryBase) {
+      this.routingTrace.summary = {
+        ...summaryBase,
+        outcome: resolvedOutcome,
+        statusCode,
+        durationMs: Math.max(0, now - this.routingTrace.startedAt),
+        ttftMs: this.ttftMs,
+      };
+    }
+    const terminalEvent = this.routingTrace.events.find(
+      (event) => event.type === "request_finished"
+    );
+    if (!terminalEvent) {
+      this.appendRoutingTraceEvent({
+        type: "request_finished",
+        outcome: resolvedOutcome,
+        statusCode,
+      });
+    } else {
+      terminalEvent.at = now;
+      terminalEvent.elapsedMs = Math.max(0, now - this.routingTrace.startedAt);
+      terminalEvent.outcome = resolvedOutcome;
+      terminalEvent.statusCode = statusCode;
+      this.advanceRoutingTraceRevision(now);
+      this.persistLiveRoutingTrace();
+    }
+    return this.getRoutingTrace();
+  }
+
+  getRoutingTrace(): RoutingTraceV1 | null {
+    return this.routingTrace ? structuredClone(this.routingTrace) : null;
+  }
+
+  private logRoutingTraceTerminalSummary(): void {
+    const summary = this.routingTrace?.summary;
+    if (this.routingTraceTerminalLogged || this.routingTrace?.mode !== "discovery" || !summary) {
+      return;
+    }
+    this.routingTraceTerminalLogged = true;
+    logger.info("[DiscoveryMetric] Request aggregate", {
+      event: "request_finished",
+      requestId: this.messageContext?.id ?? null,
+      sessionId: this.sessionId,
+      keyId: this.authState?.key?.id ?? this.messageContext?.key?.id ?? null,
+      outcome: summary.outcome,
+      statusCode: summary.statusCode,
+      winnerOrigin: summary.winnerOrigin,
+      winnerProviderId: summary.winnerProviderId,
+      winnerRound: summary.winnerRound,
+      elapsedMs: summary.durationMs,
+      ttftMs: summary.ttftMs,
+      attemptsPerRequest: summary.attemptsPerRequest,
+      maxActiveAttempts: summary.maxActiveAttempts,
+      rounds: summary.rounds,
+      providerMs: summary.providerMs,
+      fallbackPromotions: summary.fallbackPromotions,
+      cancelFailures: summary.cancelFailures,
+    });
+  }
+
+  async closeLiveObservability(): Promise<void> {
+    if (this.liveObservabilityClosePromise) return this.liveObservabilityClosePromise;
+    this.scheduleLiveObservabilityFlush();
+    this.liveObservabilityClosed = true;
+    // 刷新/删除仍持有 this（包含正文）；响应 EOF 不能提前归还这份额度。
+    this.liveObservabilityClosePromise = retainRequestMemoryUntil(
+      (async () => {
+        await (this.liveObservabilityFlushPromise ?? Promise.resolve());
+        this.logRoutingTraceTerminalSummary();
+        if (!this.sessionId || this.requestSequence == null) return;
+        if (!this.shouldTrackSessionObservability()) return;
+        await deleteLiveChain(this.sessionId, this.requestSequence);
+      })(),
+      "live-observability-close"
+    );
+    return this.liveObservabilityClosePromise;
   }
 
   /**
@@ -755,6 +1260,33 @@ export class ProxySession {
 
   getEndpointPolicy(): EndpointPolicy {
     return this.endpointPolicy;
+  }
+
+  /**
+   * 在请求 message 被原地规范化后，同步 raw wire body 与审计日志。
+   * 标准数组请求不会调用此方法，因此原始请求字节仍保持不变。
+   */
+  async syncRequestBodyFromMessage(): Promise<void> {
+    const serialized = JSON.stringify(this.request.message);
+    if (serialized === undefined) {
+      const { getLocale } = await import("next-intl/server");
+      const message = await getErrorMessageServer(
+        await getLocale(),
+        ERROR_CODES.INVALID_NORMALIZED_BODY
+      );
+      throw new ProxyError(message, 400);
+    }
+
+    this.request.buffer = new TextEncoder().encode(serialized).buffer;
+    setLazyRequestLog(this.request);
+  }
+
+  /**
+   * 获取管理语义的 endpoint。
+   * Remote Compaction v2 保留真实 /v1/responses wire path，但复用 v1 compact 的策略、日志和计费分类。
+   */
+  getManagedEndpoint(): string {
+    return this.managedEndpoint ?? this.getEndpoint() ?? "/";
   }
 
   /**
@@ -881,7 +1413,7 @@ export class ProxySession {
     }
 
     const text = typeof blockObj.text === "string" ? blockObj.text.trim() : "";
-    if (!text || text.toLowerCase() !== "warmup") {
+    if (text?.toLowerCase() !== "warmup") {
       return false;
     }
 
@@ -1118,15 +1650,20 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   return optimized;
 }
 
-function resolveSessionEndpointPolicy(requestUrl: URL): EndpointPolicy {
+function resolveSessionManagedEndpoint(
+  requestUrl: URL,
+  requestMessage: Record<string, unknown>
+): string {
   try {
     const pathname = requestUrl.pathname;
     if (typeof pathname === "string" && pathname.length > 0) {
-      return resolveEndpointPolicy(pathname);
+      return isRemoteCompactionV2Request(pathname, requestMessage)
+        ? V1_ENDPOINT_PATHS.RESPONSES_COMPACT
+        : pathname;
     }
   } catch {}
 
-  return resolveEndpointPolicy("/");
+  return "/";
 }
 
 export function extractModelFromPath(pathname: string): string | null {
@@ -1176,11 +1713,15 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   const contentLength = parseContentLengthHeader(c.req.header("content-length"));
   const contentType = c.req.header("content-type") ?? null;
-  const contentEncoding = c.req.header("content-encoding") ?? null;
   const pathname = new URL(c.req.url).pathname;
   // 原始（可能被压缩的）入站字节：用于截断检测与 multipart 透传。
-  const rawBodyBuffer = await c.req.raw.clone().arrayBuffer();
-  const receivedBodyBytes = rawBodyBuffer.byteLength;
+  const multipart = Boolean(
+    getOpenAIImageEndpoint(pathname) && isOpenAIImageMultipartContentType(contentType)
+  );
+  const loaded = await loadRequestBody(c.req.raw, !multipart);
+  retainRequestMemory(c.req.raw, loaded.lease);
+  const rawBodyBuffer = loaded.buffer;
+  const receivedBodyBytes = loaded.originalByteLength;
 
   // Truncation detection: warn only when both conditions are met
   // 1. Absolute difference > 1MB (avoid false positives from minor discrepancies)
@@ -1211,15 +1752,27 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     // 图片 multipart 请求保留 sidecar metadata，并为过滤/敏感词提供文本字段视图。
     // multipart 请求体不会被 content-encoding 压缩，按原始字节透传。
     imageRequestMetadata = await parseOpenAIImageMultipartMetadata(
-      c.req.raw,
+      new Request(c.req.url, {
+        method,
+        headers: c.req.raw.headers,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(rawBodyBuffer));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit),
       pathname,
-      contentType
+      contentType,
+      true
     );
     requestMessage = buildOpenAIImageLogicalBody(imageRequestMetadata);
     requestBodyLog = imageRequestMetadata
       ? getOpenAIImageMultipartSummary(imageRequestMetadata)
       : "(multipart image request)";
     requestBodyLogNote = "图片 multipart 请求已记录结构化摘要。";
+    loaded.lease.shrinkTo(loaded.retainedBytes);
 
     return {
       requestMessage,
@@ -1234,30 +1787,51 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   // 非 multipart：按 content-encoding（zstd/gzip/deflate/br）解压请求体，
   // 使下游模型解析、过滤、计费、日志与转发都基于明文。
-  const decodedBody = decodeRequestBody(rawBodyBuffer, contentEncoding);
-  const requestBodyBuffer = decodedBody.buffer;
+  const requestBodyBuffer = loaded.buffer;
   const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
 
   try {
     const parsedMessage = JSON.parse(requestBodyText) as Record<string, unknown>;
     requestMessage = parsedMessage; // 保留原始数据用于业务逻辑
-    requestBodyLog = JSON.stringify(optimizeRequestMessage(parsedMessage), null, 2); // 仅在日志中优化
+    requestBodyLog = ""; // 有消费者读取 request.log 时才生成日志视图。
   } catch {
     requestMessage = { raw: requestBodyText };
     requestBodyLog = requestBodyText;
     requestBodyLogNote = "请求体不是合法 JSON，已记录原始文本。";
   }
+  // 解析峰值已结束。请求剩余生命周期（含长时间流式响应、过滤、重试与后台消费者）按正文结构
+  // 估算的实际持有量占用额度；密集小对象的 V8 开销计入 structureBytes，不能只按字节数估算。
+  loaded.lease.shrinkTo(loaded.retainedBytes);
 
   return {
     requestMessage,
     requestBodyLog,
     requestBodyLogNote,
     requestBodyBuffer,
+    lazyLog: requestBodyLogNote === undefined,
     contentLength,
     // 维持原语义：actualBodyBytes 表示「接收到的原始（线上）字节」，供
     // isLargeRequestBody 的截断提示判断使用，不受解压后体积影响。
     actualBodyBytes: receivedBodyBytes,
     imageRequestMetadata,
-    decodedContentEncoding: decodedBody.encoding ?? undefined,
+    decodedContentEncoding: loaded.encoding ?? undefined,
   };
+}
+
+function setLazyRequestLog(request: ProxyRequestPayload): void {
+  Object.defineProperty(request, "log", {
+    configurable: true,
+    enumerable: true,
+    get(this: ProxyRequestPayload) {
+      return JSON.stringify(optimizeRequestMessage(this.message), null, 2);
+    },
+    set(this: ProxyRequestPayload, value: string) {
+      Object.defineProperty(this, "log", {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    },
+  });
 }

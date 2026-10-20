@@ -1,0 +1,667 @@
+import { describe, expect, it } from "vitest";
+import {
+  classifyFrame,
+  isRequestEchoFrame,
+  mapProviderTypeToFamily,
+} from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
+
+describe("mapProviderTypeToFamily", () => {
+  it("maps provider types to protocol families", () => {
+    expect(mapProviderTypeToFamily("claude")).toBe("anthropic");
+    expect(mapProviderTypeToFamily("claude-auth")).toBe("anthropic");
+    expect(mapProviderTypeToFamily("codex")).toBe("openai-responses");
+    expect(mapProviderTypeToFamily("openai-compatible")).toBe("openai-chat");
+    expect(mapProviderTypeToFamily("gemini")).toBe("gemini");
+    expect(mapProviderTypeToFamily("gemini-cli")).toBe("gemini");
+    expect(mapProviderTypeToFamily("unknown-type")).toBeNull();
+    expect(mapProviderTypeToFamily(null)).toBeNull();
+  });
+});
+
+describe("classifyFrame: anthropic", () => {
+  it("content: text delta", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_delta",
+        '{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}'
+      )
+    ).toBe("content");
+  });
+
+  it("content: embedded type without SSE event name", () => {
+    expect(
+      classifyFrame("anthropic", null, '{"type":"content_block_delta","delta":{"text":"hi"}}')
+    ).toBe("content");
+  });
+
+  it("content: thinking / partial_json / signature deltas", () => {
+    expect(
+      classifyFrame("anthropic", null, '{"type":"content_block_delta","delta":{"thinking":"..."}}')
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "anthropic",
+        null,
+        '{"type":"content_block_delta","delta":{"partial_json":"{\\"a\\""}}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame("anthropic", null, '{"type":"content_block_delta","delta":{"signature":"sig"}}')
+    ).toBe("content");
+  });
+
+  it("neutral: empty text delta", () => {
+    expect(
+      classifyFrame("anthropic", null, '{"type":"content_block_delta","delta":{"text":""}}')
+    ).toBe("neutral");
+  });
+
+  it("neutral: content_block_start carrying only tool metadata", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"f"}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: content_block_start for empty text block", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"text","text":""}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("requires entity payload before structured content_block_start commits", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"redacted_thinking","data":""}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.com"}]}}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: message_start / ping / message_delta bookkeeping", () => {
+    expect(
+      classifyFrame("anthropic", "message_start", '{"type":"message_start","message":{"id":"m"}}')
+    ).toBe("neutral");
+    expect(classifyFrame("anthropic", "ping", '{"type":"ping"}')).toBe("neutral");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "message_delta",
+        '{"type":"message_delta","usage":{"output_tokens":5}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("content: message_delta 请求级 refusal 是可交付结果（#1491）", () => {
+    const refusal =
+      '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"reasoning_extraction"}},"usage":{"output_tokens":0}}';
+    expect(classifyFrame("anthropic", "message_delta", refusal)).toBe("content");
+    // 无 event 行时按 data.type 识别
+    expect(classifyFrame("anthropic", null, refusal)).toBe("content");
+    // 其他 stop_reason 仍只是 bookkeeping，不能让空流借道提交
+    for (const stopReason of ['"end_turn"', '"max_tokens"', '"stop_sequence"', "null"]) {
+      const data = `{"type":"message_delta","delta":{"stop_reason":${stopReason}}}`;
+      expect(classifyFrame("anthropic", "message_delta", data)).toBe("neutral");
+    }
+    // refusal 字段只在 message_delta 上有语义
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_delta",
+        '{"type":"content_block_delta","delta":{"stop_reason":"refusal"}}'
+      )
+    ).toBe("neutral");
+    // 同帧携带 error 时错误优先，不能被当作拒绝放行
+    expect(
+      classifyFrame(
+        "anthropic",
+        "message_delta",
+        '{"type":"message_delta","delta":{"stop_reason":"refusal"},"error":{"message":"boom"}}'
+      )
+    ).toBe("error");
+  });
+
+  it("error: error event and fake-200 error envelope", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "error",
+        '{"type":"error","error":{"type":"overloaded_error","message":"x"}}'
+      )
+    ).toBe("error");
+    expect(classifyFrame("anthropic", null, '{"error":{"message":"boom"}}')).toBe("error");
+  });
+
+  it("error takes precedence over content in the same frame", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_delta",
+        '{"type":"content_block_delta","delta":{"text":"hi"},"error":{"message":"x"}}'
+      )
+    ).toBe("error");
+  });
+
+  it("terminal: message_stop", () => {
+    expect(classifyFrame("anthropic", "message_stop", '{"type":"message_stop"}')).toBe("terminal");
+  });
+
+  it("malformed: broken or non-object JSON", () => {
+    expect(classifyFrame("anthropic", null, '{"type":')).toBe("malformed");
+    expect(classifyFrame("anthropic", null, "plain text")).toBe("malformed");
+    expect(classifyFrame("anthropic", null, '"just a string"')).toBe("malformed");
+  });
+
+  it("neutral: unknown future event", () => {
+    expect(classifyFrame("anthropic", "future_event", '{"type":"future_event"}')).toBe("neutral");
+  });
+});
+
+describe("classifyFrame: openai-chat", () => {
+  it("content: delta content / reasoning / tool arguments / refusal / audio", () => {
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":"hi"}}]}')).toBe(
+      "content"
+    );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_content":"reasoning step"}}]}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"f","arguments":"{}"}}]}}]}'
+      )
+    ).toBe("content");
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"refusal":"no"}}]}')).toBe(
+      "content"
+    );
+    expect(
+      classifyFrame("openai-chat", null, '{"choices":[{"delta":{"audio":{"data":"b64"}}}]}')
+    ).toBe("content");
+  });
+
+  it("neutral: role-only first chunk / finish_reason-only / usage-only", () => {
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"role":"assistant"}}]}')).toBe(
+      "neutral"
+    );
+    expect(
+      classifyFrame("openai-chat", null, '{"choices":[{"delta":{},"finish_reason":"stop"}]}')
+    ).toBe("neutral");
+    expect(classifyFrame("openai-chat", null, '{"choices":[],"usage":{"total_tokens":10}}')).toBe(
+      "neutral"
+    );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"f","arguments":""}}]}}]}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: empty string content or reasoning delta", () => {
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":""}}]}')).toBe(
+      "neutral"
+    );
+    expect(
+      classifyFrame("openai-chat", null, '{"choices":[{"delta":{"reasoning_content":""}}]}')
+    ).toBe("neutral");
+  });
+
+  it("error: in-stream error payload", () => {
+    expect(classifyFrame("openai-chat", null, '{"error":{"message":"rate limited"}}')).toBe(
+      "error"
+    );
+  });
+
+  it("terminal: [DONE] sentinel", () => {
+    expect(classifyFrame("openai-chat", null, "[DONE]")).toBe("terminal");
+    expect(classifyFrame("openai-chat", null, "  [DONE]  ")).toBe("terminal");
+  });
+
+  it("malformed: non-JSON that is not the sentinel", () => {
+    expect(classifyFrame("openai-chat", null, "DONE")).toBe("malformed");
+  });
+});
+
+describe("classifyFrame: openai-responses", () => {
+  it("content: output_text delta via SSE event name", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_text.delta",
+        '{"type":"response.output_text.delta","delta":"hi"}'
+      )
+    ).toBe("content");
+  });
+
+  it("content: embedded type without event name", () => {
+    expect(
+      classifyFrame("openai-responses", null, '{"type":"response.output_text.delta","delta":"hi"}')
+    ).toBe("content");
+  });
+
+  it("content: reasoning delta / function_call arguments done / partial image", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.reasoning_text.delta",
+        '{"type":"response.reasoning_text.delta","delta":"think"}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.function_call_arguments.done",
+        '{"type":"response.function_call_arguments.done","arguments":"{}"}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.image_generation_call.partial_image",
+        '{"type":"response.image_generation_call.partial_image","partial_image_b64":"abc"}'
+      )
+    ).toBe("content");
+  });
+
+  it("content: custom tool-call input delta and done payloads", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.delta",
+        '{"type":"response.custom_tool_call_input.delta","delta":"{\\"path\\":\\"README.md\\"}"}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.done",
+        '{"type":"response.custom_tool_call_input.done","input":"{\\"path\\":\\"README.md\\"}"}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: empty custom tool-call input delta and done payloads", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.delta",
+        '{"type":"response.custom_tool_call_input.delta","delta":""}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.done",
+        '{"type":"response.custom_tool_call_input.done","input":""}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: output_item.added carrying only tool metadata", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.added",
+        '{"type":"response.output_item.added","item":{"type":"function_call","name":"get_x"}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("content: output_item tool payload with complete arguments", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"function_call","name":"get_x","arguments":"{}"}}'
+      )
+    ).toBe("content");
+  });
+
+  it("content: compaction output item with opaque encrypted content", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("content");
+  });
+
+  it("content: response.completed carrying compaction output with opaque state", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("content");
+  });
+
+  it("terminal: response.completed without a non-empty compaction output", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":""}]}}'
+      )
+    ).toBe("terminal");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("terminal");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":""},{"type":"reasoning","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("terminal");
+  });
+
+  it("rejects non-string compaction encrypted content", () => {
+    for (const encryptedContent of [true, 42, { opaque: "state" }]) {
+      expect(
+        classifyFrame(
+          "openai-responses",
+          "response.output_item.done",
+          JSON.stringify({
+            type: "response.output_item.done",
+            item: { type: "compaction", encrypted_content: encryptedContent },
+          })
+        )
+      ).toBe("neutral");
+      expect(
+        classifyFrame(
+          "openai-responses",
+          "response.completed",
+          JSON.stringify({
+            type: "response.completed",
+            response: {
+              status: "completed",
+              output: [{ type: "compaction", encrypted_content: encryptedContent }],
+            },
+          })
+        )
+      ).toBe("terminal");
+    }
+  });
+
+  it("neutral: empty or non-compaction encrypted output item", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":""}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"reasoning","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.added",
+        '{"type":"response.output_item.added","item":{"type":"compaction","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: output_item.added without item.name (message item)", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.added",
+        '{"type":"response.output_item.added","item":{"type":"message"}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: response.created with error:null does not hit error rule", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.created",
+        '{"type":"response.created","response":{"id":"r","error":null}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("neutral: sub-tool failures are recoverable", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.mcp_call.failed",
+        '{"type":"response.mcp_call.failed"}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("error: top-level error event / response.failed / populated response.error", () => {
+    expect(
+      classifyFrame("openai-responses", "error", '{"type":"error","code":"x","message":"m"}')
+    ).toBe("error");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.error",
+        '{"type":"response.error","code":"stream_read_error","message":"stream_read_error"}'
+      )
+    ).toBe("error");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.failed",
+        '{"type":"response.failed","response":{"error":{"message":"m"}}}'
+      )
+    ).toBe("error");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.in_progress",
+        '{"type":"response.in_progress","response":{"error":{"message":"m"}}}'
+      )
+    ).toBe("error");
+  });
+
+  it("terminal: response.completed / response.incomplete", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"output":[],"error":null}}'
+      )
+    ).toBe("terminal");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.incomplete",
+        '{"type":"response.incomplete","response":{"error":null}}'
+      )
+    ).toBe("terminal");
+  });
+});
+
+describe("classifyFrame: gemini", () => {
+  it("content: text / functionCall / inlineData parts", () => {
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"}}]}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"candidates":[{"content":{"parts":[{"functionCall":{"name":"f","args":{}}}]}}]}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"b64"}}]}}]}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: usageMetadata-only chunk", () => {
+    expect(
+      classifyFrame("gemini", null, '{"usageMetadata":{"totalTokenCount":10},"modelVersion":"g"}')
+    ).toBe("neutral");
+  });
+
+  it("neutral: empty parts / empty text", () => {
+    expect(classifyFrame("gemini", null, '{"candidates":[{"content":{"parts":[]}}]}')).toBe(
+      "neutral"
+    );
+    expect(
+      classifyFrame("gemini", null, '{"candidates":[{"content":{"parts":[{"text":""}]}}]}')
+    ).toBe("neutral");
+  });
+
+  it("error: error chunk / promptFeedback.blockReason / abnormal finishReason", () => {
+    expect(
+      classifyFrame("gemini", null, '{"error":{"code":500,"message":"x","status":"INTERNAL"}}')
+    ).toBe("error");
+    expect(classifyFrame("gemini", null, '{"promptFeedback":{"blockReason":"SAFETY"}}')).toBe(
+      "error"
+    );
+    expect(classifyFrame("gemini", null, '{"candidates":[{"finishReason":"SAFETY"}]}')).toBe(
+      "error"
+    );
+    expect(
+      classifyFrame("gemini", null, '{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}')
+    ).toBe("error");
+  });
+
+  it("error precedence: SAFETY finishReason beats content in same chunk", () => {
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"candidates":[{"content":{"parts":[{"text":"partial"}]},"finishReason":"SAFETY"}]}'
+      )
+    ).toBe("error");
+  });
+
+  it("error precedence: wrapper error beats response content", () => {
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"error":{"message":"failed"},"response":{"candidates":[{"content":{"parts":[{"text":"must not commit"}]}}]}}'
+      )
+    ).toBe("error");
+  });
+
+  it("content precedence: normal STOP with text is content, not terminal", () => {
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"candidates":[{"content":{"parts":[{"text":"done"}]},"finishReason":"STOP"}]}'
+      )
+    ).toBe("content");
+  });
+
+  it("terminal: STOP / MAX_TOKENS finishReason without content", () => {
+    expect(classifyFrame("gemini", null, '{"candidates":[{"finishReason":"STOP"}]}')).toBe(
+      "terminal"
+    );
+    expect(classifyFrame("gemini", null, '{"candidates":[{"finishReason":"MAX_TOKENS"}]}')).toBe(
+      "terminal"
+    );
+  });
+});
+
+describe("classifyFrame: shared edge cases", () => {
+  it("neutral: empty / whitespace-only data", () => {
+    expect(classifyFrame("anthropic", null, "")).toBe("neutral");
+    expect(classifyFrame("openai-chat", null, "   ")).toBe("neutral");
+  });
+
+  it("malformed: truncated JSON in every family", () => {
+    for (const family of ["anthropic", "openai-chat", "openai-responses", "gemini"] as const) {
+      expect(classifyFrame(family, null, '{"cut')).toBe("malformed");
+    }
+  });
+
+  it("neutral: JSON array payloads with no rule hits", () => {
+    expect(classifyFrame("openai-chat", null, "[]")).toBe("neutral");
+  });
+});
+
+describe("isRequestEchoFrame", () => {
+  it("recognizes openai-responses lifecycle echo frames by event name", () => {
+    expect(isRequestEchoFrame("openai-responses", "response.created", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.in_progress", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.queued", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.output_text.delta", "{}")).toBe(false);
+  });
+
+  it("sniffs the data head when the event line is absent", () => {
+    expect(
+      isRequestEchoFrame("openai-responses", null, '{"type":"response.created","response":{}}')
+    ).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", null, '{"type":"other"}')).toBe(false);
+    // type 不在头部 64 字节内则不嗅探（上游实践中 type 总在最前）
+    expect(
+      isRequestEchoFrame(
+        "openai-responses",
+        null,
+        `{"pad":"${"z".repeat(80)}","type":"response.created"}`
+      )
+    ).toBe(false);
+  });
+
+  it("never matches for families without echo frames", () => {
+    expect(isRequestEchoFrame("anthropic", "response.created", "{}")).toBe(false);
+    expect(isRequestEchoFrame("openai-chat", null, '{"type":"response.created"}')).toBe(false);
+    expect(isRequestEchoFrame("gemini", null, '{"type":"response.created"}')).toBe(false);
+  });
+});

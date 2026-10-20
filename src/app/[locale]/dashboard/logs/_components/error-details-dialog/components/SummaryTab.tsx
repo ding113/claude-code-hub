@@ -20,30 +20,27 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
-import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
+import { ThinkingEffortBadge } from "@/components/customs/thinking-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
-import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
+import { calculateOutputRate, shouldHideOutputRate } from "@/lib/utils/performance-formatter";
 import {
   getPricingResolutionSpecialSetting,
   getThinkingSignatureModelDetectionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
+import { extractThinkingEffortInfo } from "@/lib/utils/thinking-effort";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
-import {
-  calculateOutputRate,
-  isInProgressStatus,
-  isSuccessStatus,
-  type SummaryTabProps,
-  shouldHideOutputRate,
-} from "../types";
+import { isInProgressStatus, isSuccessStatus, type SummaryTabProps } from "../types";
+import { CachePerformance } from "./CachePerformance";
+import { buildLogsFilterHref } from "./logs-filter-href";
 
 export function SummaryTab({
   statusCode,
@@ -59,6 +56,12 @@ export function SummaryTab({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  theoreticalCacheTokens,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
@@ -66,11 +69,14 @@ export function SummaryTab({
   costBreakdown,
   hedgeLosers,
   providerChain,
+  routingTrace,
   context1mApplied,
   durationMs,
-  ttfbMs,
+  firstByteMs,
   sessionId,
+  sourceSessionId,
   requestSequence,
+  requestId,
   userAgent,
   clientIp,
   endpoint,
@@ -84,10 +90,38 @@ export function SummaryTab({
 
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
-  const outputRate = calculateOutputRate(outputTokens, durationMs, ttfbMs);
-  const hideRate = shouldHideOutputRate(outputRate, durationMs, ttfbMs);
+  const outputRate = calculateOutputRate(
+    outputTokens ?? null,
+    durationMs ?? null,
+    firstByteMs ?? null
+  );
+  const hideRate = shouldHideOutputRate(outputRate, durationMs ?? null, firstByteMs ?? null);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
+  const sessionRequestParams = new URLSearchParams();
+  if (requestSequence != null) {
+    sessionRequestParams.set("seq", String(requestSequence));
+  }
+  if (sourceSessionId) {
+    sessionRequestParams.set("sourceSessionId", sourceSessionId);
+  }
+  if (requestId != null) {
+    sessionRequestParams.set("requestId", String(requestId));
+  }
+  const sessionMessagesHref = sessionId
+    ? `/dashboard/sessions/${encodeURIComponent(sessionId)}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
+    : "";
+  const identityRows = [
+    sessionId
+      ? {
+          label: t("metadata.canonicalSessionId"),
+          value: sessionId,
+        }
+      : null,
+    sourceSessionId && sourceSessionId !== sessionId
+      ? { label: t("metadata.clientSessionId"), value: sourceSessionId }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null);
   const modelAudit = resolveModelAuditDisplay({
     originalModel: originalModel ?? null,
     model: currentModel ?? null,
@@ -107,7 +141,23 @@ export function SummaryTab({
     getThinkingSignatureModelDetectionSpecialSetting(specialSettings);
   const showNoSignatureBadge =
     thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
-  const effortInfo = extractAnthropicEffortInfo(specialSettings);
+  const thinkingEffortInfo = extractThinkingEffortInfo(specialSettings);
+  const effortMessageKey =
+    thinkingEffortInfo?.source === "codex"
+      ? "reasoningEffort"
+      : thinkingEffortInfo?.source === "openai"
+        ? "reasoningEffortOpenai"
+        : "effort";
+  const effortDisplay = thinkingEffortInfo
+    ? {
+        requestedEffort: thinkingEffortInfo.requestedEffort,
+        effectiveEffort: thinkingEffortInfo.effectiveEffort,
+        isOverridden: thinkingEffortInfo.isOverridden,
+        label: t(`${effortMessageKey}.label`),
+        tooltip: t(`${effortMessageKey}.tooltip`),
+        overridden: t(`${effortMessageKey}.overridden`),
+      }
+    : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =
@@ -279,32 +329,44 @@ export function SummaryTab({
         </div>
       )}
 
+      <CachePerformance
+        actualCacheRate={actualCacheRate ?? null}
+        theoreticalCacheRate={theoreticalCacheRate ?? null}
+        requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+        requestCacheMetricAvailability={requestCacheMetricAvailability}
+        cacheInputTotal={cacheInputTotal ?? null}
+        cacheReadInputTokens={cacheReadInputTokens ?? null}
+        theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+      />
+
       {/* Session Info */}
-      {(sessionId || effortInfo) && (
+      {(identityRows.length > 0 || effortDisplay) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">{t("metadata.sessionInfo")}</h4>
           <div className="rounded-lg border bg-card divide-y">
-            {sessionId && (
-              <div className="p-4">
+            {identityRows.map((identity) => (
+              <div className="p-4" key={`${identity.label}-${identity.value}`}>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono break-all">{sessionId}</code>
-                      {requestSequence && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {identity.label}:{" "}
+                      </span>
+                      <Link
+                        href={buildLogsFilterHref(identity.value)}
+                        className="text-xs font-mono truncate min-w-0 underline-offset-2 hover:underline"
+                      >
+                        {identity.value}
+                      </Link>
+                      {identity.value === sessionId && requestSequence && (
                         <Badge variant="outline" className="text-xs shrink-0">
                           #{requestSequence}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  {hasMessages && !checkingMessages && (
-                    <Link
-                      href={
-                        requestSequence
-                          ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                          : `/dashboard/sessions/${sessionId}/messages`
-                      }
-                    >
+                  {identity.value === sessionId && hasMessages && !checkingMessages && (
+                    <Link href={sessionMessagesHref} prefetch={false}>
                       <Button variant="outline" size="sm">
                         <ExternalLink className="h-4 w-4 mr-2" />
                         {t("viewDetails")}
@@ -313,38 +375,44 @@ export function SummaryTab({
                   )}
                 </div>
               </div>
-            )}
-            {effortInfo && (
+            ))}
+            {effortDisplay && (
               <div className="p-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">{t("effort.label")}:</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <AnthropicEffortBadge
-                            effort={effortInfo.originalEffort}
-                            label={effortInfo.originalEffort}
-                          />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs max-w-xs">{t("effort.tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {effortInfo.isOverridden && effortInfo.overriddenEffort && (
+                  <span className="text-xs text-muted-foreground">{effortDisplay.label}:</span>
+                  {effortDisplay.requestedEffort && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <ThinkingEffortBadge
+                              effort={effortDisplay.requestedEffort}
+                              label={effortDisplay.requestedEffort}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs max-w-xs">{effortDisplay.tooltip}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {effortDisplay.isOverridden && effortDisplay.effectiveEffort && (
                     <>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <AnthropicEffortBadge
-                        effort={effortInfo.overriddenEffort}
-                        label={effortInfo.overriddenEffort}
+                      {effortDisplay.requestedEffort && (
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                      )}
+                      <ThinkingEffortBadge
+                        effort={effortDisplay.effectiveEffort}
+                        label={effortDisplay.effectiveEffort}
                       />
                     </>
                   )}
                 </div>
-                {effortInfo.isOverridden && (
-                  <p className="text-[11px] text-muted-foreground mt-1">{t("effort.overridden")}</p>
+                {effortDisplay.isOverridden && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {effortDisplay.overridden}
+                  </p>
                 )}
               </div>
             )}
@@ -627,10 +695,23 @@ export function SummaryTab({
             {(() => {
               const hedgeWinnerStep =
                 providerChain?.find((item) => item.reason === "hedge_winner") ?? null;
+              const discoveryWinnerEvent =
+                routingTrace?.mode === "discovery"
+                  ? routingTrace.events.findLast(
+                      (event) =>
+                        event.type === "winner_committed" &&
+                        (routingTrace.summary?.winnerProviderId == null ||
+                          event.provider?.id === routingTrace.summary.winnerProviderId)
+                    )
+                  : null;
+              const discoveryWinner = discoveryWinnerEvent?.provider;
+              const discoveryWinnerAttempt = discoveryWinnerEvent?.attemptId?.match(/:(\d+)$/)?.[1];
               const hedgeTable = buildHedgeBillingTable(costUsd, hedgeLosers, {
-                providerId: hedgeWinnerStep?.id ?? null,
-                providerName: hedgeWinnerStep?.name ?? null,
-                attemptNumber: hedgeWinnerStep?.attemptNumber ?? null,
+                providerId: hedgeWinnerStep?.id ?? discoveryWinner?.id ?? null,
+                providerName: hedgeWinnerStep?.name ?? discoveryWinner?.name ?? null,
+                attemptNumber:
+                  hedgeWinnerStep?.attemptNumber ??
+                  (discoveryWinnerAttempt ? Number(discoveryWinnerAttempt) : null),
                 inputTokens,
                 outputTokens,
                 cacheCreationInputTokens,
@@ -649,7 +730,10 @@ export function SummaryTab({
                       {t("billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
                     </Badge>
                   </div>
-                  <div className="overflow-x-auto rounded-md border">
+                  <div
+                    className="overflow-x-auto rounded-md border"
+                    data-testid="provider-racing-billing-table"
+                  >
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b bg-muted/40 text-muted-foreground">

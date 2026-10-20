@@ -28,93 +28,118 @@ const cloudflareErrorCases = [
 ] as const;
 
 describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
-  it.each(httpStatusCases)("keeps matching a standalone HTTP $statusCode status token", ({
-    statusCode,
-    matcherId,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}`)).toEqual({
-      statusCode,
-      matcherId,
+  it("prefers explicit numeric and numeric-string status fields in error JSON", () => {
+    expect(inferUpstreamErrorStatusCodeFromText('{"error":{"status_code":"422"}}')).toEqual({
+      statusCode: 422,
+      matcherId: "structured_status",
+    });
+    expect(inferUpstreamErrorStatusCodeFromText('{"status":429}')).toEqual({
+      statusCode: 429,
+      matcherId: "structured_status",
     });
   });
 
-  it.each(
-    httpStatusCases
-  )("does not treat HTTP $statusCode followed by a decimal fraction as a status token", ({
-    statusCode,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.12`)).toBeNull();
+  it("recognizes a cyber policy stream error as a bad request", () => {
+    expect(
+      inferUpstreamErrorStatusCodeFromText(
+        '{"type":"error","code":"cyber_policy","message":"flagged for possible cybersecurity risk"}'
+      )
+    ).toEqual({ statusCode: 400, matcherId: "structured_bad_request" });
   });
 
-  it.each(
-    httpStatusCases
-  )("does not treat HTTP $statusCode embedded in a longer number as a status token", ({
-    statusCode,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}12`)).toBeNull();
-  });
-
-  it.each(
-    httpStatusCases
-  )("does not treat HTTP $statusCode followed by a letter as a status token", ({ statusCode }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}abc`)).toBeNull();
-  });
-
-  it.each(httpStatusCases)("keeps matching HTTP $statusCode followed by sentence punctuation", ({
-    statusCode,
-    matcherId,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.`)).toEqual({
-      statusCode,
-      matcherId,
+  it.each([
+    '{"type":"error","error":{"type":"invalid_request_error"}}',
+    '{"type":"error","error":{"code":"invalid_prompt"}}',
+    '{"type":"error","code":"context_length_exceeded"}',
+    '{"response":{"error":{"status":"INVALID_ARGUMENT"}}}',
+  ])("recognizes structured client error semantics without an HTTP status: %s", (body) => {
+    expect(inferUpstreamErrorStatusCodeFromText(body)).toEqual({
+      statusCode: 400,
+      matcherId: "structured_bad_request",
     });
   });
 
-  it.each(cloudflareErrorCases)("keeps matching a standalone Cloudflare Error $code token", ({
-    code,
-    statusCode,
-    matcherId,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}`)).toEqual({
-      statusCode,
-      matcherId,
-    });
-  });
+  it.each(httpStatusCases)(
+    "keeps matching a standalone HTTP $statusCode status token",
+    ({ statusCode, matcherId }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}`)).toEqual({
+        statusCode,
+        matcherId,
+      });
+    }
+  );
 
-  it.each(
-    cloudflareErrorCases
-  )("does not treat Cloudflare Error $code followed by a decimal fraction as a code token", ({
-    code,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.7`)).toBeNull();
-  });
+  it.each(httpStatusCases)(
+    "does not treat HTTP $statusCode followed by a decimal fraction as a status token",
+    ({ statusCode }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.12`)).toBeNull();
+    }
+  );
 
-  it.each(
-    cloudflareErrorCases
-  )("does not treat Cloudflare Error $code embedded in a longer number as a code token", ({
-    code,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}7`)).toBeNull();
-  });
+  it.each(httpStatusCases)(
+    "does not treat HTTP $statusCode embedded in a longer number as a status token",
+    ({ statusCode }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}12`)).toBeNull();
+    }
+  );
 
-  it.each(
-    cloudflareErrorCases
-  )("does not treat Cloudflare Error $code followed by a letter as a code token", ({ code }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}x`)).toBeNull();
-  });
+  it.each(httpStatusCases)(
+    "does not treat HTTP $statusCode followed by a letter as a status token",
+    ({ statusCode }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}abc`)).toBeNull();
+    }
+  );
 
-  it.each(
-    cloudflareErrorCases
-  )("keeps matching Cloudflare Error $code followed by sentence punctuation", ({
-    code,
-    statusCode,
-    matcherId,
-  }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.`)).toEqual({
-      statusCode,
-      matcherId,
-    });
-  });
+  it.each(httpStatusCases)(
+    "keeps matching HTTP $statusCode followed by sentence punctuation",
+    ({ statusCode, matcherId }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.`)).toEqual({
+        statusCode,
+        matcherId,
+      });
+    }
+  );
+
+  it.each(cloudflareErrorCases)(
+    "keeps matching a standalone Cloudflare Error $code token",
+    ({ code, statusCode, matcherId }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}`)).toEqual({
+        statusCode,
+        matcherId,
+      });
+    }
+  );
+
+  it.each(cloudflareErrorCases)(
+    "does not treat Cloudflare Error $code followed by a decimal fraction as a code token",
+    ({ code }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.7`)).toBeNull();
+    }
+  );
+
+  it.each(cloudflareErrorCases)(
+    "does not treat Cloudflare Error $code embedded in a longer number as a code token",
+    ({ code }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}7`)).toBeNull();
+    }
+  );
+
+  it.each(cloudflareErrorCases)(
+    "does not treat Cloudflare Error $code followed by a letter as a code token",
+    ({ code }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}x`)).toBeNull();
+    }
+  );
+
+  it.each(cloudflareErrorCases)(
+    "keeps matching Cloudflare Error $code followed by sentence punctuation",
+    ({ code, statusCode, matcherId }) => {
+      expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.`)).toEqual({
+        statusCode,
+        matcherId,
+      });
+    }
+  );
 
   it("does not infer service_unavailable from an AWS request id containing 503", () => {
     const text = "request id: 202604250550399959";

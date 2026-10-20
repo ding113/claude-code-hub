@@ -12,9 +12,9 @@ import WebSocket, { type RawData, WebSocketServer } from "ws";
  *
  * Default Vitest/E2E runs skip this file's body. To run it locally:
  *   PowerShell:
- *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_EXPECT_TRANSPORT="websocket"; npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_EXPECT_TRANSPORT="websocket"; npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  *   POSIX:
- *     CCH_CODEX_E2E=1 CCH_CODEX_E2E_EXPECT_TRANSPORT=websocket npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     CCH_CODEX_E2E=1 CCH_CODEX_E2E_EXPECT_TRANSPORT=websocket npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  *
  * `CCH_CODEX_E2E_EXPECT_TRANSPORT=any|http|websocket` controls how strict the
  * assertion is. Use `websocket` when validating a Codex build that should speak
@@ -23,7 +23,7 @@ import WebSocket, { type RawData, WebSocketServer } from "ws";
  *
  * Fault-injection probes are also opt-in:
  *   PowerShell:
- *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_FAULTS="1"; npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_FAULTS="1"; npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  */
 
 type ProbeEvent =
@@ -1085,6 +1085,51 @@ describe("CCH Responses WebSocket edge E2E", () => {
       expect(client.ws.readyState).toBe(WebSocket.OPEN);
       client.ws.close(1000, "test_done");
       await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("rejects internal bodies that cannot fit in one outbound WebSocket event", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res, body }) => {
+        if (body.input === "oversized-json") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end("x".repeat(1024 * 1024 + 1));
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.end(`data: ${"x".repeat(1024 * 1024 + 1)}`);
+      });
+
+      const jsonClient = connectRawWsClient(harness.port);
+      await jsonClient.opened;
+      sendResponseCreate(jsonClient, { model, input: "oversized-json" });
+      await jsonClient.nextMessage(
+        errorEvent("internal_response_too_large"),
+        3000,
+        "oversized JSON response was not rejected"
+      );
+      expect(await jsonClient.closeEvent).toEqual({
+        code: 1011,
+        reason: "internal_response_too_large",
+      });
+
+      const sseClient = connectRawWsClient(harness.port);
+      await sseClient.opened;
+      sendResponseCreate(sseClient, { model, input: "oversized-sse" });
+      await sseClient.nextMessage(
+        errorEvent("internal_sse_event_too_large"),
+        3000,
+        "oversized unterminated SSE event was not rejected"
+      );
+      expect(await sseClient.closeEvent).toEqual({
+        code: 1011,
+        reason: "internal_sse_event_too_large",
+      });
     } finally {
       await close();
     }

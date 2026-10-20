@@ -176,6 +176,77 @@ describe("buildFakeStreamingResponse — stream path", () => {
     expect(finalBuffer).toContain("event: message_stop");
   });
 
+  test("does not accumulate heartbeat frames while the downstream reader is stalled", async () => {
+    const performAttempt = vi.fn(
+      (_index: number, signal: AbortSignal) =>
+        new Promise<{ status: number; body: string; providerId: string }>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => reject(Object.assign(new Error("cancelled"), { name: "AbortError" })),
+            { once: true }
+          );
+        })
+    );
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+    });
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    const reader = response.body?.getReader();
+    const first = await reader?.read();
+    expect(new TextDecoder().decode(first?.value)).toBe(": ping\n\n");
+
+    let secondSettled = false;
+    const second = reader?.read().then((result) => {
+      secondSettled = true;
+      return result;
+    });
+    await Promise.resolve();
+    expect(secondSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(new TextDecoder().decode((await second)?.value)).toBe(": ping\n\n");
+    await reader?.cancel();
+  });
+
+  test("downstream cancellation aborts the active attempt and removes the heartbeat timer", async () => {
+    let attemptAborted = false;
+    const performAttempt = vi.fn(
+      (_index: number, signal: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              attemptAborted = true;
+              reject(Object.assign(new Error("cancelled"), { name: "AbortError" }));
+            },
+            { once: true }
+          );
+        })
+    );
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+    });
+    const reader = response.body?.getReader();
+    await reader?.read();
+
+    await reader?.cancel("downstream disconnected");
+    await vi.runAllTimersAsync();
+
+    expect(attemptAborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test("client abort closes the response without emitting success terminator", async () => {
     const abortController = new AbortController();
 

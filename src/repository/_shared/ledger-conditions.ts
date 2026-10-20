@@ -17,7 +17,13 @@ const NON_BILLING_LEDGER_ENDPOINT_CONDITION = sql`(
  * Warmup 行在触发器层面已过滤，不会进入 usage_ledger，
  * 此外 count_tokens / compact 虽写 message_request，但不得进入 billable ledger。
  */
-export const LEDGER_BILLING_CONDITION = sql`(${usageLedger.blockedBy} IS NULL AND ${NON_BILLING_LEDGER_ENDPOINT_CONDITION})`;
+export const LEDGER_BILLING_CONDITION = sql`(${usageLedger.blockedBy} IS NULL AND ${usageLedger.isReplay} = false AND ${NON_BILLING_LEDGER_ENDPOINT_CONDITION})`;
+
+/**
+ * 使用记录与按 ID/Session 回读允许 Replay，但仍排除拦截行和非计费端点。
+ * Replay 的 cost 已在 ledger 写入层固定为 0，不应从审计可见性中移除。
+ */
+export const LEDGER_AUDIT_CONDITION = sql`(${usageLedger.blockedBy} IS NULL AND ${NON_BILLING_LEDGER_ENDPOINT_CONDITION})`;
 
 /**
  * 非计费查询中排除被阻断请求的别名条件（语义更清晰）。

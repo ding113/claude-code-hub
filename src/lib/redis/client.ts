@@ -1,7 +1,9 @@
 import Redis, { type RedisOptions } from "ioredis";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
+let redisClientUrl: string | null = null;
 
 function maskRedisUrl(redisUrl: string) {
   try {
@@ -46,6 +48,7 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
   isTLS: boolean;
   options: RedisOptions;
 } {
+  const env = getEnvConfig();
   const isTLS = (() => {
     try {
       const parsed = new URL(redisUrl);
@@ -59,6 +62,14 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
   const baseOptions: RedisOptions = {
     enableOfflineQueue: false, // 快速失败
     maxRetriesPerRequest: 3,
+    commandTimeout: env.REDIS_COMMAND_TIMEOUT_MS,
+    // commandTimeout only rejects the caller Promise; it does not remove a sent
+    // command from ioredis' RESP-order queue. Destroy a no-progress socket shortly
+    // afterwards so the shared queue cannot grow without bound under a TCP blackhole.
+    socketTimeout: env.REDIS_COMMAND_TIMEOUT_MS + 5_000,
+    // Timed-out writes have already been treated as fail-open by the application.
+    // Replaying them after reconnect would mutate Redis after the request completed.
+    autoResendUnfulfilledCommands: false,
     retryStrategy(times: number) {
       if (times > 5) {
         logger.error("[Redis] Max retries reached, giving up");
@@ -95,9 +106,20 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
   const safeRedisUrl = maskRedisUrl(redisUrl);
 
+  if (redisClient && redisClientUrl !== redisUrl) {
+    const staleClient = redisClient;
+    redisClient = null;
+    redisClientUrl = null;
+    staleClient.disconnect();
+    logger.warn("[Redis] Connection configuration changed, replacing client", {
+      redisUrl: safeRedisUrl,
+    });
+  }
+
   if (redisClient) {
     if (redisClient.status === "end") {
       redisClient = null;
+      redisClientUrl = null;
     } else {
       return redisClient;
     }
@@ -113,6 +135,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
     // 3. 使用组合后的配置创建客户端
     const client = new Redis(redisUrl, redisOptions);
     redisClient = client;
+    redisClientUrl = redisUrl;
 
     // 4. 保持原始的事件监听器
     client.on("connect", () => {
@@ -143,6 +166,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
       if (redisClient !== client) return;
       logger.warn("[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
       redisClient = null;
+      redisClientUrl = null;
     });
 
     // 5. 返回客户端实例
@@ -169,6 +193,7 @@ export async function closeRedis(): Promise<void> {
   } finally {
     if (redisClient === client) {
       redisClient = null;
+      redisClientUrl = null;
     }
   }
 }

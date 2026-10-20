@@ -2195,12 +2195,12 @@ function getOpenAPIServers() {
 const openApiDocumentConfig = {
   openapi: "3.1.0",
   info: {
-    title: "Claude Code Hub API",
+    title: "CC Hub API",
     version: "1.0.0",
     description: `
-# Claude Code Hub 管理 API
+# CC Hub 管理 API
 
-Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能:
+CC Hub 是一个 Claude API 代理中转服务平台,提供以下功能:
 
 - 🔐 **用户和密钥管理** - 统一的用户体系和 API Key 管理
 - 🌐 **供应商管理** - 多供应商支持,智能负载均衡和故障转移
@@ -2220,7 +2220,7 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 
 #### 方法 1：通过 Web UI 登录（推荐）
 
-1. 访问 Claude Code Hub 登录页面
+1. 访问 CC Hub 登录页面
 2. 使用您的 API Key 或管理员令牌（ADMIN_TOKEN）登录
 3. 登录成功后，浏览器会自动设置 \`auth-token\` Cookie
 4. 在同一浏览器中访问 API 文档页面即可直接测试（Cookie 自动携带）

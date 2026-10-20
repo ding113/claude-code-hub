@@ -259,7 +259,8 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
         value === "low" ||
         value === "medium" ||
         value === "high" ||
-        value === "xhigh"
+        value === "xhigh" ||
+        value === "max"
       );
     case "codex_reasoning_summary_preference":
       return value === "inherit" || value === "auto" || value === "detailed";

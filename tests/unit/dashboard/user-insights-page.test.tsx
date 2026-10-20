@@ -214,8 +214,8 @@ describe("UserInsightsView", () => {
     expect(heading!.textContent).toContain("TestUser");
     expect(mockGetUserInsightsOverview).toHaveBeenCalledWith(
       10,
-      resolveTimePresetDates("7days").startDate,
-      resolveTimePresetDates("7days").endDate
+      resolveTimePresetDates("7days", "UTC").startDate,
+      resolveTimePresetDates("7days", "UTC").endDate
     );
 
     unmount();
@@ -265,7 +265,7 @@ describe("UserInsightsView", () => {
 
     await flushMicrotasks();
 
-    const { startDate, endDate } = resolveTimePresetDates("30days");
+    const { startDate, endDate } = resolveTimePresetDates("30days", "UTC");
     expect(mockGetUserInsightsOverview).toHaveBeenLastCalledWith(10, startDate, endDate);
 
     unmount();

@@ -5,8 +5,10 @@ import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { UsageLogRow } from "@/repository/usage-logs";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 let mockLogs: UsageLogRow[] = [];
+let mockSourceSessionIdsByIdentity: Record<string, string[]> = {};
 let mockIsLoading = false;
 let mockIsError = false;
 let mockError: unknown = null;
@@ -23,7 +25,16 @@ vi.mock("@tanstack/react-query", () => ({
   useInfiniteQuery: (options: unknown) => {
     useInfiniteQuerySpy(options);
     return {
-      data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
+      data: {
+        pages: [
+          {
+            logs: mockLogs,
+            sourceSessionIdsByIdentity: mockSourceSessionIdsByIdentity,
+            nextCursor: null,
+            hasMore: false,
+          },
+        ],
+      },
       fetchNextPage: vi.fn(),
       hasNextPage: mockHasNextPage,
       isFetchingNextPage: mockIsFetchingNextPage,
@@ -103,8 +114,21 @@ vi.mock("./model-display-with-redirect", () => ({
   ),
 }));
 
+const dialogProps = vi.hoisted(() => ({ latest: null as Record<string, unknown> | null }));
+
 vi.mock("./error-details-dialog", () => ({
-  ErrorDetailsDialog: () => <div data-slot="error-details-dialog" />,
+  ErrorDetailsDialog: (props: Record<string, unknown>) => {
+    dialogProps.latest = props;
+    return (
+      <div
+        data-slot="error-details-dialog"
+        data-replay={String(props.isReplay ?? false)}
+        data-replay-source-request-id={
+          props.isReplay ? String(props.replaySourceRequestId ?? "") : undefined
+        }
+      />
+    );
+  },
 }));
 
 let mockIsProviderFinalized = true;
@@ -119,6 +143,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     id: 1,
     createdAt: new Date(),
     sessionId: null,
+    sourceSessionId: null,
+    sessionIdentityKind: null,
     requestSequence: null,
     userName: "u",
     keyName: "k",
@@ -135,6 +161,14 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     cacheCreation5mInputTokens: 0,
     cacheCreation1hInputTokens: 0,
     cacheTtlApplied: null,
+    theoreticalCacheTokens: null,
+    cacheScoreEligible: null,
+    cacheScoreExcludedReason: null,
+    cacheInputTotal: 1,
+    actualCacheRate: 0,
+    theoreticalCacheRate: null,
+    requestCacheCoefficientBp: null,
+    requestCacheMetricAvailability: "not_recorded",
     totalTokens: 2,
     costUsd: "0.01",
     costMultiplier: null,
@@ -142,11 +176,14 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: 100,
-    ttfbMs: 50,
+    ttftMs: 50,
+    firstByteMs: 50,
     errorMessage: null,
     providerChain: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: false,
+    replaySourceRequestId: null,
     userAgent: null,
     clientIp: null,
     messagesCount: null,
@@ -157,6 +194,16 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
   };
 }
 
+const discoveryTrace: RoutingTraceV1 = {
+  version: 1,
+  mode: "discovery",
+  startedAt: 1,
+  updatedAt: 2,
+  discoveryEnabled: true,
+  eligible: true,
+  events: [],
+};
+
 function renderTableWithLog(overrides: Partial<UsageLogRow>) {
   mockIsLoading = false;
   mockIsError = false;
@@ -164,9 +211,45 @@ function renderTableWithLog(overrides: Partial<UsageLogRow>) {
   mockHasNextPage = false;
   mockIsFetchingNextPage = false;
   mockLogs = [makeLog({ id: 1, ...overrides })];
+  mockSourceSessionIdsByIdentity = {};
 
   return renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
 }
+
+test("shows the client session ID and canonical prefix identity in the virtualized tooltip", () => {
+  renderTableWithLog({
+    sessionId: "pfx:scope:fingerprint",
+    sourceSessionId: "client-session-id",
+  });
+  mockSourceSessionIdsByIdentity = {
+    "pfx:scope:fingerprint": ["client-session-id", "client-session-id-2"],
+  };
+  const html = renderToStaticMarkup(
+    <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+  );
+
+  expect(html).toContain("client-session-id");
+  expect(html).toContain("client-session-id-2");
+  expect(html).toContain("pfx:scope:fingerprint");
+});
+
+test("does not duplicate the canonical identity when it is the source fallback", () => {
+  const html = renderTableWithLog({
+    sessionId: "same-session-id",
+    sourceSessionId: "same-session-id",
+  });
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("same-session-id")
+  );
+
+  expect(
+    [...(tooltip?.querySelectorAll("span") ?? [])].filter(
+      (node) => node.textContent === "same-session-id"
+    )
+  ).toHaveLength(1);
+});
 
 function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   const html = renderTableWithLog(overrides);
@@ -183,6 +266,123 @@ function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
 
   return tooltip;
 }
+
+function renderPerformanceWithLog(overrides: Partial<UsageLogRow>) {
+  const html = renderTableWithLog(overrides);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("logs.details.performance.duration")
+  );
+
+  if (!(tooltip instanceof HTMLDivElement) || !(tooltip.parentElement instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip content not found");
+  }
+
+  const trigger = tooltip.parentElement.firstElementChild;
+  if (!(trigger instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip trigger not found");
+  }
+
+  return { tooltip, trigger };
+}
+
+describe("virtualized-logs-table thinking effort", () => {
+  test("forwards Replay provenance to the details dialog", () => {
+    const html = renderTableWithLog({ isReplay: true, replaySourceRequestId: 7 });
+
+    expect(dialogProps.latest).toEqual(
+      expect.objectContaining({ isReplay: true, replaySourceRequestId: 7 })
+    );
+    expect(html).toContain('data-replay-source-request-id="7"');
+  });
+
+  test("在计费模型右侧显示思考强度列", () => {
+    const html = renderTableWithLog({
+      model: "gpt-5.4",
+      specialSettings: [
+        {
+          type: "codex_reasoning_effort",
+          scope: "request",
+          hit: true,
+          effort: "low",
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "Codex",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: "low", after: "max", changed: true }],
+        },
+      ],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const headerText = container.querySelector(".sticky")?.textContent ?? "";
+    const modelIndex = headerText.indexOf("logs.columns.model");
+    const effortIndex = headerText.indexOf("logs.columns.reasoningEffort");
+    const tokensIndex = headerText.indexOf("logs.columns.tokens");
+    expect(modelIndex).toBeGreaterThanOrEqual(0);
+    expect(effortIndex).toBeGreaterThan(modelIndex);
+    expect(tokensIndex).toBeGreaterThan(effortIndex);
+
+    const effortDisplay = container.querySelector('[data-slot="thinking-effort"]');
+    expect(effortDisplay?.textContent).toContain("low");
+    expect(effortDisplay?.textContent).toContain("max");
+    expect(effortDisplay?.closest(".overflow-visible")).not.toBeNull();
+  });
+
+  test("显示 Anthropic 请求的思考强度", () => {
+    const html = renderTableWithLog({
+      model: "claude-opus-4-5",
+      specialSettings: [
+        {
+          type: "anthropic_effort",
+          scope: "request",
+          hit: true,
+          effort: "medium",
+        },
+      ],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const effortDisplay = container.querySelector('[data-slot="thinking-effort"]');
+    expect(effortDisplay?.textContent).toContain("medium");
+  });
+
+  test("hides reasoning effort column when hiddenColumns includes reasoningEffort", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [
+      makeLog({
+        id: 1,
+        specialSettings: [
+          { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "high" },
+        ],
+      }),
+    ];
+
+    const htmlHidden = renderToStaticMarkup(
+      <VirtualizedLogsTable
+        filters={{}}
+        autoRefreshEnabled={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    expect(htmlHidden).not.toContain("logs.columns.reasoningEffort");
+    expect(htmlHidden).not.toContain('data-slot="thinking-effort"');
+  });
+});
 
 describe("virtualized-logs-table multiplier badge", () => {
   test("does not cap cached pages so deep scroll can return to the latest rows", () => {
@@ -260,6 +460,72 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("x0.20");
   });
 
+  test("combines fast and 1M into one compact cost badge", () => {
+    const html = renderTableWithLog({
+      context1mApplied: true,
+      specialSettings: [
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: "priority",
+          billingSourcePreference: "actual",
+          resolvedFrom: "actual",
+          effectivePriority: true,
+        },
+      ],
+    });
+
+    expect(html).toContain("logs.billingDetails.fast");
+    expect(html).toContain(">·<");
+    expect(html).toContain(">1M<");
+    expect(html).toContain("gap-0 px-0.5 text-[9px] leading-3");
+  });
+
+  test("keeps fast-only and 1M-only badges independent", () => {
+    for (const overrides of [
+      {
+        specialSettings: [
+          {
+            type: "codex_service_tier_result" as const,
+            scope: "response" as const,
+            hit: true,
+            requestedServiceTier: "priority",
+            actualServiceTier: "priority",
+            billingSourcePreference: "actual" as const,
+            resolvedFrom: "actual" as const,
+            effectivePriority: true,
+          },
+        ],
+        context1mApplied: false,
+      },
+      { specialSettings: null, context1mApplied: true },
+    ]) {
+      const html = renderTableWithLog(overrides);
+      expect(html).not.toContain("gap-0 px-0.5 text-[9px] leading-3");
+    }
+  });
+
+  test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
+    const html = renderTableWithLog({
+      costMultiplier: "0.01",
+      routingTrace: discoveryTrace,
+      providerChain: [
+        { id: 1, name: "failed", reason: "retry_failed", statusCode: 503 },
+        {
+          id: 2,
+          name: "winner",
+          reason: "retry_success",
+          statusCode: 200,
+          costMultiplier: 0.03,
+        },
+      ],
+    });
+
+    expect(html).toContain("x0.03");
+  });
+
   test("shows scroll-to-top button after scroll and triggers scrollTo", async () => {
     mockIsLoading = false;
     mockIsError = false;
@@ -323,6 +589,22 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("renders Replay badge without treating the request as blocked", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, isReplay: true, replaySourceRequestId: 7 })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("logs.table.replay");
+    expect(html).not.toContain("logs.table.blocked");
+  });
+
   test("hides provider column when hiddenColumns includes provider", () => {
     mockIsLoading = false;
     mockIsError = false;
@@ -375,17 +657,19 @@ describe("virtualized-logs-table multiplier badge", () => {
     mockIsFetchingNextPage = false;
 
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
-    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttfbMs: 950, outputTokens: 300 })];
+    mockLogs = [
+      makeLog({ id: 1, durationMs: 1000, ttftMs: 950, firstByteMs: 950, outputTokens: 300 }),
+    ];
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
 
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
-    // TTFB should still appear
-    expect(html).toContain("TTFB");
+    // TTFT 行仍应出现
+    expect(html).toContain("logs.details.performance.ttft");
   });
 
   test("shows tok/s when conditions are normal", () => {
@@ -395,17 +679,40 @@ describe("virtualized-logs-table multiplier badge", () => {
     mockHasNextPage = false;
     mockIsFetchingNextPage = false;
 
-    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
-    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttfbMs: 500, outputTokens: 50 })];
+    mockLogs = [
+      makeLog({ id: 1, durationMs: 1000, ttftMs: 500, firstByteMs: 500, outputTokens: 50 }),
+    ];
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
 
     // tok/s should appear
     expect(html).toContain("tok/s");
-    // TTFB should also appear
-    expect(html).toContain("TTFB");
+    // TTFT 行同样应出现
+    expect(html).toContain("logs.details.performance.ttft");
+  });
+
+  test("性能列使用 TTFT 缩写", () => {
+    const { trigger } = renderPerformanceWithLog({
+      durationMs: 1000,
+      ttftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(trigger.textContent).toContain("logs.details.performance.ttftShort");
+  });
+
+  test("性能 Tooltip 保留 TTFT 和 TTFB 完整术语", () => {
+    const { tooltip } = renderPerformanceWithLog({
+      durationMs: 1000,
+      ttftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(tooltip.textContent).toContain("logs.details.performance.ttft");
+    expect(tooltip.textContent).toContain("logs.details.performance.ttfb");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {
@@ -736,6 +1043,64 @@ describe("virtualized-logs-table live chain display", () => {
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
     expect(html).toContain("text-indigo-500");
+  });
+
+  test("stacks every currently connected racing provider and exposes the full list", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [],
+          activeProviders: [
+            { id: 1, name: "openai-east-with-a-long-name" },
+            { id: 2, name: "anthropic-west-with-a-long-name" },
+            { id: 3, name: "gemini-central-with-a-long-name" },
+          ],
+          phase: "hedge_racing",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain('data-slot="live-provider-stack"');
+    expect(html).toContain("openai-east-with-a-long-name");
+    expect(html).toContain("anthropic-west-with-a-long-name");
+    expect(html).toContain("gemini-central-with-a-long-name");
+    expect(html).toContain('data-slot="live-provider-tooltip"');
+  });
+
+  test("shows only the newly active provider after fallback switches", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [
+            { id: 1, name: "primary-provider", reason: "retry_failed" },
+            { id: 2, name: "fallback-provider", reason: "initial_selection" },
+          ],
+          activeProviders: [{ id: 2, name: "fallback-provider" }],
+          phase: "provider_selected",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("fallback-provider");
+    expect(html).not.toContain("primary-provider");
   });
 
   test("renders generic in-progress when live chain is empty", () => {

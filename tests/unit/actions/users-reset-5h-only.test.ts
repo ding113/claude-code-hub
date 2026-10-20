@@ -66,6 +66,11 @@ vi.mock("@/lib/security/api-key-auth-cache", () => ({
   invalidateCachedUser: invalidateCachedUserMock,
 }));
 
+const enqueueUserStatisticsResetMock = vi.fn();
+vi.mock("@/lib/user-statistics-reset/reset-queue", () => ({
+  enqueueUserStatisticsReset: enqueueUserStatisticsResetMock,
+}));
+
 const txDeleteWhereMock = vi.fn();
 const txDeleteMock = vi.fn(() => ({ where: txDeleteWhereMock }));
 const txUpdateWhereMock = vi.fn();
@@ -286,6 +291,17 @@ describe("full reset compatibility with user 5h marker", () => {
     updateUserCostResetMarkersMock.mockResolvedValue(true);
     txUpdateWhereMock.mockResolvedValue([{ id: 123 }]);
     txDeleteWhereMock.mockResolvedValue([]);
+    enqueueUserStatisticsResetMock.mockResolvedValue({
+      resetId: "00000000-0000-4000-8000-000000000001",
+      userId: 123,
+      status: "queued",
+      requestedAt: "2026-08-02T12:00:00.000Z",
+      startedAt: null,
+      completedAt: null,
+      deletedMessageRequests: 0,
+      deletedUsageLedger: 0,
+      errorCode: null,
+    });
   });
 
   test("full reset still resets all amount windows and advances 5h marker", async () => {
@@ -301,21 +317,19 @@ describe("full reset compatibility with user 5h marker", () => {
     expect(clearUserCostCacheMock).toHaveBeenCalled();
   });
 
-  test("full statistics reset does not leave stale 5h marker", async () => {
+  test("full statistics reset queues marker cleanup in the background worker", async () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
-    expect(txUpdateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        costResetAt: null,
-        limit5hCostResetAt: null,
-      })
-    );
-    expect(invalidateCachedUserMock).toHaveBeenCalledWith(123);
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [11],
+    });
+    expect(txUpdateSetMock).not.toHaveBeenCalled();
+    expect(invalidateCachedUserMock).not.toHaveBeenCalled();
   });
 
-  test("full statistics reset fails when fixed 5h state exists but Redis is unavailable", async () => {
+  test("full statistics reset delegates fixed user 5h readiness to the background queue", async () => {
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
@@ -328,12 +342,15 @@ describe("full reset compatibility with user 5h marker", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(false);
-    expect(result.errorCode).toBe(ERROR_CODES.OPERATION_FAILED);
+    expect(result.ok).toBe(true);
+    expect(getRedisClientMock).not.toHaveBeenCalled();
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [],
+    });
     expect(txUpdateSetMock).not.toHaveBeenCalled();
   });
 
-  test("full statistics reset fails when a child key has fixed 5h state and Redis is unavailable", async () => {
+  test("full statistics reset delegates fixed child-key 5h readiness to the background queue", async () => {
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
@@ -353,8 +370,11 @@ describe("full reset compatibility with user 5h marker", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(false);
-    expect(result.errorCode).toBe(ERROR_CODES.OPERATION_FAILED);
+    expect(result.ok).toBe(true);
+    expect(getRedisClientMock).not.toHaveBeenCalled();
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [11],
+    });
     expect(txUpdateSetMock).not.toHaveBeenCalled();
   });
 });

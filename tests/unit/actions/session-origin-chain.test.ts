@@ -3,6 +3,8 @@ import type { ProviderChainItem } from "@/types/message";
 
 const getSessionMock = vi.fn();
 const findSessionOriginChainMock = vi.fn();
+const findSessionRequestLocatorMock = vi.fn();
+const aggregateMultipleSessionStatsMock = vi.fn();
 const findKeyListMock = vi.fn();
 
 const dbSelectMock = vi.fn();
@@ -16,6 +18,8 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/repository/message", () => ({
   findSessionOriginChain: findSessionOriginChainMock,
+  findSessionRequestLocator: findSessionRequestLocatorMock,
+  aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
 }));
 
 vi.mock("@/repository/key", () => ({
@@ -38,6 +42,24 @@ describe("getSessionOriginChain", () => {
     dbLimitMock.mockResolvedValue([{ id: 1 }]);
 
     findKeyListMock.mockResolvedValue([{ key: "user-key-1" }]);
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      { sessionId: "pfx:scope:fingerprint", userId: 2 },
+    ]);
+    findSessionRequestLocatorMock.mockReset();
+    findSessionRequestLocatorMock.mockImplementation(
+      async (
+        identity: string,
+        selector: { sourceSessionId?: string; requestSequence?: number } = {}
+      ) => ({
+        requestId: 101,
+        sourceSessionId: selector.sourceSessionId ?? identity,
+        requestSequence: selector.requestSequence ?? 1,
+        keyId: 1,
+        identityKind: identity.startsWith("pfx:") ? "prefix_affinity" : "session_id",
+        scopeTag: identity.startsWith("pfx:") ? "scope" : null,
+        fingerprint: identity.startsWith("pfx:") ? "fingerprint" : null,
+      })
+    );
   });
 
   test("admin happy path: returns provider chain", async () => {
@@ -53,15 +75,15 @@ describe("getSessionOriginChain", () => {
     findSessionOriginChainMock.mockResolvedValue(chain);
 
     const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
-    const result = await getSessionOriginChain("sess-admin");
+    const result = await getSessionOriginChain("pfx:scope:fingerprint", 2, "physical-selected");
 
     expect(result).toEqual({ ok: true, data: chain });
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("sess-admin");
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 2);
     expect(findKeyListMock).not.toHaveBeenCalled();
     expect(dbSelectMock).not.toHaveBeenCalled();
   });
 
-  test("non-admin happy path: returns provider chain after ownership check", async () => {
+  test("non-admin happy path: authorizes the aggregate identity before reading its physical source", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 2, role: "user" } });
 
     const chain: ProviderChainItem[] = [
@@ -74,12 +96,11 @@ describe("getSessionOriginChain", () => {
     findSessionOriginChainMock.mockResolvedValue(chain);
 
     const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
-    const result = await getSessionOriginChain("sess-user");
+    const result = await getSessionOriginChain("pfx:scope:fingerprint", 2, "physical-selected");
 
     expect(result).toEqual({ ok: true, data: chain });
-    expect(findKeyListMock).toHaveBeenCalledWith(2);
-    expect(dbSelectMock).toHaveBeenCalledTimes(1);
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("sess-user");
+    expect(aggregateMultipleSessionStatsMock).toHaveBeenCalledWith(["pfx:scope:fingerprint"], 2);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 2);
   });
 
   test("unauthenticated: returns not logged in", async () => {
@@ -96,8 +117,9 @@ describe("getSessionOriginChain", () => {
 
   test("non-admin without access: returns unauthorized error", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 3, role: "user" } });
-    findKeyListMock.mockResolvedValue([{ key: "user-key-3" }]);
-    dbLimitMock.mockResolvedValue([]);
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      { sessionId: "sess-other-user", userId: 4 },
+    ]);
 
     const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
     const result = await getSessionOriginChain("sess-other-user");
@@ -118,13 +140,16 @@ describe("getSessionOriginChain", () => {
 
   test("not found: returns ok with null data", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      { sessionId: "sess-not-found", userId: 1 },
+    ]);
     findSessionOriginChainMock.mockResolvedValue(null);
 
     const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
     const result = await getSessionOriginChain("sess-not-found");
 
     expect(result).toEqual({ ok: true, data: null });
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("sess-not-found");
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 1);
     expect(findKeyListMock).not.toHaveBeenCalled();
     expect(dbSelectMock).not.toHaveBeenCalled();
   });

@@ -5,19 +5,24 @@ import { act } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import dashboardMessages from "../../../../../../messages/en/dashboard.json";
 import ipDetailsMessages from "../../../../../../messages/en/ipDetails.json";
 import providerChainMessages from "../../../../../../messages/en/provider-chain.json";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 const hasSessionMessagesMock = vi.fn();
 
-vi.mock("@/actions/active-sessions", () => ({
-  hasSessionMessages: (...args: [string, number | undefined]) => hasSessionMessagesMock(...args),
+vi.mock("@/lib/api-client/v1/actions/active-sessions", () => ({
+  hasSessionMessages: (
+    ...args: [string, number | undefined, string | undefined, number | undefined]
+  ) => hasSessionMessagesMock(...args),
 }));
 
 const getSessionOriginChainMock = vi.fn();
 
-vi.mock("@/actions/session-origin-chain", () => ({
-  getSessionOriginChain: (...args: [string]) => getSessionOriginChainMock(...args),
+vi.mock("@/lib/api-client/v1/actions/session-origin-chain", () => ({
+  getSessionOriginChain: (...args: [string, number | undefined, string | undefined]) =>
+    getSessionOriginChainMock(...args),
 }));
 
 const useRealProviderTimelineMock = vi.fn(() => false);
@@ -31,8 +36,18 @@ beforeEach(() => {
 });
 
 vi.mock("@/i18n/routing", () => ({
-  Link: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  Link: ({
+    href,
+    children,
+    prefetch,
+  }: {
+    href: string;
+    children: ReactNode;
+    prefetch?: boolean;
+  }) => (
+    <a href={href} data-prefetch={String(prefetch)}>
+      {children}
+    </a>
   ),
 }));
 
@@ -206,6 +221,9 @@ const messages = {
         endpoint: "Endpoint",
       },
       details: {
+        ...dashboardMessages.logs.details,
+        routingTrace: dashboardMessages.logs.details.routingTrace,
+        modelAudit: dashboardMessages.logs.details.modelAudit,
         title: "Request Details",
         inProgress: "In progress",
         statusTitle: "Status: {status}",
@@ -233,6 +251,13 @@ const messages = {
           warmup: "Warmup",
           desc: "Warmup skipped",
         },
+        replayServe: {
+          ...dashboardMessages.logs.details.replayServe,
+          title: "Replay",
+          desc: "Served from Replay without a new upstream charge.",
+          replayId: "Replay ID",
+          sourceRequestId: "Source request",
+        },
         blocked: {
           title: "Blocked",
           sensitiveWord: "Sensitive word",
@@ -251,37 +276,49 @@ const messages = {
         performance: {
           title: "Performance",
           ttfb: "TTFB",
+          ttft: "TTFT",
+          ttftShort: "TTFT",
           duration: "Duration",
           outputRate: "Output rate",
+          outputTokens: "Output Tokens",
         },
         performanceTab: {
           noPerformanceData: "No performance data",
-          ttfbGauge: "Time to First Byte",
+          ttftGauge: "Time to First Token",
           outputRateGauge: "Output Rate",
           latencyBreakdown: "Latency Breakdown",
           generationTime: "Generation Time",
+          segmentTtfb: "TTFB",
+          segmentTtft: "Token Wait",
+          segmentTotal: "Total",
           assessment: {
             excellent: "Excellent",
             good: "Good",
             warning: "Warning",
             poor: "Poor",
           },
-          thresholds: {
-            ttfbGood: "TTFB < 300ms",
-            ttfbWarning: "TTFB 300-600ms",
-            ttfbPoor: "TTFB > 1000ms",
-          },
         },
         metadata: {
           noMetadata: "No metadata",
           sessionInfo: "Session Info",
+          sessionId: "Session ID",
+          prefixId: "Prefix ID",
+          canonicalSessionId: "Canonical Session ID",
+          clientSessionId: "Client Session ID",
           clientInfo: "Client Info",
           billingInfo: "Billing Info",
           technicalTimeline: "Technical Timeline",
           copyTimeline: "Copy Timeline",
         },
+        reasoningEffort: {
+          label: "Reasoning effort",
+          overridden: "Overridden by provider",
+          tooltip: "Thinking effort in the Codex request (reasoning.effort), shown verbatim.",
+        },
         logicTrace: {
+          ...dashboardMessages.logs.details.logicTrace,
           title: "Decision Chain",
+          singleRouteSelectionTitle: "Provider selection under single-route protection",
           noDecisionData: "No decision data",
           providersCount: "{count} providers",
           healthyCount: "{count} healthy",
@@ -341,6 +378,7 @@ const messages = {
           circuitOpen: "Circuit open",
         },
         billingDetails: {
+          ...dashboardMessages.logs.details.billingDetails,
           title: "Billing details",
           input: "Input",
           output: "Output",
@@ -394,6 +432,15 @@ function renderClientWithIntl(node: ReactNode) {
 
   return {
     container,
+    rerender: (nextNode: ReactNode) => {
+      act(() => {
+        root.render(
+          <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+            {nextNode}
+          </NextIntlClientProvider>
+        );
+      });
+    },
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -411,6 +458,252 @@ function click(element: Element | null) {
 }
 
 describe("error-details-dialog layout", () => {
+  test("uses the physical source when checking messages for a prefix Session request", async () => {
+    const { unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
+        requestSequence={3}
+        requestId={203}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(hasSessionMessagesMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-a", 203);
+    unmount();
+  });
+
+  test("includes the physical source in the Session detail link", async () => {
+    hasSessionMessagesMock.mockResolvedValue({ ok: true, data: true });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
+        requestSequence={3}
+        requestId={203}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('a[href*="sourceSessionId=physical-a"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="seq=3"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=pfx%3Ascope%3Aroot"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=physical-a"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="requestId=203"]')).toBeTruthy();
+    expect(
+      container
+        .querySelector('a[href*="/dashboard/sessions/pfx%3Ascope%3Aroot/messages"]')
+        ?.getAttribute("data-prefetch")
+    ).toBe("false");
+    expect(container.textContent).toContain("Canonical Session ID: pfx:scope:root");
+    expect(container.textContent).toContain("Client Session ID: physical-a");
+    unmount();
+  });
+
+  test("links both Prefix ID and physical Session ID from the Logic Trace", async () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "prefix-provider",
+              reason: "session_reuse",
+              decisionContext: { sessionId: "pfx:scope/root?branch#frag" },
+            },
+          ] as any
+        }
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-session"
+        sessionIdentityKind="prefix_affinity"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const reuseStep = Array.from(container.querySelectorAll('[data-slot="step-card"]')).find(
+      (element) => element.textContent?.includes("Session Reuse Selection")
+    );
+    expect(reuseStep).toBeTruthy();
+
+    expect(
+      container.querySelector('a[href*="sessionId=pfx%3Ascope%2Froot%3Fbranch%23frag"]')
+    ).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=physical-session"]')).toBeTruthy();
+    expect(container.textContent).toContain("Prefix ID");
+    expect(container.textContent).toContain("Session ID");
+    unmount();
+  });
+
+  test("shows cache metrics and encoded identity links in the Prefix Affinity step", async () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "affinity-provider",
+              reason: "affinity_hit",
+              selectionMethod: "prefix_affinity",
+              affinity: { matchedDepth: 2, matchedPrefixBytes: 240 },
+            },
+          ] as any
+        }
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-session"
+        sessionIdentityKind="prefix_affinity"
+        cacheInputTotal={150}
+        cacheReadInputTokens={30}
+        theoreticalCacheTokens={60}
+        actualCacheRate={0.2}
+        theoreticalCacheRate={0.4}
+        requestCacheCoefficientBp={5000}
+        requestCacheMetricAvailability="available"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const affinityStep = Array.from(container.querySelectorAll('[data-slot="step-card"]')).find(
+      (element) => element.textContent?.includes("affinity-provider")
+    );
+    expect(affinityStep).toBeTruthy();
+    expect(
+      affinityStep?.querySelector('a[href*="sessionId=pfx%3Ascope%2Froot%3Fbranch%23frag"]')
+    ).toBeTruthy();
+    expect(affinityStep?.querySelector('a[href*="sessionId=physical-session"]')).toBeTruthy();
+    expect(affinityStep?.textContent).toContain("Cache Performance");
+    expect(affinityStep?.textContent).toContain("20.0%");
+    expect(affinityStep?.textContent).toContain("40.0%");
+    expect(affinityStep?.textContent).toContain("0.50");
+    unmount();
+  });
+
+  test("encodes prefix identities in the Session detail path", async () => {
+    hasSessionMessagesMock.mockResolvedValue({ ok: true, data: true });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
+        requestSequence={3}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector(
+        'a[href*="/dashboard/sessions/pfx%3Ascope%2Froot%3Fbranch%23frag/messages"]'
+      )
+    ).toBeTruthy();
+    unmount();
+  });
+
+  test("clears stale Session detail availability while checking a new request", async () => {
+    hasSessionMessagesMock.mockResolvedValueOnce({ ok: true, data: true });
+    const pendingCheck = Promise.withResolvers<{ ok: false; error: string }>();
+    const rendered = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        requestSequence={3}
+        requestId={203}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(rendered.container.querySelector('a[href*="requestId=203"]')).toBeTruthy();
+
+    hasSessionMessagesMock.mockReturnValueOnce(pendingCheck.promise);
+    rendered.rerender(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-b"
+        requestSequence={4}
+        requestId={204}
+      />
+    );
+
+    expect(rendered.container.querySelector('a[href*="requestId=203"]')).toBeNull();
+
+    await act(async () => {
+      pendingCheck.resolve({ ok: false, error: "not found" });
+      await pendingCheck.promise;
+    });
+    expect(rendered.container.querySelector('a[href*="requestId=204"]')).toBeNull();
+    rendered.unmount();
+  });
+
+  test("marks Replay requests and shows their source request", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        isReplay
+        replaySourceRequestId={7}
+        blockedBy={null}
+      />
+    );
+
+    expect(html).toContain("Replay");
+    expect(html).toContain("Source request");
+    expect(html).toContain("7");
+    expect(html).not.toContain(">Blocked<");
+  });
+
   test("renders fake-200 forwarded notice when errorMessage is a FAKE_200_* code", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -461,6 +754,48 @@ describe("error-details-dialog layout", () => {
     expect(html).toContain("provider_parameter_override");
   });
 
+  test("renders Codex reasoning effort and provider override in request details", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        specialSettings={[
+          {
+            type: "codex_reasoning_effort",
+            scope: "request",
+            hit: true,
+            effort: "low",
+          },
+          {
+            type: "provider_parameter_override",
+            scope: "provider",
+            providerId: 1,
+            providerName: "Codex",
+            providerType: "codex",
+            hit: true,
+            changed: true,
+            changes: [{ path: "reasoning.effort", before: "low", after: "high", changed: true }],
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain("Reasoning effort");
+    expect(html).toContain("Thinking effort in the Codex request");
+    expect(html).toContain("Overridden by provider");
+    expect(html).toContain("low");
+    expect(html).toContain("high");
+
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelector("svg.lucide-arrow-right")?.getAttribute("aria-hidden")).toBe(
+      "true"
+    );
+  });
+
   test("renders key metrics when cost and duration are present", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -473,7 +808,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={80}
         durationMs={900}
-        ttfbMs={100}
+        ttftMs={100}
+        firstByteMs={100}
       />
     );
 
@@ -493,7 +829,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={0}
         durationMs={null}
-        ttfbMs={null}
+        ttftMs={null}
+        firstByteMs={null}
       />
     );
 
@@ -513,7 +850,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={80}
         durationMs={900}
-        ttfbMs={100}
+        ttftMs={100}
+        firstByteMs={100}
       />
     );
 
@@ -523,7 +861,7 @@ describe("error-details-dialog layout", () => {
 
   test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -536,7 +874,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={300}
         durationMs={1000}
-        ttfbMs={950}
+        ttftMs={950}
+        firstByteMs={950}
       />
     );
 
@@ -548,7 +887,7 @@ describe("error-details-dialog layout", () => {
   });
 
   test("shows tok/s in dialog when conditions are normal", () => {
-    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -561,7 +900,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={50}
         durationMs={1000}
-        ttfbMs={500}
+        ttftMs={500}
+        firstByteMs={500}
       />
     );
 
@@ -1141,12 +1481,13 @@ describe("error-details-dialog tabs", () => {
         providerChain={null}
         sessionId={null}
         durationMs={1000}
-        ttfbMs={200}
+        ttftMs={200}
+        firstByteMs={200}
         outputTokens={500}
       />
     );
 
-    expect(html).toContain("Time to First Byte");
+    expect(html).toContain("Time to First Token");
     expect(html).toContain("Output Rate");
     expect(html).toContain("Latency Breakdown");
   });
@@ -1166,6 +1507,1253 @@ describe("error-details-dialog tabs", () => {
     expect(html).toContain("Session Info");
     expect(html).toContain("test-session-123");
     expect(html).toContain("#5");
+  });
+});
+
+describe("error-details-dialog routing trace", () => {
+  const discoveryTrace: RoutingTraceV1 = {
+    version: 1,
+    mode: "discovery",
+    startedAt: 1_000,
+    updatedAt: 13_000,
+    discoveryEnabled: true,
+    eligible: true,
+    config: {
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 2,
+      discoverySlaMs: 10_000,
+      stickySlaMs: 20_000,
+      racingTotalTimeoutMs: 60_000,
+      stickyTimeoutCooldownMs: 300_000,
+      sessionTtlSeconds: 300,
+    },
+    events: [
+      {
+        type: "attempt_started",
+        at: 1_000,
+        elapsedMs: 0,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 10, name: "sticky-provider", priority: 1 },
+      },
+      {
+        type: "attempt_finished",
+        at: 3_000,
+        elapsedMs: 2_000,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 10, name: "sticky-provider", priority: 1 },
+        outcome: "cancelled",
+        cancellationKind: "sticky_timeout",
+      },
+      {
+        type: "round_started",
+        at: 3_000,
+        elapsedMs: 2_000,
+        round: 1,
+      },
+      {
+        type: "attempt_started",
+        at: 3_010,
+        elapsedMs: 2_010,
+        round: 1,
+        attemptId: "normal:1",
+        attemptKind: "normal",
+        provider: { id: 11, name: "candidate-a", priority: 1 },
+      },
+      {
+        type: "attempt_held",
+        at: 3_100,
+        elapsedMs: 2_100,
+        round: 1,
+        attemptId: "normal:1",
+        attemptKind: "normal",
+        provider: { id: 11, name: "candidate-a", priority: 1 },
+      },
+      {
+        type: "attempt_started",
+        at: 3_020,
+        elapsedMs: 2_020,
+        round: 1,
+        attemptId: "normal:2",
+        attemptKind: "normal",
+        provider: { id: 12, name: "candidate-b", priority: 2 },
+      },
+      {
+        type: "winner_committed",
+        at: 4_000,
+        elapsedMs: 3_000,
+        round: 1,
+        attemptId: "normal:2",
+        attemptKind: "normal",
+        provider: { id: 12, name: "candidate-b", priority: 2 },
+        statusCode: 200,
+      },
+    ],
+    summary: {
+      outcome: "success",
+      statusCode: 200,
+      durationMs: 12_000,
+      ttftMs: 3_000,
+      attemptsPerRequest: 3,
+      maxActiveAttempts: 2,
+      rounds: 1,
+      providerMs: 5_000,
+      fallbackPromotions: 0,
+      cancelFailures: 0,
+      winnerOrigin: "normal",
+      winnerProviderId: 12,
+      winnerRound: 1,
+    },
+  };
+
+  test("renders Sticky and same-round attempts in the Discovery branch", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 12, name: "candidate-b", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={discoveryTrace}
+        sessionId="trace-session"
+      />
+    );
+    const document = parseHtml(html);
+
+    expect(document.querySelector("[data-testid='routing-mode-banner']")?.textContent).toContain(
+      "Bounded Discovery"
+    );
+    expect(document.querySelector("[data-testid='discovery-round-0']")?.textContent).toContain(
+      "sticky-provider"
+    );
+    const roundOne = document.querySelector("[data-testid='discovery-round-1']");
+    expect(roundOne?.textContent).toContain("candidate-a");
+    expect(roundOne?.textContent).toContain("candidate-b");
+    expect(roundOne?.textContent).toContain("Candidate");
+    expect(roundOne?.textContent).not.toContain("Candidate → Fallback");
+    expect(roundOne?.textContent).toContain("Ready, held");
+    expect(roundOne?.textContent).toContain("Winner");
+    expect(roundOne?.querySelector(".sm\\:grid-cols-2")).not.toBeNull();
+    expect(html).toContain("60000ms");
+    expect(html).toContain("300000ms");
+    expect(html).toContain("300s");
+  });
+
+  test("shows fallback promotion and humanizes the fallback winner binding result", () => {
+    const fallbackTrace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+        },
+        {
+          type: "fallback_promoted",
+          at: 11_000,
+          elapsedMs: 10_000,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+          outcome: "timeout",
+        },
+        {
+          type: "winner_committed",
+          at: 20_000,
+          elapsedMs: 19_000,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+          statusCode: 200,
+        },
+        {
+          type: "request_finished",
+          at: 21_000,
+          elapsedMs: 20_000,
+          outcome: "success",
+          statusCode: 200,
+        },
+        {
+          type: "binding_finalized",
+          at: 21_100,
+          elapsedMs: 20_100,
+          provider: { id: 80, name: "slow-provider" },
+          bindingAction: "none",
+          outcome: "skipped",
+          reason: "fallback_winner",
+        },
+      ],
+      summary: {
+        ...discoveryTrace.summary!,
+        durationMs: 20_000,
+        ttftMs: 19_000,
+        attemptsPerRequest: 1,
+        rounds: 1,
+        fallbackPromotions: 1,
+        winnerOrigin: "fallback",
+        winnerProviderId: 80,
+        winnerRound: 1,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 80, name: "slow-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={fallbackTrace}
+        sessionId="fallback-session"
+      />
+    );
+    const document = parseHtml(html);
+    const fallbackCard = document.querySelector("[data-testid='discovery-attempt']");
+    const terminal = document.querySelector("[data-testid='discovery-terminal-status']");
+    const bindingSummary = document.querySelector("[data-testid='discovery-binding-summary']");
+
+    expect(fallbackCard?.textContent).toContain("Candidate → Fallback");
+    expect(fallbackCard?.textContent).toContain("Winner");
+    expect(terminal?.textContent).toContain("Not written · Fallback winner");
+    expect(terminal?.textContent).not.toContain("fallback_winner");
+    expect(bindingSummary?.getAttribute("title")).toBe("fallback_winner");
+    expect(terminal?.textContent).not.toContain("No change · Skipped");
+
+    const normalWinnerHtml = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={{
+          ...fallbackTrace,
+          summary: { ...fallbackTrace.summary!, winnerOrigin: "normal" },
+        }}
+        sessionId="normal-winner-session"
+      />
+    );
+    const normalWinnerTerminal = parseHtml(normalWinnerHtml).querySelector(
+      "[data-testid='discovery-terminal-status']"
+    );
+    expect(normalWinnerTerminal?.textContent).toContain("No change · Skipped");
+    expect(normalWinnerTerminal?.textContent).toContain("fallback_winner");
+    expect(normalWinnerTerminal?.textContent).not.toContain("Not written · Fallback winner");
+  });
+
+  test("shows Sticky promotion without inventing a source role for truncated traces", () => {
+    const { summary: _summary, ...traceWithoutSummary } = discoveryTrace;
+    const renderRole = (events: RoutingTraceV1["events"], truncated = false) => {
+      const html = renderWithIntl(
+        <ErrorDetailsDialog
+          externalOpen
+          statusCode={null}
+          errorMessage={null}
+          providerChain={[]}
+          routingTrace={{ ...traceWithoutSummary, events, truncated }}
+          sessionId="role-transition-session"
+        />
+      );
+      return parseHtml(html).querySelector("[data-testid='discovery-attempt']")?.textContent ?? "";
+    };
+
+    const stickyRole = renderRole([
+      {
+        type: "attempt_started",
+        at: 1_000,
+        elapsedMs: 0,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 80, name: "sticky-provider", priority: 1 },
+      },
+      {
+        type: "fallback_promoted",
+        at: 21_000,
+        elapsedMs: 20_000,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "fallback",
+        provider: { id: 80, name: "sticky-provider", priority: 1 },
+      },
+    ]);
+    const truncatedFallbackRole = renderRole(
+      [
+        {
+          type: "fallback_promoted",
+          at: 21_000,
+          elapsedMs: 20_000,
+          round: 1,
+          attemptId: "fallback:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "fallback-provider", priority: 1 },
+        },
+      ],
+      true
+    );
+
+    expect(stickyRole).toContain("Sticky → Fallback");
+    expect(truncatedFallbackRole).toContain("Fallback");
+    expect(truncatedFallbackRole).not.toContain("Candidate → Fallback");
+    expect(truncatedFallbackRole).not.toContain("Sticky → Fallback");
+  });
+
+  test("expands exact Discovery attempts with sanitized provider details and cancellation reasons", () => {
+    const longSecondError = `<script>alert('x')</script> second-attempt-429 ${"x".repeat(8_200)}TAIL_NOT_RENDERED`;
+    const detailedTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 5_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "80:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 1_500,
+          elapsedMs: 500,
+          round: 1,
+          attemptId: "80:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+          outcome: "failed",
+          statusCode: 403,
+        },
+        {
+          type: "attempt_started",
+          at: 1_600,
+          elapsedMs: 600,
+          round: 1,
+          attemptId: "80:2",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 1,
+          attemptId: "80:2",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+          outcome: "failed",
+          statusCode: 429,
+        },
+        {
+          type: "attempt_started",
+          at: 2_100,
+          elapsedMs: 1_100,
+          round: 1,
+          attemptId: "91:3",
+          attemptKind: "normal",
+          provider: { id: 91, name: "legacy-provider", priority: 2 },
+        },
+        {
+          type: "attempt_finished",
+          at: 2_500,
+          elapsedMs: 1_500,
+          round: 1,
+          attemptId: "91:3",
+          attemptKind: "normal",
+          provider: { id: 91, name: "legacy-provider", priority: 2 },
+          outcome: "failed",
+          statusCode: 503,
+        },
+        {
+          type: "attempt_started",
+          at: 2_600,
+          elapsedMs: 1_600,
+          round: 1,
+          attemptId: "56:4",
+          attemptKind: "normal",
+          provider: { id: 56, name: "cancelled-provider", priority: 3 },
+        },
+        {
+          type: "attempt_finished",
+          at: 5_000,
+          elapsedMs: 4_000,
+          round: 1,
+          attemptId: "56:4",
+          attemptKind: "normal",
+          provider: { id: 56, name: "cancelled-provider", priority: 3 },
+          outcome: "cancelled",
+          cancellationKind: "discovery_sla_timeout",
+        },
+      ],
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={503}
+        errorMessage={null}
+        providerChain={[
+          {
+            id: 80,
+            name: "same-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 403,
+            endpointUrl: "https://api.example.com/v1?key=secret-one",
+            errorMessage: "first-attempt-403",
+          },
+          {
+            id: 80,
+            name: "same-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            statusCode: 429,
+            endpointUrl: "https://api.example.com/v2?key=secret-two",
+            errorMessage: longSecondError,
+          },
+          {
+            id: 91,
+            name: "legacy-provider",
+            reason: "retry_failed",
+            statusCode: 503,
+            endpointUrl:
+              "https://endpoint-user:endpoint-pass@api.example.com/v3?key=endpoint-secret#fragment",
+            errorDetails: {
+              provider: {
+                id: 91,
+                name: "legacy-provider",
+                statusCode: 503,
+                statusText: "Service Unavailable",
+                upstreamBody: JSON.stringify({
+                  message: "third-attempt-503",
+                  api_key: "sk-abcdefghijklmnopqrstuvwxyz123456",
+                  authorization: "Bearer bearer-secret-value",
+                }),
+              },
+            },
+          },
+        ]}
+        routingTrace={detailedTrace}
+        sessionId="trace-details"
+      />
+    );
+
+    const attempts = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-testid='discovery-attempt']")
+    );
+    const secondAttempt = attempts.find((card) => card.textContent?.includes("HTTP 429"));
+    const secondToggle =
+      secondAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null;
+    expect(secondToggle?.getAttribute("aria-expanded")).toBe("false");
+    click(secondToggle);
+    expect(secondToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(secondAttempt?.textContent).toContain("second-attempt-429");
+    expect(secondAttempt?.textContent).not.toContain("first-attempt-403");
+    expect(secondAttempt?.textContent).toContain("https://api.example.com/v2");
+    expect(secondAttempt?.textContent).not.toContain("secret-two");
+    expect(secondAttempt?.textContent).not.toContain("TAIL_NOT_RENDERED");
+    expect(secondAttempt?.querySelector("script")).toBeNull();
+
+    const legacyAttempt = attempts.find((card) => card.textContent?.includes("HTTP 503"));
+    click(legacyAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(legacyAttempt?.textContent).toContain("third-attempt-503");
+    expect(legacyAttempt?.textContent).toContain("https://api.example.com/v3");
+    expect(legacyAttempt?.textContent).not.toContain("endpoint-user");
+    expect(legacyAttempt?.textContent).not.toContain("endpoint-secret");
+    expect(legacyAttempt?.textContent).not.toContain("abcdefghijklmnopqrstuvwxyz123456");
+    expect(legacyAttempt?.textContent).not.toContain("bearer-secret-value");
+
+    const cancelledAttempt = attempts.find((card) =>
+      card.textContent?.includes("cancelled-provider")
+    );
+    click(cancelledAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(cancelledAttempt?.textContent).toContain("Discovery SLA expired");
+    expect(cancelledAttempt?.textContent).not.toContain("Upstream error");
+    unmount();
+  });
+
+  test("maps billed Discovery losers to attempt cards without treating cancelled usage as zero", () => {
+    const billingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 8_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "101:1",
+          attemptKind: "normal",
+          provider: { id: 101, name: "billed-loser", priority: 1 },
+        },
+        {
+          type: "attempt_ready",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 1,
+          attemptId: "101:1",
+          attemptKind: "normal",
+          provider: { id: 101, name: "billed-loser", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 3_000,
+          elapsedMs: 2_000,
+          round: 1,
+          attemptId: "101:1",
+          attemptKind: "normal",
+          provider: { id: 101, name: "billed-loser", priority: 1 },
+          outcome: "cancelled",
+          cancellationKind: "winner_committed",
+        },
+        {
+          type: "attempt_started",
+          at: 1_100,
+          elapsedMs: 100,
+          round: 1,
+          attemptId: "102:2",
+          attemptKind: "normal",
+          provider: { id: 102, name: "winner-provider", priority: 1 },
+        },
+        {
+          type: "winner_committed",
+          at: 2_500,
+          elapsedMs: 1_500,
+          round: 1,
+          attemptId: "102:2",
+          attemptKind: "normal",
+          provider: { id: 102, name: "winner-provider", priority: 1 },
+          statusCode: 200,
+        },
+        {
+          type: "attempt_started",
+          at: 1_200,
+          elapsedMs: 200,
+          round: 1,
+          attemptId: "103:3",
+          attemptKind: "normal",
+          provider: { id: 103, name: "cancelled-without-usage", priority: 2 },
+        },
+        {
+          type: "attempt_finished",
+          at: 3_100,
+          elapsedMs: 2_100,
+          round: 1,
+          attemptId: "103:3",
+          attemptKind: "normal",
+          provider: { id: 103, name: "cancelled-without-usage", priority: 2 },
+          outcome: "cancelled",
+          cancellationKind: "discovery_sla_timeout",
+        },
+        {
+          type: "attempt_started",
+          at: 1_300,
+          elapsedMs: 300,
+          round: 1,
+          attemptId: "101:4",
+          attemptKind: "normal",
+          provider: { id: 101, name: "billed-loser", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 3_200,
+          elapsedMs: 2_200,
+          round: 1,
+          attemptId: "101:4",
+          attemptKind: "normal",
+          provider: { id: 101, name: "billed-loser", priority: 1 },
+          outcome: "cancelled",
+          cancellationKind: "discovery_sla_timeout",
+        },
+      ],
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 7_000,
+        ttftMs: 1_500,
+        attemptsPerRequest: 4,
+        maxActiveAttempts: 4,
+        rounds: 1,
+        providerMs: 5_100,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal",
+        winnerProviderId: 102,
+        winnerRound: 1,
+      },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          {
+            id: 101,
+            name: "billed-loser",
+            reason: "hedge_loser_billed",
+            attemptNumber: 1,
+            statusCode: 200,
+          },
+          {
+            id: 102,
+            name: "winner-provider",
+            reason: "request_success",
+            attemptNumber: 2,
+            statusCode: 200,
+          },
+        ]}
+        routingTrace={billingTrace}
+        sessionId="discovery-billing"
+        costUsd="0.015"
+        inputTokens={100}
+        outputTokens={30}
+        cacheCreationInputTokens={20}
+        hedgeLosers={[
+          {
+            providerId: 101,
+            providerName: "billed-loser",
+            attemptNumber: 1,
+            costUsd: "0.006",
+            inputTokens: 50,
+            outputTokens: 12,
+            cacheCreationInputTokens: 10,
+          },
+        ]}
+      />
+    );
+
+    const cards = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-testid='discovery-attempt']")
+    );
+    const repeatedProviderCards = cards.filter((card) =>
+      card.textContent?.includes("billed-loser")
+    );
+    const billedLoser = repeatedProviderCards[0];
+    const sameProviderWithoutUsage = repeatedProviderCards[1];
+    const winner = cards.find((card) => card.textContent?.includes("winner-provider"));
+    const cancelled = cards.find((card) => card.textContent?.includes("cancelled-without-usage"));
+    click(billedLoser?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    click(
+      sameProviderWithoutUsage?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null
+    );
+    click(winner?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    click(cancelled?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+
+    expect(billedLoser?.textContent).toContain("Included in total cost");
+    expect(billedLoser?.textContent).toContain("$0.006000");
+    expect(billedLoser?.textContent).toContain("Input 50");
+    expect(billedLoser?.textContent).toContain("Output 12");
+    expect(billedLoser?.textContent).toContain("Cache Write 10");
+    expect(sameProviderWithoutUsage?.textContent).toContain("Cancelled; usage unavailable");
+    expect(sameProviderWithoutUsage?.textContent).not.toContain("$0.006000");
+    expect(winner?.textContent).toContain("Winner cost");
+    expect(winner?.textContent).toContain("$0.009000");
+    expect(winner?.textContent).toContain("Input 100");
+    expect(winner?.textContent).toContain("Output 30");
+    expect(winner?.textContent).toContain("Cache Write 20");
+    expect(cancelled?.textContent).toContain("Cancelled; usage unavailable");
+    expect(cancelled?.textContent).not.toContain("$0.000000");
+
+    const summaryTable = container.querySelector<HTMLElement>(
+      "[data-testid='provider-racing-billing-table']"
+    );
+    expect(summaryTable?.textContent).toContain("winner-provider");
+    expect(summaryTable?.textContent).toContain("#2");
+    expect(summaryTable?.textContent).toContain("$0.009000");
+    expect(summaryTable?.textContent).toContain("billed-loser");
+    expect(summaryTable?.textContent).toContain("#1");
+    expect(summaryTable?.textContent).toContain("$0.006000");
+    expect(summaryTable?.textContent).toContain("$0.015000");
+    unmount();
+  });
+
+  test("does not attach an older loser cost to a later winner from the same provider", () => {
+    const trace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "101:4",
+          attemptKind: "normal",
+          provider: { id: 101, name: "same-provider-winner", priority: 1 },
+        },
+        {
+          type: "attempt_ready",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 1,
+          attemptId: "101:4",
+          attemptKind: "normal",
+          provider: { id: 101, name: "same-provider-winner", priority: 1 },
+        },
+        {
+          type: "winner_committed",
+          at: 2_100,
+          elapsedMs: 1_100,
+          round: 1,
+          attemptId: "101:4",
+          attemptKind: "normal",
+          provider: { id: 101, name: "same-provider-winner", priority: 1 },
+          outcome: "winner",
+          statusCode: 200,
+        },
+      ],
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 2_000,
+        ttftMs: 1_100,
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        providerMs: 3_000,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal",
+        winnerProviderId: 101,
+        winnerRound: 1,
+      },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          {
+            id: 101,
+            name: "same-provider-winner",
+            reason: "request_success",
+            attemptNumber: 4,
+            statusCode: 200,
+          },
+        ]}
+        routingTrace={trace}
+        sessionId="same-provider-mismatch"
+        costUsd="0.015"
+        inputTokens={100}
+        outputTokens={30}
+        hedgeLosers={[
+          {
+            providerId: 101,
+            providerName: "same-provider-older-loser",
+            attemptNumber: 1,
+            costUsd: "0.006",
+            inputTokens: 50,
+            outputTokens: 12,
+          },
+        ]}
+      />
+    );
+
+    const winner = container.querySelector<HTMLElement>("[data-testid='discovery-attempt']");
+    click(winner?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(winner?.textContent).toContain("Winner cost");
+    expect(winner?.textContent).toContain("$0.009000");
+    expect(winner?.textContent).not.toContain("$0.006000");
+    unmount();
+  });
+
+  test("labels a lease conflict as single-route protection while retaining provider selection", () => {
+    const protectedTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "lease_conflict",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 80, name: "protected-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={protectedTrace}
+        sessionId="protected-session"
+      />
+    );
+
+    expect(html).toContain("Single-route protection");
+    expect(html).toContain("Provider selection under single-route protection");
+    expect(html).toContain("protected-provider");
+  });
+
+  test("shows a legacy mode and bypass reason while retaining the old chain", () => {
+    const legacyTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "legacy_serial",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "non_streaming",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 1, name: "legacy-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={legacyTrace}
+        sessionId="legacy-session"
+      />
+    );
+
+    expect(html).toContain("Legacy serial fallback");
+    expect(html).toContain("Non-streaming request");
+    expect(html).toContain("legacy-provider");
+    expect(html).not.toContain("Discovery rounds");
+  });
+
+  test("shows provider selection when a legacy Hedge trace has no attempt evidence", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[{ id: 1, name: "selected-provider", reason: "initial_selection" }]}
+        routingTrace={{
+          version: 1,
+          mode: "legacy_hedge",
+          startedAt: 1_000,
+          updatedAt: 2_000,
+          discoveryEnabled: false,
+          eligible: false,
+          bypassReason: "disabled",
+          events: [{ type: "request_started", at: 1_000, elapsedMs: 0 }],
+        }}
+        sessionId="legacy-selection-only"
+      />
+    );
+
+    expect(html).toContain("Legacy Hedge");
+    expect(html).toContain("selected-provider");
+    expect(html).not.toContain("No provider attempts recorded");
+    expect(html).not.toContain('data-testid="discovery-attempt"');
+  });
+
+  test("surfaces legacy hedge slot saturation and its configured cap", () => {
+    const legacyHedgeTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "legacy_hedge",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      config: {
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10_000,
+        stickySlaMs: 20_000,
+        racingTotalTimeoutMs: 60_000,
+        stickyTimeoutCooldownMs: 300_000,
+        legacyHedgeMaxInFlight: 3,
+      },
+      events: [
+        {
+          type: "hedge_slot_saturated",
+          at: 2_000,
+          elapsedMs: 1_000,
+          attemptId: "legacy-hedge-1-1",
+          provider: { id: 1, name: "slow-provider" },
+          activeAttemptCount: 3,
+          configuredCap: 3,
+          durationMs: 1_000,
+        },
+      ],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={499}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={legacyHedgeTrace}
+        sessionId="legacy-hedge-session"
+      />
+    );
+
+    expect(html).toContain("Legacy Hedge");
+    expect(html).toContain("Legacy hedge cap");
+    expect(html).toContain("Hedge slots saturated (1)");
+    expect(html).toContain("slow-provider");
+    expect(html).toContain("3/3 active");
+  });
+
+  test("shows late terminal failure and Sticky binding result after a first-byte winner", () => {
+    const failedTrace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        ...discoveryTrace.events,
+        {
+          type: "request_finished",
+          at: 5_000,
+          elapsedMs: 4_000,
+          outcome: "failed",
+          statusCode: 502,
+        },
+        {
+          type: "binding_finalized",
+          at: 5_100,
+          elapsedMs: 4_100,
+          provider: { id: 12, name: "candidate-b" },
+          bindingAction: "renew",
+          outcome: "skipped",
+          reason: "generation_conflict",
+        },
+      ],
+      summary: { ...discoveryTrace.summary!, outcome: "failed", statusCode: 502 },
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={502}
+        errorMessage="STREAM_COMPLETION_MARKER_MISSING"
+        providerChain={[{ id: 12, name: "candidate-b", reason: "retry_failed", statusCode: 502 }]}
+        routingTrace={failedTrace}
+        sessionId="trace-session"
+      />
+    );
+    const document = parseHtml(html);
+    const terminal = document.querySelector("[data-testid='discovery-terminal-status']");
+
+    expect(terminal?.textContent).toContain("Request result");
+    expect(terminal?.textContent).toContain("Failed");
+    expect(terminal?.textContent).toContain("HTTP 502");
+    expect(terminal?.textContent).toContain("Sticky binding");
+    expect(terminal?.textContent).toContain("Renew");
+    expect(terminal?.textContent).toContain("generation_conflict");
+    expect(document.querySelector("[data-testid='discovery-round-1']")?.textContent).toContain(
+      "Failed"
+    );
+  });
+
+  test("derives live attempt concurrency while the terminal summary is not available", () => {
+    const { summary: _summary, ...liveTrace } = discoveryTrace;
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={null}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={liveTrace}
+        sessionId="live-trace-session"
+      />
+    );
+    const document = parseHtml(html);
+    const discoveryView = document.querySelector("[data-testid='discovery-trace-view']");
+
+    expect(discoveryView?.textContent).toContain("1 rounds · 3 attempts · max 2 active");
+    expect(discoveryView?.textContent).not.toContain("0 attempts · max 0 active");
+  });
+
+  test("shows a recorded upstream error when a legacy Hedge trace has no attempt events", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      mode: "legacy_hedge",
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      events: [
+        { type: "request_started", at: 1_000, elapsedMs: 0 },
+        { type: "request_finished", at: 1_100, elapsedMs: 100, outcome: "failed", statusCode: 502 },
+      ],
+      summary: {
+        ...discoveryTrace.summary!,
+        outcome: "failed",
+        statusCode: 502,
+        attemptsPerRequest: 0,
+      },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="legacy-empty-trace"
+        providerChain={[
+          { id: 1, name: "selected", reason: "initial_selection" },
+          {
+            id: 1,
+            name: "selected",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 502,
+            errorMessage: "upstream failed",
+            errorDetails: {
+              provider: {
+                id: 1,
+                name: "selected",
+                statusCode: 502,
+                statusText: "Bad Gateway",
+                upstreamBody: '{"error":"upstream unavailable"}',
+              },
+            },
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const attempt = container.querySelector("[data-testid='discovery-attempt']");
+    expect(attempt?.textContent).toContain("selected");
+    expect(attempt?.textContent).toContain("HTTP 502");
+    expect(container.textContent).not.toContain("No provider attempts recorded");
+    click(attempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(attempt?.textContent).toContain("upstream unavailable");
+    unmount();
+  });
+
+  test.each(["legacy-hedge-1-1", "legacy-hedge-1-setup-1"])(
+    "matches legacy Hedge attempt %s to its decision-chain error",
+    (attemptId) => {
+      const trace: RoutingTraceV1 = {
+        ...discoveryTrace,
+        mode: "legacy_hedge",
+        discoveryEnabled: false,
+        eligible: false,
+        bypassReason: "disabled",
+        events: [
+          {
+            type: "attempt_finished",
+            at: 1_100,
+            elapsedMs: 100,
+            round: 1,
+            attemptId,
+            provider: { id: 1, name: "failed-provider" },
+            outcome: "failed",
+            statusCode: 502,
+          },
+        ],
+      };
+      const { container, unmount } = renderClientWithIntl(
+        <ErrorDetailsDialog
+          externalOpen
+          initialTab="logic-trace"
+          statusCode={502}
+          errorMessage={null}
+          sessionId="legacy-error-trace"
+          providerChain={[
+            { id: 1, name: "failed-provider", reason: "initial_selection" },
+            {
+              id: 1,
+              name: "failed-provider",
+              reason: "retry_failed",
+              attemptNumber: 1,
+              statusCode: 502,
+              errorDetails: {
+                provider: {
+                  id: 1,
+                  name: "failed-provider",
+                  statusCode: 502,
+                  statusText: "Bad Gateway",
+                  upstreamBody: '{"error":"gateway failure"}',
+                },
+              },
+            },
+          ]}
+          routingTrace={trace}
+        />
+      );
+
+      const attempts = container.querySelectorAll("[data-testid='discovery-attempt']");
+      expect(attempts).toHaveLength(1);
+      click(attempts[0].querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+      expect(attempts[0].textContent).toContain("gateway failure");
+      unmount();
+    }
+  );
+
+  test("matches each rectified legacy Hedge retry to its own decision-chain error", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      mode: "legacy_hedge",
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      events: [
+        {
+          type: "attempt_finished",
+          at: 1_100,
+          elapsedMs: 100,
+          round: 1,
+          attemptId: "legacy-hedge-2-1",
+          provider: { id: 7, name: "retried-provider" },
+          outcome: "failed",
+          statusCode: 400,
+          reason: "reactive_rectifier_retry",
+        },
+        {
+          type: "attempt_finished",
+          at: 1_300,
+          elapsedMs: 300,
+          round: 1,
+          attemptId: "legacy-hedge-2-2",
+          provider: { id: 7, name: "retried-provider" },
+          outcome: "failed",
+          statusCode: 502,
+        },
+      ],
+    };
+    const upstreamError = (statusCode: number, upstreamBody: string) => ({
+      provider: {
+        id: 7,
+        name: "retried-provider",
+        statusCode,
+        statusText: "error",
+        upstreamBody,
+      },
+    });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="legacy-rectified-retry"
+        providerChain={[
+          { id: 1, name: "initial-provider", reason: "initial_selection" },
+          {
+            id: 7,
+            name: "retried-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            routingAttemptId: "legacy-hedge-2-1",
+            routingRound: 1,
+            statusCode: 400,
+            errorDetails: upstreamError(400, '{"error":"budget too low"}'),
+          },
+          {
+            id: 7,
+            name: "retried-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            routingAttemptId: "legacy-hedge-2-2",
+            routingRound: 1,
+            statusCode: 502,
+            errorDetails: upstreamError(502, '{"error":"retry gateway failure"}'),
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const attempts = [...container.querySelectorAll("[data-testid='discovery-attempt']")];
+    expect(attempts).toHaveLength(2);
+    for (const attempt of attempts) {
+      click(attempt.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    }
+    expect(attempts[0].textContent).toContain("budget too low");
+    expect(attempts[0].textContent).not.toContain("retry gateway failure");
+    expect(attempts[1].textContent).toContain("retry gateway failure");
+    unmount();
+  });
+
+  test("keeps reconstructed Discovery attempts out of the winner round when their round is unknown", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        { type: "request_started", at: 1_000, elapsedMs: 0 },
+        { type: "request_finished", at: 1_500, elapsedMs: 500, outcome: "failed", statusCode: 502 },
+      ],
+      summary: { ...discoveryTrace.summary!, outcome: "failed", statusCode: 502, winnerRound: 2 },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="discovery-truncated-trace"
+        providerChain={[
+          {
+            id: 21,
+            name: "round-one-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            routingAttemptId: "21:1",
+            routingRound: 1,
+            statusCode: 502,
+            errorMessage: "round one failure",
+          },
+          {
+            id: 22,
+            name: "legacy-record-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            statusCode: 502,
+            errorMessage: "round not recorded failure",
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const roundOne = container.querySelector("[data-testid='discovery-round-1']");
+    const unknownRound = container.querySelector("[data-testid='discovery-round-unknown']");
+    expect(roundOne?.textContent).toContain("round-one-provider");
+    expect(unknownRound?.textContent).toContain("Round not recorded");
+    expect(unknownRound?.textContent).toContain("legacy-record-provider");
+    expect(container.querySelector("[data-testid='discovery-round-2']")).toBeNull();
+    unmount();
+  });
+
+  test("falls back to the old chain for an unsupported trace version", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 1, name: "old-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={{ ...discoveryTrace, version: 2 } as unknown as RoutingTraceV1}
+        sessionId="old-session"
+      />
+    );
+
+    expect(html).toContain("old-provider");
+    expect(html).not.toContain("Bounded Discovery");
   });
 });
 
@@ -1223,7 +2811,9 @@ describe("error-details-dialog origin decision chain", () => {
         externalOpen
         statusCode={200}
         errorMessage={null}
-        sessionId={"sess-origin-3"}
+        sessionId={"pfx:scope:root"}
+        sourceSessionId="physical-origin"
+        requestSequence={3}
         providerChain={
           [
             {
@@ -1247,7 +2837,7 @@ describe("error-details-dialog origin decision chain", () => {
       await Promise.resolve();
     });
 
-    expect(getSessionOriginChainMock).toHaveBeenCalledWith("sess-origin-3");
+    expect(getSessionOriginChainMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-origin");
     expect(getSessionOriginChainMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Original decision record unavailable");
     unmount();

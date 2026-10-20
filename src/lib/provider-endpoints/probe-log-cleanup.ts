@@ -30,12 +30,15 @@ const cleanupState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__?: LeaderLock;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__?: boolean;
+  __CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__?: Promise<void>;
+  __CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__?: boolean;
 };
 
 async function runCleanupOnce(): Promise<void> {
   if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__) {
     return;
   }
+  if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) return;
 
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = true;
 
@@ -69,7 +72,7 @@ async function runCleanupOnce(): Promise<void> {
 
     let totalDeleted = 0;
     while (true) {
-      if (leadershipLost) {
+      if (leadershipLost || cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) {
         return;
       }
 
@@ -77,6 +80,10 @@ async function runCleanupOnce(): Promise<void> {
         beforeDate,
         batchSize: CLEANUP_BATCH_SIZE,
       });
+
+      if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) {
+        return;
+      }
 
       if (deleted <= 0) {
         break;
@@ -110,6 +117,16 @@ async function runCleanupOnce(): Promise<void> {
   }
 }
 
+function launchCleanup(): void {
+  if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__) return;
+  const current = runCleanupOnce().finally(() => {
+    if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__ === current) {
+      cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__ = undefined;
+    }
+  });
+  cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__ = current;
+}
+
 export function startEndpointProbeLogCleanup(): void {
   if (process.env.CI === "true") {
     return;
@@ -120,15 +137,17 @@ export function startEndpointProbeLogCleanup(): void {
   }
 
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STARTED__ = true;
+  cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__ = false;
 
-  void runCleanupOnce();
+  launchCleanup();
 
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_INTERVAL_ID__ = setInterval(() => {
-    void runCleanupOnce();
+    launchCleanup();
   }, CLEANUP_INTERVAL_MS);
 }
 
-export function stopEndpointProbeLogCleanup(): void {
+export async function stopEndpointProbeLogCleanup(): Promise<void> {
+  cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__ = true;
   const intervalId = cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_INTERVAL_ID__;
   if (intervalId) {
     clearInterval(intervalId);
@@ -136,11 +155,12 @@ export function stopEndpointProbeLogCleanup(): void {
 
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_INTERVAL_ID__ = undefined;
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STARTED__ = false;
-  cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = false;
+
+  await cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__;
 
   const lock = cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__;
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = undefined;
   if (lock) {
-    void releaseLeaderLock(lock);
+    await releaseLeaderLock(lock);
   }
 }

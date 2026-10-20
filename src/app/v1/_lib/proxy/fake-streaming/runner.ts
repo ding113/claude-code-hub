@@ -1,3 +1,4 @@
+import { retainCurrentRequestMemory } from "@/lib/memory/request-lifetime";
 import { emitFinalNonStream, emitFinalStream, emitStreamError } from "./emitters";
 import { type AttemptPerformer, orchestrateFakeStreamingAttempts } from "./orchestrator";
 import type { ProtocolFamily } from "./response-validator";
@@ -37,6 +38,22 @@ export function buildFakeStreamingResponse(input: FakeStreamingRunInput): Respon
 
 function buildStreamResponse(input: FakeStreamingRunInput): Response {
   const encoder = new TextEncoder();
+  const runAbortController = new AbortController();
+  const forwardInputAbort = () => runAbortController.abort(input.abortSignal.reason);
+  if (input.abortSignal.aborted) {
+    forwardInputAbort();
+  } else {
+    input.abortSignal.addEventListener("abort", forwardInputAbort, { once: true });
+  }
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  const cleanupRun = () => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    input.abortSignal.removeEventListener("abort", forwardInputAbort);
+  };
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
@@ -58,33 +75,38 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
         }
       };
 
-      // First heartbeat goes out immediately so consumers see something on the
-      // wire right away.
-      safeEnqueue(HEARTBEAT_FRAME);
-
-      const heartbeatTimer = setInterval(() => {
-        safeEnqueue(HEARTBEAT_FRAME);
-      }, input.heartbeatIntervalMs);
-
-      const cleanupHeartbeat = () => clearInterval(heartbeatTimer);
-
       const onAbort = () => {
-        cleanupHeartbeat();
+        cleanupRun();
         safeClose();
       };
-      input.abortSignal.addEventListener("abort", onAbort, { once: true });
+      runAbortController.signal.addEventListener("abort", onAbort, { once: true });
+      if (runAbortController.signal.aborted) {
+        onAbort();
+        return;
+      }
 
+      // First heartbeat goes out immediately so consumers see something on the
+      // wire right away. Subsequent heartbeats respect the stream queue: a slow
+      // or absent reader never accumulates one frame per interval in Node heap.
+      safeEnqueue(HEARTBEAT_FRAME);
+      heartbeatTimer = setInterval(() => {
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) return;
+        safeEnqueue(HEARTBEAT_FRAME);
+      }, input.heartbeatIntervalMs);
+      heartbeatTimer.unref?.();
+
+      const releaseRequestMemory = retainCurrentRequestMemory("fake-streaming");
       void orchestrateFakeStreamingAttempts({
         family: input.family,
         performAttempt: input.performAttempt,
-        abortSignal: input.abortSignal,
+        abortSignal: runAbortController.signal,
         maxAttempts: input.maxAttempts,
         isStream: false,
       })
         .then((result) => {
-          cleanupHeartbeat();
-          input.abortSignal.removeEventListener("abort", onAbort);
-          if (input.abortSignal.aborted) {
+          cleanupRun();
+          runAbortController.signal.removeEventListener("abort", onAbort);
+          if (runAbortController.signal.aborted) {
             safeClose();
             return;
           }
@@ -114,9 +136,9 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
           safeClose();
         })
         .catch((error: unknown) => {
-          cleanupHeartbeat();
-          input.abortSignal.removeEventListener("abort", onAbort);
-          if (!input.abortSignal.aborted) {
+          cleanupRun();
+          runAbortController.signal.removeEventListener("abort", onAbort);
+          if (!runAbortController.signal.aborted) {
             safeEnqueue(
               emitStreamError({
                 family: input.family,
@@ -127,7 +149,12 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
             );
           }
           safeClose();
-        });
+        })
+        .finally(releaseRequestMemory);
+    },
+    cancel(reason) {
+      cleanupRun();
+      runAbortController.abort(reason);
     },
   });
 

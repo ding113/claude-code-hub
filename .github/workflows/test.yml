@@ -161,7 +161,7 @@ jobs:
       - name: Run integration tests
         run: >
           bun x vitest run
-          --config tests/configs/integration.config.ts
+          --config tests/configs/integration.config.mts
           --passWithNoTests
 
   # ==================== API 测试（需要运行服务）====================

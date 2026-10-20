@@ -1,4 +1,4 @@
-import { format, subDays } from "date-fns";
+import { addDays, format, startOfWeek, subDays } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 export interface ClockParts {
@@ -94,4 +94,61 @@ export function getQuickDateRange(
         endDate: formatDate(baseDate),
       };
   }
+}
+
+export type QuickTimePreset = "today" | "this-week";
+
+const QUICK_TIME_PRESETS: QuickTimePreset[] = ["today", "this-week"];
+
+function getDateRangeForTimePreset(
+  preset: QuickTimePreset,
+  timeZone?: string,
+  now: Date = new Date()
+): { startDate: string; endDate: string } {
+  if (preset === "this-week") {
+    const baseDate = timeZone ? toZonedTime(now, timeZone) : now;
+    const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+    return {
+      startDate: format(weekStart, "yyyy-MM-dd"),
+      endDate: format(addDays(weekStart, 6), "yyyy-MM-dd"),
+    };
+  }
+  return getQuickDateRange("today", timeZone, now);
+}
+
+/**
+ * Exclusive-end timestamp range ([start 00:00:00, end+1day 00:00:00)) for a quick time preset,
+ * resolved in the same timezone the time filter UI displays dates in.
+ */
+export function getQuickTimeRange(
+  preset: QuickTimePreset,
+  timeZone?: string,
+  now: Date = new Date()
+): { startTime: number; endTime: number } | null {
+  const { startDate, endDate } = getDateRangeForTimePreset(preset, timeZone, now);
+  const startTime = dateStringWithClockToTimestamp(startDate, "00:00:00", timeZone);
+  const endInclusive = dateStringWithClockToTimestamp(endDate, "23:59:59", timeZone);
+  if (startTime === undefined || endInclusive === undefined) return null;
+  return { startTime, endTime: endInclusive + 1000 };
+}
+
+/**
+ * Inverse of getQuickTimeRange: returns the preset whose range exactly matches the given
+ * timestamps, or null when the range is custom (or incomplete).
+ */
+export function detectQuickTimePreset(
+  startTime?: number,
+  endTime?: number,
+  timeZone?: string,
+  now: Date = new Date()
+): QuickTimePreset | null {
+  if (startTime === undefined || endTime === undefined) return null;
+
+  for (const preset of QUICK_TIME_PRESETS) {
+    const range = getQuickTimeRange(preset, timeZone, now);
+    if (range && range.startTime === startTime && range.endTime === endTime) {
+      return preset;
+    }
+  }
+  return null;
 }

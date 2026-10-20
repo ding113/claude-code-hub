@@ -1,5 +1,5 @@
 # ================================
-# Claude Code Hub - dev 工具链
+# CC Hub - dev 工具链
 # ================================
 #
 # 目标:
@@ -35,7 +35,7 @@ LOCAL_REDIS_URL ?= redis://$(REDIS_HOST):$(REDIS_PORT)
 
 help:
 	@echo ""
-	@echo "Claude Code Hub - dev 工具链"
+	@echo "CC Hub - dev 工具链"
 	@echo ""
 	@echo "常用命令:"
 	@echo "  make db        启动 PostgreSQL + Redis（Docker）"

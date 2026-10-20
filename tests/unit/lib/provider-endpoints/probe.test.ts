@@ -36,6 +36,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete process.env.ENDPOINT_PROBE_METHOD;
+  delete process.env.ENDPOINT_PROBE_SCHEDULER_ENABLED;
 });
 
 describe("provider-endpoints: probe", () => {
@@ -268,8 +269,9 @@ describe("provider-endpoints: probe", () => {
     expect(recordFailureMock).not.toHaveBeenCalled();
   });
 
-  test("probeProviderEndpointAndRecord: 记录入库字段包含 source/ok/statusCode/latency/probedAt", async () => {
+  test("probeProviderEndpointAndRecord: scheduler 关闭时 manual 探测仍正常入库", async () => {
     process.env.ENDPOINT_PROBE_METHOD = "HEAD";
+    process.env.ENDPOINT_PROBE_SCHEDULER_ENABLED = "false";
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 

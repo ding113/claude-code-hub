@@ -1,4 +1,5 @@
 import type { ActiveSessionInfo } from "@/types/session";
+import type { ApiFetchOptions } from "../fetcher";
 import {
   apiDelete,
   apiGet,
@@ -15,7 +16,12 @@ export function getActiveSessions() {
   );
 }
 
-export function getAllSessions(activePage?: number, inactivePage?: number, pageSize?: number) {
+export function getAllSessions(
+  activePage?: number,
+  inactivePage?: number,
+  pageSize?: number,
+  options?: ApiFetchOptions
+) {
   return toActionResult(
     apiGet(
       `/api/v1/sessions${searchParams({
@@ -23,34 +29,58 @@ export function getAllSessions(activePage?: number, inactivePage?: number, pageS
         activePage,
         inactivePage,
         pageSize,
-      })}`
+      })}`,
+      options
     )
   );
 }
 
-export function getSessionMessages(sessionId: string, requestSequence?: number) {
+export function getSessionMessages(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string
+) {
   return toActionResult(
     apiGet(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages${searchParams({
         requestSequence,
+        sourceSessionId,
       })}`
     )
   );
 }
 
-export function hasSessionMessages(sessionId: string, requestSequence?: number) {
+export function hasSessionMessages(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string,
+  requestId?: number
+) {
   return toActionResult(
     apiGet<{ exists: boolean }>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/exists${searchParams({
         requestSequence,
+        sourceSessionId,
+        requestId,
       })}`
     ).then((body) => body.exists)
   );
 }
 
-export function getSessionDetails(sessionId: string, requestSequence?: number) {
+export function getSessionDetails(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string,
+  requestId?: number
+) {
   return toActionResult(
-    apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}${searchParams({ requestSequence })}`)
+    apiGet(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}${searchParams({
+        requestSequence,
+        sourceSessionId,
+        requestId,
+      })}`
+    )
   );
 }
 

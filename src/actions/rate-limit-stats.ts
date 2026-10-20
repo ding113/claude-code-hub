@@ -19,7 +19,7 @@ export async function getRateLimitStats(
     const session = await getSession();
 
     // 仅管理员可访问
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "Unauthorized - Admin access required",

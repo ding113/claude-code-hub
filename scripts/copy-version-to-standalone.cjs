@@ -25,8 +25,8 @@ fs.mkdirSync(dstDir, { recursive: true });
 fs.copyFileSync(src, dst);
 console.log(`[copy-version] Copied VERSION -> ${dst}`);
 
-// Make standalone output self-contained for local `node .next/standalone/server.js` runs.
-// Next.js standalone requires `.next/static` and `public` to exist next to `server.js`.
+// 让 standalone 产物可直接执行 `node .next/standalone/cluster.js`。
+// Next.js standalone 要求 `.next/static` 和 `public` 与 `server.js` 位于同级目录。
 copyDirIfExists(
   path.resolve(process.cwd(), ".next", "static"),
   path.resolve(dstDir, ".next", "static")

@@ -26,6 +26,18 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 }));
 
 const redisStore = new Map<string, string>();
+const pipelineSetexMock = vi.fn().mockReturnThis();
+const pipelineHsetMock = vi.fn().mockReturnThis();
+const pipelineExpireMock = vi.fn().mockReturnThis();
+const pipelineDelMock = vi.fn().mockReturnThis();
+const pipelineExecMock = vi.fn().mockResolvedValue([]);
+const redisPipeline = {
+  setex: pipelineSetexMock,
+  hset: pipelineHsetMock,
+  expire: pipelineExpireMock,
+  del: pipelineDelMock,
+  exec: pipelineExecMock,
+};
 const redisMock = {
   status: "ready",
   setex: vi.fn((key: string, _ttl: number, value: string) => {
@@ -33,16 +45,17 @@ const redisMock = {
     return Promise.resolve("OK");
   }),
   get: vi.fn((key: string) => Promise.resolve(redisStore.get(key) ?? null)),
+  del: vi.fn((key: string) => Promise.resolve(redisStore.delete(key) ? 1 : 0)),
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
-  pipeline: vi.fn(() => ({
-    setex: vi.fn().mockReturnThis(),
-    hset: vi.fn().mockReturnThis(),
-    expire: vi.fn().mockReturnThis(),
-    del: vi.fn().mockReturnThis(),
-    exec: vi.fn().mockResolvedValue([]),
-  })),
+  eval: vi.fn((script: string, keyCount: number, ...rawArgs: Array<string | number>) => {
+    if (!script.includes("cch:session-response-bundle:read:v1")) return Promise.resolve(1);
+    const keys = rawArgs.slice(0, keyCount).map(String);
+    const body = redisStore.get(keys[1]);
+    return Promise.resolve([0, body === undefined ? 0 : 1, body ?? null]);
+  }),
+  pipeline: vi.fn(() => redisPipeline),
 };
 
 vi.mock("@/lib/redis", () => ({
@@ -51,11 +64,15 @@ vi.mock("@/lib/redis", () => ({
 
 let mockStoreMessages = false;
 let mockStoreSessionResponseBody = true;
+let mockSessionRequestArtifactMaxBytes = 1024 * 1024;
+let mockSessionResponseBodyMaxBytes = 1024 * 1024;
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
     STORE_SESSION_MESSAGES: mockStoreMessages,
     STORE_SESSION_RESPONSE_BODY: mockStoreSessionResponseBody,
+    SESSION_REQUEST_ARTIFACT_MAX_BYTES: mockSessionRequestArtifactMaxBytes,
+    SESSION_RESPONSE_BODY_MAX_BYTES: mockSessionResponseBodyMaxBytes,
     SESSION_TTL: 300,
   }),
 }));
@@ -66,8 +83,89 @@ describe("SessionManager detail snapshots", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     redisStore.clear();
+    redisMock.status = "ready";
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
+    mockSessionRequestArtifactMaxBytes = 1024 * 1024;
+    mockSessionResponseBodyMaxBytes = 1024 * 1024;
+  });
+
+  it("atomically persists the request sequence while expiring its owner marker", async () => {
+    redisMock.eval.mockResolvedValueOnce(1);
+
+    await expect(SessionManager.getNextRequestSequence("sess_owner", 42)).resolves.toBe(1);
+
+    expect(redisMock.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('PERSIST', KEYS[1])"),
+      2,
+      "session:sess_owner:seq",
+      "session:sess_owner:response-body-generation:v1",
+      "session:sess_owner:req:",
+      "300",
+      "42"
+    );
+    expect(redisMock.incr).not.toHaveBeenCalled();
+    expect(redisMock.pipeline).not.toHaveBeenCalled();
+  });
+
+  it("validates request artifacts against their immutable key owner", async () => {
+    redisStore.set("session:sess_owner:req:1:owner", "42");
+
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 42)).resolves.toBe(
+      true
+    );
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 43)).resolves.toBe(
+      false
+    );
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 2, 42)).resolves.toBe(
+      false
+    );
+  });
+
+  it("fails request artifact ownership checks closed when Redis is unavailable", async () => {
+    redisMock.status = "end";
+
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 42)).resolves.toBe(
+      false
+    );
+    expect(redisMock.get).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the request owner when a late response snapshot is stored", async () => {
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_late_response",
+      "after",
+      { body: "late response" },
+      7,
+      42
+    );
+
+    expect(redisMock.setex).toHaveBeenCalledWith(
+      "session:sess_late_response:req:7:owner",
+      300,
+      "42"
+    );
+  });
+
+  it("does not use legacy messages for a missing scoped request", async () => {
+    redisStore.set(
+      "session:sess_scoped_messages:messages",
+      JSON.stringify([{ role: "user", content: "legacy" }])
+    );
+
+    await expect(SessionManager.getSessionMessages("sess_scoped_messages", 7)).resolves.toBeNull();
+    await expect(SessionManager.getSessionMessages("sess_scoped_messages")).resolves.toEqual([
+      { role: "user", content: "legacy" },
+    ]);
+  });
+
+  it("does not use legacy response for a missing scoped request", async () => {
+    redisStore.set("session:sess_scoped_response:response", "legacy response");
+
+    await expect(SessionManager.getSessionResponse("sess_scoped_response", 7)).resolves.toBeNull();
+    await expect(SessionManager.getSessionResponse("sess_scoped_response")).resolves.toBe(
+      "legacy response"
+    );
   });
 
   it("stores and retrieves request/response before-after snapshots with TTL and redaction", async () => {
@@ -305,6 +403,103 @@ describe("SessionManager detail snapshots", () => {
       headers: { "content-type": "application/json" },
       meta: { upstreamUrl: null, statusCode: 200 },
     });
+  });
+
+  it("skips only an oversized response body while preserving snapshot headers and meta", async () => {
+    mockSessionResponseBodyMaxBytes = 4;
+
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_oversized_response",
+      "after",
+      {
+        body: "12345",
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        meta: { upstreamUrl: null, statusCode: 200 },
+      },
+      1
+    );
+
+    expect(
+      await SessionManager.getSessionResponsePhaseSnapshot("sess_oversized_response", "after", 1)
+    ).toEqual({
+      body: null,
+      headers: { "content-type": "text/event-stream" },
+      meta: { upstreamUrl: null, statusCode: 200 },
+    });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "SessionManager: Skipped oversized session response body",
+      { context: "snapshot:after", byteSize: 5, maxBytes: 4 }
+    );
+  });
+
+  it("skips oversized request artifacts while preserving snapshot headers and meta", async () => {
+    mockStoreMessages = true;
+    mockSessionRequestArtifactMaxBytes = 4;
+
+    await SessionManager.storeSessionRequestBody("sess_oversized_request", "12345", 1);
+    await SessionManager.storeSessionMessages("sess_oversized_request", ["12345"], 1);
+    await SessionManager.storeSessionRequestPhaseSnapshot(
+      "sess_oversized_request",
+      "before",
+      {
+        body: "12345",
+        messages: ["12345"],
+        headers: new Headers({ "content-type": "application/json" }),
+        meta: {
+          clientUrl: "https://client.example/v1/messages",
+          upstreamUrl: null,
+          method: "POST",
+        },
+      },
+      1
+    );
+
+    expect(await SessionManager.getSessionRequestBody("sess_oversized_request", 1)).toBeNull();
+    expect(await SessionManager.getSessionMessages("sess_oversized_request", 1)).toBeNull();
+    expect(
+      await SessionManager.getSessionRequestPhaseSnapshot("sess_oversized_request", "before", 1)
+    ).toEqual({
+      body: null,
+      messages: null,
+      headers: { "content-type": "application/json" },
+      meta: {
+        clientUrl: "https://client.example/v1/messages",
+        upstreamUrl: null,
+        method: "POST",
+      },
+    });
+  });
+
+  it("removes a previous snapshot body when its replacement exceeds the limit", async () => {
+    mockSessionResponseBodyMaxBytes = 4;
+
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_replaced_response",
+      "after",
+      { body: "1234" },
+      1
+    );
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_replaced_response",
+      "after",
+      {
+        body: "12345",
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        meta: { upstreamUrl: null, statusCode: 200 },
+      },
+      1
+    );
+
+    expect(
+      await SessionManager.getSessionResponsePhaseSnapshot("sess_replaced_response", "after", 1)
+    ).toEqual({
+      body: null,
+      headers: { "content-type": "text/event-stream" },
+      meta: { upstreamUrl: null, statusCode: 200 },
+    });
+    expect(redisMock.del).toHaveBeenCalledWith(
+      "session:sess_replaced_response:req:1:snapshot:response:after:body"
+    );
   });
 
   it("treats empty headers as missing instead of an empty record", async () => {

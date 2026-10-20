@@ -192,7 +192,7 @@
     },
     "customHeaders": {
       "label": "自訂請求標頭（JSON）",
-      "desc": "靜態請求標頭會合併到出站請求；不會覆蓋鑑權標頭或最終 request filter。",
+      "desc": "靜態值或動態模板會合併到出站請求；不會覆蓋鑑權標頭或最終 request filter。可用 '{{header.Name}}' 複製入站請求標頭，'{{session.id}}' 寫入 Session ID，'{{session.client_id}}' 寫入用戶端 Session ID。來源缺失時跳過該標頭。",
       "errors": {
         "invalidJson": "自訂請求標頭必須為合法 JSON",
         "notObject": "自訂請求標頭必須為 JSON 物件",
@@ -201,7 +201,8 @@
         "protectedName": "鑑權請求標頭不能透過自訂請求標頭設定",
         "invalidValue": "請求標頭值必須為字串",
         "emptyName": "請求標頭名稱不能為空",
-        "crlf": "請求標頭名稱和值不能包含換行符"
+        "crlf": "請求標頭名稱和值不能包含換行符",
+        "invalidTemplate": "動態模板語法無效。支援 '{{header.Name}}'、'{{session.id}}'、'{{session.client_id}}'"
       }
     },
     "codexOverrides": {
@@ -237,15 +238,16 @@
         }
       },
       "reasoningEffort": {
-        "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。注意：none 僅 GPT-5.4 mini 系列支援，模型不支援會返回錯誤。",
+        "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。可用檔位因模型而異，模型不支援會返回錯誤。",
         "label": "推理等級覆寫",
         "options": {
           "high": "high（更強推理）",
           "inherit": "不覆寫（跟隨客戶端）",
           "low": "low",
           "medium": "medium（預設）",
+          "max": "max（最高強度）",
           "minimal": "minimal（更省資源、更快）",
-          "none": "none（僅 GPT-5.4 mini）",
+          "none": "none",
           "xhigh": "xhigh"
         }
       },

@@ -1,0 +1,836 @@
+import { describe, expect, it, vi } from "vitest";
+import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
+import type { ProtocolFamily } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
+import {
+  concatChunks,
+  createShadowGateObserver,
+  isRequestScopedGateFailure,
+  runStreamContentGate,
+  STREAM_SHADOW_OBSERVER_MAX_BUFFER_CHARACTERS,
+  StreamPrecommitError,
+  type StreamGateFailureReason,
+} from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
+import { StreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { DiscoveryPrebuffer } from "@/app/v1/_lib/proxy/discovery-prebuffer";
+import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
+import { MemoryGovernor } from "../../../server-lib/memory-governor";
+
+const encoder = new TextEncoder();
+
+function readerFromChunks(
+  chunks: (string | Uint8Array)[],
+  options?: { failAfter?: number; failWith?: Error }
+): ReadableStreamDefaultReader<Uint8Array> {
+  let index = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (options?.failAfter !== undefined && index >= options.failAfter) {
+        controller.error(options.failWith ?? new Error("stream failed"));
+        return;
+      }
+      if (index >= chunks.length) {
+        controller.close();
+        return;
+      }
+      const chunk = chunks[index++];
+      controller.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+    },
+  });
+  return stream.getReader();
+}
+
+const GATE_OPTIONS = {
+  family: "anthropic" as const,
+  providerId: 7,
+  providerName: "test-provider",
+  prebufferEventCap: 64,
+  prebufferByteCap: 256 * 1024,
+};
+
+const PING = 'event: ping\ndata: {"type":"ping"}\n\n';
+const MESSAGE_START =
+  'event: message_start\ndata: {"type":"message_start","message":{"id":"m1"}}\n\n';
+const TEXT_DELTA =
+  'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}\n\n';
+const ERROR_FRAME =
+  'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}\n\n';
+const MESSAGE_STOP = 'event: message_stop\ndata: {"type":"message_stop"}\n\n';
+const REFUSAL_DELTA =
+  'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"reasoning_extraction"}},"usage":{"output_tokens":0}}\n\n';
+
+async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
+  const merged = concatChunks(chunks);
+  return merged ? new TextDecoder().decode(merged) : "";
+}
+
+describe("runStreamContentGate", () => {
+  it("错误状态位于长消息末尾时仍保留原 64 KiB 状态推断语义", async () => {
+    const frame = `event: error\ndata: ${JSON.stringify({ error: { message: "x".repeat(12000), status_code: 400 } })}\n\n`;
+    const result = await runStreamContentGate(readerFromChunks([frame]), GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (!result.committed)
+      expect(result.error).toMatchObject({ statusCode: 400, gateReason: "gate_error" });
+  });
+  it("把共享预算所有权交给已提交前缀，并在失败时自动释放", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const budget = new StreamGatePrebufferBudget(() => reservation);
+    const onBudgetWaitStart = vi.fn();
+    const onBudgetWaitEnd = vi.fn();
+    const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+      ...GATE_OPTIONS,
+      prebufferBudget: budget,
+      onBudgetWaitStart,
+      onBudgetWaitEnd,
+    });
+    expect(committed.committed).toBe(true);
+    if (committed.committed) {
+      expect(committed.prebufferLease?.reservedBytes).toBeGreaterThan(0);
+      expect(committed.prebufferLease?.reservedBytes).toBeLessThan(reservation);
+      expect(budget.snapshot().reservedBytes).toBe(committed.prebufferLease?.reservedBytes);
+      committed.prebufferLease?.release();
+    }
+    expect(onBudgetWaitStart).not.toHaveBeenCalled();
+    expect(onBudgetWaitEnd).not.toHaveBeenCalled();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+
+    const failed = await runStreamContentGate(readerFromChunks([ERROR_FRAME]), {
+      ...GATE_OPTIONS,
+      prebufferBudget: budget,
+    });
+    expect(failed.committed).toBe(false);
+    expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it("已提交前缀被丢弃（既未读完也未取消）时，请求作用域结束兜底归还两级额度", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const governor = new MemoryGovernor({
+      limit: reservation,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const budget = new StreamGatePrebufferBudget(() => reservation, governor);
+    const response = await withRequestMemoryLifetime(async () => {
+      const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+        ...GATE_OPTIONS,
+        prebufferBudget: budget,
+      });
+      expect(committed.committed).toBe(true);
+      expect(budget.snapshot().reservedBytes).toBeGreaterThan(0);
+      expect(governor.snapshot().leases.byTag.gate.count).toBe(1);
+      // 模拟下游在构造响应后丢弃了持有租约的前缀流。
+      return new Response("unrelated");
+    });
+    await response.text();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+    expect(governor.snapshot().usedBytes).toBe(0);
+  });
+
+  it("发现预缓冲重复挂载时先归还新租约再报错", async () => {
+    const budget = new StreamGatePrebufferBudget(() => 1024);
+    const prebuffer = new DiscoveryPrebuffer();
+    prebuffer.attachLease(await budget.acquire(256));
+    const second = await budget.acquire(256);
+    expect(() => prebuffer.attachLease(second)).toThrow();
+    expect(budget.snapshot().reservedBytes).toBe(256);
+    prebuffer.clear();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it("读取上游前先取得本地预算并在排队期间暂停供应商计时", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const budget = new StreamGatePrebufferBudget(() => reservation);
+    const occupied = await budget.acquire(reservation);
+    const onBudgetWaitStart = vi.fn();
+    const onBudgetWaitEnd = vi.fn();
+
+    const pending = runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+      ...GATE_OPTIONS,
+      prebufferBudget: budget,
+      onBudgetWaitStart,
+      onBudgetWaitEnd,
+    });
+
+    await vi.waitFor(() => expect(budget.snapshot().waiting).toBe(1));
+    expect(onBudgetWaitStart).toHaveBeenCalledTimes(1);
+
+    occupied.release();
+    const result = await pending;
+    expect(result.committed).toBe(true);
+    expect(onBudgetWaitEnd).toHaveBeenCalledTimes(1);
+    if (result.committed) result.prebufferLease?.release();
+  });
+
+  it("在持有前拒绝越过 2 倍单请求上限的超大网络 chunk", async () => {
+    const oversized = new Uint8Array(GATE_OPTIONS.prebufferByteCap * 2 + 1);
+    const result = await runStreamContentGate(readerFromChunks([oversized]), GATE_OPTIONS);
+
+    expect(result.committed).toBe(false);
+    if (!result.committed) {
+      expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+    }
+  });
+
+  it("shadow observer 对未终止超长帧采用有界 fail-open 观察", () => {
+    const observer = createShadowGateObserver({
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "test-provider",
+    });
+    expect(() =>
+      observer.observe(
+        encoder.encode(`data: ${"x".repeat(STREAM_SHADOW_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
+      )
+    ).not.toThrow();
+    expect(() => observer.observe(encoder.encode("data: {}\n\n"))).not.toThrow();
+  });
+
+  it("commits on first valid content frame and returns full buffered prefix", async () => {
+    const reader = readerFromChunks([PING, MESSAGE_START, TEXT_DELTA, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    // 前缀包含中性帧与触发提交的内容帧所在 chunk
+    expect(await drainPrefix(result.prefixChunks)).toBe(PING + MESSAGE_START + TEXT_DELTA);
+    expect(result.readerDone).toBe(false);
+    // 剩余字节（message_stop）仍在 reader 上
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(MESSAGE_STOP);
+  });
+
+  it("fails over on error frame before content with upstream error body preserved", async () => {
+    const reader = readerFromChunks([PING, ERROR_FRAME, TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect(result.error).toBeInstanceOf(StreamPrecommitError);
+    const gateError = result.error as StreamPrecommitError;
+    expect(gateError.gateReason).toBe("gate_error");
+    expect(gateError.statusCode).toBe(502);
+    expect(gateError.upstreamError?.body).toContain("overloaded_error");
+    expect(gateError.upstreamError?.providerId).toBe(7);
+  });
+
+  it("fails over on malformed frame (fail-closed)", async () => {
+    const reader = readerFromChunks([PING, "data: {broken json\n\n"]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("decode_error");
+  });
+
+  it("treats terminal before content as empty stream", async () => {
+    const reader = readerFromChunks([PING, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(true);
+  });
+
+  it("无内容块的 Anthropic refusal 流原样提交，不伪造 empty_stream（#1491）", async () => {
+    const reader = readerFromChunks([MESSAGE_START, REFUSAL_DELTA, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(MESSAGE_START + REFUSAL_DELTA);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(MESSAGE_STOP);
+  });
+
+  it("三帧 refusal 位于同一 chunk 或无结尾空行时同样提交", async () => {
+    const single = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START + REFUSAL_DELTA + MESSAGE_STOP]),
+      GATE_OPTIONS
+    );
+    expect(single.committed).toBe(true);
+
+    const trailing = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, REFUSAL_DELTA.trimEnd()]),
+      GATE_OPTIONS
+    );
+    expect(trailing.committed).toBe(true);
+    if (trailing.committed) expect(trailing.readerDone).toBe(true);
+  });
+
+  it("非 refusal 的 message_delta 之后直接终止仍是 empty_stream", async () => {
+    const endTurn =
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n';
+    const result = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, endTurn, MESSAGE_STOP]),
+      { ...GATE_OPTIONS, upstreamStatusCode: 200 }
+    );
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    const gateError = result.error as StreamPrecommitError;
+    expect(gateError.gateReason).toBe("empty_stream");
+    expect(isRequestScopedGateFailure(gateError)).toBe(false);
+    // 本地合成 502 与上游真实 200 分开记录
+    expect(gateError.statusCode).toBe(502);
+    expect(gateError.upstreamStatusCode).toBe(200);
+    expect(JSON.parse(gateError.upstreamError?.body ?? "{}").error.upstream_status_code).toBe(200);
+  });
+
+  it("treats EOF without any content as empty stream", async () => {
+    const reader = readerFromChunks([PING, MESSAGE_START]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    // 上游断流：没有任何终止帧，属真实供应商侧异常
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
+  });
+
+  it("treats fully empty stream as empty stream", async () => {
+    const reader = readerFromChunks([]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
+  });
+
+  it("commits on trailing content frame without terminating blank line", async () => {
+    const reader = readerFromChunks([
+      'data: {"type":"content_block_delta","delta":{"text":"tail"}}',
+    ]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.readerDone).toBe(true);
+  });
+
+  it("fails with prebuffer_overflow when event cap exceeded", async () => {
+    const pings = Array.from({ length: 20 }, () => PING);
+    const reader = readerFromChunks(pings);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 10,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("fails with prebuffer_overflow when a single chunk carries more frames than the event cap", async () => {
+    // event 上限是逐帧硬上限：单 chunk 内塞满小中性帧同样触发
+    const manyFramesOneChunk = Array.from({ length: 20 }, () => PING).join("");
+    const reader = readerFromChunks([manyFramesOneChunk]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 10,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("commits when content arrives right at the event cap boundary", async () => {
+    // 第 cap 帧仍允许缓冲（framesSeen > cap 才溢出）；下一帧即 content 应正常提交
+    const reader = readerFromChunks([PING + PING + PING + TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 3,
+    });
+    expect(result.committed).toBe(true);
+  });
+
+  it("fails with prebuffer_overflow when byte cap exceeded", async () => {
+    const bigNeutral = `event: ping\ndata: {"type":"ping","pad":"${"x".repeat(4000)}"}\n\n`;
+    const reader = readerFromChunks([bigNeutral, bigNeutral, bigNeutral]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferByteCap: 8000,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("propagates read rejection unchanged (timeout/client abort classification stays upstream)", async () => {
+    const abortError = new Error("This operation was aborted");
+    abortError.name = "AbortError";
+    const reader = readerFromChunks([PING], { failAfter: 1, failWith: abortError });
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect(result.error).toBe(abortError);
+    expect(result.error).not.toBeInstanceOf(StreamPrecommitError);
+  });
+
+  it("is invariant to arbitrary chunk splits", async () => {
+    const body = PING + MESSAGE_START + TEXT_DELTA;
+    const bytes = encoder.encode(body);
+    for (const splitAt of [1, 7, 20, 55, bytes.length - 1]) {
+      const reader = readerFromChunks([bytes.slice(0, splitAt), bytes.slice(splitAt)]);
+      const result = await runStreamContentGate(reader, GATE_OPTIONS);
+      expect(result.committed).toBe(true);
+      if (!result.committed) continue;
+      expect(await drainPrefix(result.prefixChunks)).toBe(body);
+    }
+  });
+
+  it("coalesces a byte-fragmented prefix without changing its bytes", async () => {
+    const body = PING + MESSAGE_START + TEXT_DELTA;
+    const chunks = [...encoder.encode(body)].map((byte) => Uint8Array.of(byte));
+    const result = await runStreamContentGate(readerFromChunks(chunks), GATE_OPTIONS);
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(body);
+    expect(result.prefixChunks.length).toBeLessThan(chunks.length);
+  });
+
+  it("openai-chat: [DONE]-only stream is empty, in-stream error fails over", async () => {
+    const doneOnly = readerFromChunks(["data: [DONE]\n\n"]);
+    const doneResult = await runStreamContentGate(doneOnly, {
+      ...GATE_OPTIONS,
+      family: "openai-chat",
+    });
+    expect(doneResult.committed).toBe(false);
+    if (!doneResult.committed) {
+      expect((doneResult.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    }
+
+    const errorStream = readerFromChunks([
+      'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+      'data: {"error":{"message":"rate limited","code":429}}\n\n',
+    ]);
+    const errorResult = await runStreamContentGate(errorStream, {
+      ...GATE_OPTIONS,
+      family: "openai-chat",
+    });
+    expect(errorResult.committed).toBe(false);
+    if (!errorResult.committed) {
+      expect((errorResult.error as StreamPrecommitError).gateReason).toBe("gate_error");
+    }
+  });
+
+  it("openai-chat: DeepSeek reasoning_content commits before the default event cap", async () => {
+    const reasoningFrames = Array.from(
+      { length: 65 },
+      (_, index) =>
+        `data: {"choices":[{"delta":{"reasoning_content":"reasoning step ${index}"}}]}\n\n`
+    );
+    const reader = readerFromChunks(reasoningFrames);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-chat",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(reasoningFrames[0]);
+    expect(result.readerDone).toBe(false);
+  });
+
+  it("openai-responses: commits a compaction item before response.completed", async () => {
+    const compaction =
+      'event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}\n\n';
+    const completed =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n';
+    const reader = readerFromChunks([compaction, completed]);
+
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(compaction);
+    expect(result.readerDone).toBe(false);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(completed);
+  });
+
+  it("openai-responses: commits compaction carried only by response.completed", async () => {
+    const completed =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}\n\n';
+    const reader = readerFromChunks([completed]);
+
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(completed);
+    expect(result.readerDone).toBe(false);
+  });
+
+  it("openai-responses: commits custom tool-call input before response.completed", async () => {
+    const toolInput =
+      'event: response.custom_tool_call_input.delta\ndata: {"type":"response.custom_tool_call_input.delta","delta":"{\\"path\\":\\"README.md\\"}"}\n\n';
+    const completed =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n';
+    const reader = readerFromChunks([toolInput, completed]);
+
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(toolInput);
+    expect(result.readerDone).toBe(false);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(completed);
+  });
+
+  it("gemini: usage-only chunks buffer until content commits", async () => {
+    const reader = readerFromChunks([
+      'data: {"usageMetadata":{"totalTokenCount":1}}\n\n',
+      'data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n\n',
+    ]);
+    const result = await runStreamContentGate(reader, { ...GATE_OPTIONS, family: "gemini" });
+    expect(result.committed).toBe(true);
+  });
+});
+
+describe("concatChunks", () => {
+  it("returns null for empty, identity for single, concatenation for many", () => {
+    expect(concatChunks([])).toBeNull();
+    const single = encoder.encode("abc");
+    expect(concatChunks([single])).toBe(single);
+    const merged = concatChunks([encoder.encode("ab"), encoder.encode("cd")]);
+    expect(new TextDecoder().decode(merged as Uint8Array)).toBe("abcd");
+  });
+});
+
+describe("StreamPrecommitError classification", () => {
+  it("is a ProxyError with 502 so categorizeErrorAsync yields PROVIDER_ERROR semantics", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "anthropic",
+      providerId: 1,
+      providerName: "p",
+    });
+    expect(error).toBeInstanceOf(ProxyError);
+    expect(error.statusCode).toBe(502);
+    expect(error).not.toBeInstanceOf(EmptyResponseError);
+  });
+
+  it("preserves an inferred 4xx stream error and lets error rules classify it", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          code: "cyber_policy",
+          message: "This content was flagged for possible cybersecurity risk.",
+        },
+      }),
+    });
+
+    expect(error.statusCode).toBe(400);
+    expect(error.upstreamError).toMatchObject({
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "structured_bad_request",
+    });
+    expect(error.upstreamError?.isSyntheticFake200).toBeUndefined();
+  });
+
+  it("preserves an explicit 4xx status from the stream error", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        status: 422,
+        error: {
+          message: "Unprocessable entity",
+        },
+      }),
+    });
+    expect(error.statusCode).toBe(422);
+    expect(error.upstreamError?.statusCodeInferred).toBe(true);
+  });
+
+  it("keeps provider-side and unknown gate errors on the 502 failover path", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "anthropic",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        type: "error",
+        error: { type: "overloaded_error", message: "overloaded" },
+      }),
+    });
+
+    expect(error.statusCode).toBe(502);
+    expect(error.upstreamError).toMatchObject({ statusCodeInferred: false });
+    expect(error.upstreamError?.isSyntheticFake200).toBeUndefined();
+  });
+
+  it("preserves structured invalid-request semantics without an explicit status", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", code: "invalid_prompt" },
+      }),
+    });
+
+    expect(error.statusCode).toBe(400);
+    expect(error.upstreamError?.statusCodeInferenceMatcherId).toBe("structured_bad_request");
+  });
+});
+
+describe("request echo frame byte-cap exclusion", () => {
+  const RESPONSES_OPTIONS = {
+    ...GATE_OPTIONS,
+    family: "openai-responses" as const,
+    prebufferByteCap: 1024,
+  };
+  const bigPayload = "x".repeat(4096);
+  const ECHO_FRAME = `event: response.created\ndata: {"type":"response.created","response":{"instructions":"${bigPayload}"}}\n\n`;
+  const RESPONSES_DELTA =
+    'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"hi"}\n\n';
+
+  it("does not count request echo frames against the byte cap", async () => {
+    // cap 4096 < 帧总字节（约 4186）：若不豁免必溢出；回显在豁免额度（=cap）内则放行
+    const reader = readerFromChunks([ECHO_FRAME, RESPONSES_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...RESPONSES_OPTIONS,
+      prebufferByteCap: 4096,
+    });
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toContain("response.created");
+  });
+
+  it("caps the echo exemption at prebufferByteCap so echo floods still overflow", async () => {
+    // 豁免额度上限 = cap（1024）：4KB 回显超出上限部分照常计入，缓冲总量被压在 2×cap 内
+    const reader = readerFromChunks([ECHO_FRAME, RESPONSES_DELTA]);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect(result.error).toBeInstanceOf(StreamPrecommitError);
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("still overflows on oversized non-echo neutral frames", async () => {
+    const bigNeutral = `event: response.output_item.added\ndata: {"type":"response.output_item.added","item":"${bigPayload}"}\n\n`;
+    const reader = readerFromChunks([bigNeutral, RESPONSES_DELTA]);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect(result.error).toBeInstanceOf(StreamPrecommitError);
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("reports echo-excluded bytes in the overflow error body", async () => {
+    // 每个网络 chunk 都小于 2×cap，确保先按帧识别回显；随后由普通中性帧
+    // 把扣除回显后的有效前缀推过 cap。单个超大 chunk 应在解析前直接拒绝。
+    const bigEchoFrame = `event: response.in_progress\ndata: {"type":"response.in_progress","response":{"instructions":"${"x".repeat(700)}"}}\n\n`;
+    const oversizedTail = `event: response.output_item.added\ndata: {"item":"${"y".repeat(900)}"}\n\n`;
+    const reader = readerFromChunks([bigEchoFrame, oversizedTail, RESPONSES_DELTA]);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    const body = JSON.parse((result.error as StreamPrecommitError).upstreamError?.body ?? "{}");
+    expect(body.error.echo_excluded_bytes).toBeGreaterThan(700);
+  });
+});
+
+describe("gate idle timeout", () => {
+  it("fails with idle_timeout when no chunk arrives within idleTimeoutMs", async () => {
+    const neverEnding = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => {}) });
+    const result = await runStreamContentGate(neverEnding.getReader(), {
+      ...GATE_OPTIONS,
+      idleTimeoutMs: 20,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("idle_timeout");
+  });
+
+  it("does not time out while chunks keep arriving", async () => {
+    const reader = readerFromChunks([PING, MESSAGE_START, TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, { ...GATE_OPTIONS, idleTimeoutMs: 5000 });
+    expect(result.committed).toBe(true);
+  });
+});
+
+describe("commit marker and first-byte callback", () => {
+  it("captures the committing frame/chunk marker when enabled", async () => {
+    const reader = readerFromChunks([PING, MESSAGE_START, TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      captureCommitMarker: true,
+    });
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.commitMarker).toMatchObject({
+      frameIndex: 3,
+      chunkIndex: 3,
+      eventName: "content_block_delta",
+      echoExcludedBytes: 0,
+    });
+    expect(result.commitMarker?.bufferedBytes).toBeGreaterThan(0);
+  });
+
+  it("omits the marker when capture is disabled (high-concurrency mode)", async () => {
+    const reader = readerFromChunks([MESSAGE_START, TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      captureCommitMarker: false,
+    });
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.commitMarker).toBeNull();
+  });
+
+  it("invokes onFirstByte exactly once on the first non-empty chunk", async () => {
+    let calls = 0;
+    const reader = readerFromChunks([PING, MESSAGE_START, TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      onFirstByte: () => {
+        calls += 1;
+      },
+    });
+    expect(result.committed).toBe(true);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("isRequestScopedGateFailure (circuit-breaker accounting scope)", () => {
+  const detail = { providerId: 7, providerName: "p7" } as const;
+
+  const families: ProtocolFamily[] = ["anthropic", "openai-chat", "openai-responses", "gemini"];
+  const reasons: StreamGateFailureReason[] = [
+    "gate_error",
+    "decode_error",
+    "empty_stream",
+    "prebuffer_overflow",
+    "idle_timeout",
+  ];
+
+  it("exempts only openai-responses empty_stream that ended on a terminal frame", () => {
+    for (const family of families) {
+      for (const reason of reasons) {
+        for (const terminalBeforeContent of [true, false]) {
+          const error = new StreamPrecommitError(reason, {
+            ...detail,
+            family,
+            terminalBeforeContent,
+          });
+          const expected =
+            family === "openai-responses" && reason === "empty_stream" && terminalBeforeContent;
+          expect(
+            isRequestScopedGateFailure(error),
+            `${family}/${reason}/terminal=${terminalBeforeContent}`
+          ).toBe(expected);
+        }
+      }
+    }
+  });
+
+  it("keeps upstream disconnects (EOF, no terminal frame) accountable", () => {
+    // 默认 terminalBeforeContent=false：断流 / 空 body 仍要计入熔断
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+    });
+    expect(error.terminalBeforeContent).toBe(false);
+    expect(isRequestScopedGateFailure(error)).toBe(false);
+  });
+
+  it("carries the three fields the accounting call sites depend on", () => {
+    // 串行与 hedge 两处记账只依赖这三个字段，无需重放整条转发路径
+    // （discovery 路径不经过门控，不产生 StreamPrecommitError）
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+      terminalBeforeContent: true,
+    });
+    expect(error.gateReason).toBe("empty_stream");
+    expect(error.gateFamily).toBe("openai-responses");
+    expect(error.terminalBeforeContent).toBe(true);
+    expect(error.statusCode).toBe(502);
+  });
+
+  it("rejects non-gate errors", () => {
+    expect(isRequestScopedGateFailure(new ProxyError("boom", 502))).toBe(false);
+    expect(isRequestScopedGateFailure(new Error("boom"))).toBe(false);
+    expect(isRequestScopedGateFailure(null)).toBe(false);
+  });
+});
+
+describe("OpenAI Responses 空输出完成", () => {
+  const options = { ...GATE_OPTIONS, family: "openai-responses" as const };
+
+  function completion(status: string, error: unknown = null): string {
+    const payload = JSON.stringify({
+      type: "response.completed",
+      response: { id: "resp_empty", status, output: [], error },
+    });
+    return `event: response.completed\ndata: ${payload}\n\n`;
+  }
+
+  it("透传明确成功但没有可见文本的完整响应", async () => {
+    const frames = [
+      'event: response.created\ndata: {"type":"response.created","response":{"id":"resp_empty","status":"in_progress","output":[]}}\n\n',
+      'event: response.output_text.done\ndata: {"type":"response.output_text.done","text":""}\n\n',
+      completion("completed"),
+    ];
+
+    const result = await runStreamContentGate(readerFromChunks(frames), options);
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(frames.join(""));
+  });
+
+  it("无结尾空行的成功完成帧也能在 EOF 时透传", async () => {
+    const result = await runStreamContentGate(
+      readerFromChunks([completion("completed").trimEnd()]),
+      options
+    );
+
+    expect(result.committed).toBe(true);
+    if (result.committed) expect(result.readerDone).toBe(true);
+  });
+
+  it("透传明确的 incomplete 终态，不把合法协议结果伪装成供应商 502", async () => {
+    const payload = JSON.stringify({
+      type: "response.incomplete",
+      response: {
+        id: "resp_incomplete",
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        usage: { input_tokens: 8, output_tokens: 4 },
+      },
+    });
+    const frame = `event: response.incomplete\ndata: ${payload}\n\n`;
+
+    const result = await runStreamContentGate(readerFromChunks([frame]), options);
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(frame);
+  });
+
+  it.each([
+    ["response.completed", "failed", null],
+    ["response.completed", "completed", { code: "server_error" }],
+  ])("拒绝非成功终态 %s/%s", async (eventName, status, error) => {
+    const payload = JSON.stringify({
+      type: eventName,
+      response: { id: "resp_bad", status, output: [], error },
+    });
+    const frame = `event: ${eventName}\ndata: ${payload}\n\n`;
+
+    const result = await runStreamContentGate(readerFromChunks([frame]), options);
+
+    expect(result.committed).toBe(false);
+  });
+});

@@ -782,14 +782,15 @@ export function isOpenAIImageMultipartContentType(contentType: string | null): b
 export async function parseOpenAIImageMultipartMetadata(
   request: Request,
   pathname: string,
-  contentType: string | null
+  contentType: string | null,
+  consume = false
 ): Promise<OpenAIImageRequestMetadata | null> {
   const endpoint = getOpenAIImageEndpoint(pathname);
   if (!endpoint || !isOpenAIImageMultipartContentType(contentType)) {
     return null;
   }
 
-  const formData = await request.clone().formData();
+  const formData = await (consume ? request : request.clone()).formData();
   const parts: OpenAIImageMultipartPart[] = [];
   let model: string | null = null;
 
@@ -1024,7 +1025,7 @@ export async function validateOpenAIImageRequest(options: {
   }
 
   if (endpoint === "variations") {
-    if (!options.imageRequestMetadata || options.imageRequestMetadata.bodyKind !== "multipart") {
+    if (options.imageRequestMetadata?.bodyKind !== "multipart") {
       return fail("Invalid request: /images/variations requires multipart/form-data.");
     }
     return validateVariationsMultipartRequest(options.imageRequestMetadata);

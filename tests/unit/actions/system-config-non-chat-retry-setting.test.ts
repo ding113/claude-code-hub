@@ -63,7 +63,7 @@ vi.mock("@/lib/utils/timezone", () => ({
 function createSettings(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
-    siteTitle: "Claude Code Hub",
+    siteTitle: "CC Hub",
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
@@ -137,7 +137,7 @@ describe("non-chat fallback system setting", () => {
     expect(
       toSystemSettings({
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
       }).allowNonConversationEndpointProviderFallback
     ).toBe(true);
 

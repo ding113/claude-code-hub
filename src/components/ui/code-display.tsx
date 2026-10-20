@@ -26,6 +26,10 @@ export type CodeDisplayLanguage = "json" | "sse" | "text";
 const DEFAULT_MAX_CONTENT_BYTES = 1_000_000; // 1MB
 const DEFAULT_MAX_LINES = 10_000;
 const PRETTY_MODE_DEFAULT_MAX_CHARS = 100_000;
+// SSE 事件视图为虚拟滚动 + 折叠预览，渲染成本与内容体积解耦：
+// 不受 PRETTY_MODE_DEFAULT_MAX_CHARS 强制降级与行数上限约束，
+// 字节上限对齐流式统计缓冲（response-handler STREAM_STATS_MAX_BUFFER_BYTES）
+const SSE_MAX_CONTENT_BYTES = 10_000_000;
 
 export interface CodeDisplayProps {
   content: string;
@@ -89,14 +93,20 @@ export function CodeDisplay({
 }: CodeDisplayProps) {
   const t = useTranslations("dashboard.sessions");
   const tActions = useTranslations("dashboard.actions");
-  const resolvedMaxContentBytes = maxContentBytes ?? DEFAULT_MAX_CONTENT_BYTES;
+  const isSse = language === "sse";
+  const resolvedMaxContentBytes =
+    maxContentBytes ?? (isSse ? SSE_MAX_CONTENT_BYTES : DEFAULT_MAX_CONTENT_BYTES);
   const resolvedMaxLines = maxLines ?? DEFAULT_MAX_LINES;
   const contentBytes = useMemo(() => new Blob([content]).size, [content]);
   const isOverMaxBytes = contentBytes > resolvedMaxContentBytes;
 
   const [mode, setMode] = useState<"raw" | "pretty">(() => {
     const defaultMode = getDefaultMode(language);
-    if (defaultMode === "pretty" && content.length > PRETTY_MODE_DEFAULT_MAX_CHARS) {
+    if (
+      defaultMode === "pretty" &&
+      language !== "sse" &&
+      content.length > PRETTY_MODE_DEFAULT_MAX_CHARS
+    ) {
       return "raw";
     }
     return defaultMode;
@@ -124,18 +134,18 @@ export function CodeDisplay({
 
   useEffect(() => {
     if (mode !== "pretty") return;
-    if (language === "text") return;
+    if (language === "text" || language === "sse") return;
     if (content.length <= PRETTY_MODE_DEFAULT_MAX_CHARS) return;
     setMode("raw");
   }, [content, language, mode]);
 
   const lineCount = useMemo(() => {
-    if (isOverMaxBytes) return 0;
+    if (isOverMaxBytes || isSse) return 0;
     return countLinesUpTo(content, resolvedMaxLines + 1);
-  }, [content, isOverMaxBytes, resolvedMaxLines]);
+  }, [content, isOverMaxBytes, isSse, resolvedMaxLines]);
   const isLargeContent = content.length > 4000 || lineCount > 200;
   const isExpanded = expanded || !isLargeContent;
-  const isHardLimited = isOverMaxBytes || lineCount > resolvedMaxLines;
+  const isHardLimited = isOverMaxBytes || (!isSse && lineCount > resolvedMaxLines);
 
   const formattedJson = useMemo(() => {
     if (language !== "json") return content;

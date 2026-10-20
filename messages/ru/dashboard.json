@@ -61,13 +61,13 @@
     "filters": {
       "user": "Пользователь",
       "provider": "Поставщик",
-      "sessionId": "ID сессии",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "Поиск пользователей...",
       "searchProvider": "Поиск провайдеров...",
-      "searchSessionId": "Поиск ID сессии...",
+      "searchSessionId": "Поиск Session или Prefix ID...",
       "noUserFound": "Пользователи не найдены",
       "noProviderFound": "Провайдеры не найдены",
-      "noSessionFound": "ID сессии не найдены",
+      "noSessionFound": "Session или Prefix ID не найдены",
       "model": "Модель",
       "actualResponseModelMismatch": "Модель тарификации отличается от фактической",
       "endpoint": "Эндпоинт",
@@ -88,6 +88,12 @@
       "minRetryCount": "Количество ретраев ≥",
       "minRetryCountPlaceholder": "Введите минимум (0 — без ограничения)",
       "enabled": "Вкл.",
+      "replay": {
+        "label": "Replay",
+        "all": "Все запросы",
+        "only": "Только Replay",
+        "exclude": "Исключить Replay"
+      },
       "apply": "Применить фильтр",
       "reset": "Сброс",
       "last7days": "7д",
@@ -131,6 +137,8 @@
       "ip": "IP",
       "provider": "Поставщик",
       "model": "Модель тарификации",
+      "reasoningEffort": "Интенсивность рассуждений",
+      "reasoningEffortTooltip": "Интенсивность рассуждений для запроса этой модели",
       "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
@@ -162,6 +170,7 @@
       "prevPage": "Предыдущая",
       "nextPage": "Следующая",
       "blocked": "Заблокировано",
+      "replay": "Replay",
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
       "specialSettings": "Особые",
@@ -212,6 +221,23 @@
         "viewFullError": "Показать полную ошибку",
         "viewSession": "Просмотр сеанса"
       },
+      "cachePerformance": {
+        "title": "Эффективность кэша",
+        "actualRate": "Фактическая доля кэша",
+        "theoreticalRate": "Теоретическая доля кэша",
+        "coefficient": "Коэффициент кэша запроса",
+        "rawCoefficient": "Необработанный коэффициент одного запроса; поправка доверия провайдера не применяется.",
+        "estimateNote": "Теоретическая доля оценивается по самому длинному нормализованному префиксу (байты / 4).",
+        "availability": {
+          "available": "Запрос подходит для оценки кэша префикса.",
+          "no_input": "Для запроса не записаны входные токены.",
+          "no_affinity_key": "Prefix ID не записан, поэтому теоретическая доля и коэффициент недоступны.",
+          "attempt_failed": "Попытка запроса завершилась ошибкой; коэффициент исключен.",
+          "not_observable": "Использование кэша у провайдера не наблюдалось; коэффициент исключен.",
+          "stream_truncated": "Поток был усечен; коэффициент исключен.",
+          "not_recorded": "Для этого запроса не записаны метрики кэша префикса."
+        }
+      },
       "specialSettings": {
         "title": "Особые настройки"
       },
@@ -225,6 +251,7 @@
         "title": "Информация о блокировке",
         "type": "Тип блокировки",
         "sensitiveWord": "Блокировка по ключевым словам",
+        "localCapacity": "Недостаточно локальной ёмкости",
         "word": "Ключевое слово",
         "matchType": "Тип совпадения",
         "matchTypeContains": "Содержит",
@@ -299,6 +326,7 @@
         "title": "Детали биллинга",
         "input": "Входные",
         "output": "Выходные",
+        "cacheWrite": "Запись в кэш",
         "cacheWrite5m": "Запись кэша (5m)",
         "cacheWrite1h": "Запись кэша (1h)",
         "cacheRead": "Чтение кэша",
@@ -316,6 +344,7 @@
           "local_manual": "Локальная ручная цена",
           "cloud_exact": "Точная облачная цена провайдера",
           "cloud_model_fallback": "Цена провайдера из резервной модели",
+          "cloud_official": "Официальная облачная цена",
           "priority_fallback": "Приоритетная резервная цена",
           "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
           "official_fallback": "Официальная цена"
@@ -345,30 +374,35 @@
       "performance": {
         "title": "Производительность",
         "ttfb": "TTFB",
+        "ttft": "TTFT",
+        "ttftShort": "TTFT",
         "duration": "Общее время",
-        "outputRate": "Скорость вывода"
+        "outputRate": "Скорость вывода",
+        "outputTokens": "Токены вывода"
       },
       "performanceTab": {
         "noPerformanceData": "Нет данных о производительности",
-        "ttfbGauge": "Время до первого байта",
+        "ttftGauge": "Время до первого токена",
         "outputRateGauge": "Скорость вывода",
         "latencyBreakdown": "Разбивка задержки",
         "generationTime": "Время генерации",
+        "segmentTtfb": "TTFB",
+        "segmentTtft": "Ожидание токена",
+        "segmentTotal": "Всего",
         "assessment": {
           "excellent": "Отлично",
           "good": "Хорошо",
           "warning": "Предупреждение",
           "poor": "Плохо"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1с",
-          "ttfbWarning": "TTFB 1-2с",
-          "ttfbPoor": "TTFB > 3с"
         }
       },
       "metadata": {
         "noMetadata": "Нет метаданных",
         "sessionInfo": "Информация о сеансе",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "Идентификатор Session клиента",
         "clientInfo": "Информация о клиенте",
         "billingInfo": "Информация о биллинге",
         "technicalTimeline": "Техническая хронология",
@@ -379,8 +413,157 @@
         "overridden": "Переопределено провайдером",
         "tooltip": "Уровень усилий на размышления, запрошенный клиентом (output_config.effort); показан как есть — прокси не переименовывает и не преобразует уровни."
       },
+      "routingTrace": {
+        "title": "Режим маршрутизации",
+        "modes": {
+          "discovery": "Ограниченный Discovery",
+          "legacy_hedge": "Прежняя гонка Hedge",
+          "legacy_serial": "Прежнее последовательное переключение",
+          "single_upstream": "Один upstream",
+          "lease_conflict": "Защита одним маршрутом"
+        },
+        "bypassed": "Discovery не использован: {reason}",
+        "bypassReasons": {
+          "disabled": "Discovery отключён",
+          "non_streaming": "Непотоковый запрос",
+          "retry_not_allowed": "Эта конечная точка не разрешает повторы",
+          "provider_switch_not_allowed": "Эта конечная точка не разрешает смену провайдера",
+          "raw_passthrough": "Запрос с прямой передачей данных",
+          "unsupported_protocol": "Протокол не поддерживается Discovery",
+          "websocket": "Запрос WebSocket",
+          "streaming_hedge_disabled": "Потоковая гонка отключена для этого запроса",
+          "raw_cross_provider_fallback": "Включено прямое переключение между провайдерами",
+          "missing_session": "Нет идентификатора Session",
+          "missing_key": "Нет идентификатора API Key",
+          "rollout_ineligible": "Запрос не входит в текущий rollout",
+          "redis_capability_unavailable": "Возможность привязки Redis недоступна",
+          "binding_conflict": "Конфликт привязки Session",
+          "lease_conflict": "Lease Discovery занят другим запросом; этот запрос использует один upstream",
+          "lease_unavailable": "Lease Discovery недоступен",
+          "unknown": "Условия запуска Discovery не выполнены"
+        },
+        "discoveryTitle": "Раунды Discovery",
+        "discoveryCompact": "{rounds} р. · {attempts} поп.",
+        "routeMode": "Способ маршрутизации",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "Холодный старт",
+          "rediscovery": "Повторное обнаружение"
+        },
+        "finalProvider": "Итоговый провайдер",
+        "roundsLabel": "Раунды",
+        "attemptsLabel": "Попытки",
+        "winnerOrigin": "Источник победителя",
+        "viewDetails": "Открыть детали Discovery",
+        "stickyPhase": "Проверка Sticky",
+        "round": "Раунд {round}",
+        "roundUnknown": "Раунд не записан",
+        "attempts": "Попыток: {count}",
+        "noAttempts": "Попытки провайдеров не записаны",
+        "providerFallback": "Провайдер {id}",
+        "elapsed": "+{elapsed} мс",
+        "priority": "Приоритет {priority}",
+        "roles": {
+          "sticky": "Sticky",
+          "normal": "Кандидат",
+          "fallback": "Резерв"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "Обычный кандидат",
+          "fallback": "Перехват резервным провайдером"
+        },
+        "roleTransition": "{from} → {to}",
+        "outcomes": {
+          "success": "Успешно",
+          "pending": "Ожидание",
+          "ready": "Готов",
+          "held": "Готов, удерживается",
+          "winner": "Победитель",
+          "failed": "Ошибка",
+          "cancelled": "Отменён",
+          "timeout": "Тайм-аут SLA",
+          "client_abort": "Клиент отключился",
+          "deadline": "Общий срок"
+        },
+        "terminalOutcome": "Результат запроса",
+        "bindingResult": "Sticky-привязка",
+        "bindingActions": {
+          "create": "Создать",
+          "renew": "Продлить",
+          "clear": "Очистить",
+          "none": "Без изменений"
+        },
+        "bindingFallbackWinner": "Не записано · Победитель резерва",
+        "bindingOutcomes": {
+          "updated": "Обновлено",
+          "cleared": "Очищено",
+          "skipped": "Пропущено",
+          "failed": "Ошибка",
+          "unknown": "Неизвестно"
+        },
+        "fallbackPromoted": "Повышен до резерва",
+        "winnerCommitted": "Победитель подтверждён",
+        "roundStarted": "Раунд начат",
+        "events": {
+          "started": "Запрос запущен",
+          "ready": "Получены первые допустимые данные",
+          "held": "Выдача удержана правилами маршрутизации",
+          "fallbackPromoted": "Повышен до резерва",
+          "winnerCommitted": "Подтверждён как победитель",
+          "finished": "Завершено: {outcome}"
+        },
+        "traceTruncated": "Часть событий опущена из-за ограничения хранилища.",
+        "summary": "Раундов: {rounds} · попыток: {attempts} · максимум активных: {maxActive}",
+        "config": "Снимок настроек",
+        "configConcurrency": "Параллельность",
+        "configLegacyHedgeMaxInFlight": "Лимит legacy hedge",
+        "configMaxRounds": "Максимум раундов",
+        "configDiscoverySla": "SLA раунда",
+        "configStickySla": "SLA Sticky",
+        "configTotalTimeout": "Общий тайм-аут",
+        "configStickyCooldown": "Пауза после тайм-аута Sticky",
+        "configStickyBindingTtl": "Срок действия привязки Sticky (SESSION_TTL)",
+        "slotSaturation": "Слоты hedge заполнены ({count})",
+        "slotSaturationEvent": "{provider} · активно {active}/{cap} · прошло {elapsed} мс",
+        "attemptDetails": {
+          "providerId": "ID провайдера",
+          "attempt": "Попытка",
+          "status": "Статус HTTP",
+          "inferred": "выведен",
+          "endpoint": "Upstream",
+          "error": "Ошибка upstream",
+          "cancellation": "Причина отмены",
+          "timeline": "Хронология попытки",
+          "billing": "Стоимость и использование",
+          "billed": "Включено в общую стоимость",
+          "billedCost": "Начисленная стоимость",
+          "winnerCost": "Стоимость победителя",
+          "notObtained": "Отменено, usage не получен"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "Победила другая попытка Discovery",
+          "discovery_sla_timeout": "SLA Discovery истёк",
+          "round_timeout": "SLA раунда истёк",
+          "sticky_timeout": "SLA Sticky истёк",
+          "request_deadline": "Общий срок Discovery истёк",
+          "client_abort": "Клиент отключился",
+          "winner_committed": "Другой провайдер был выбран победителем"
+        }
+      },
+      "reasoningEffort": {
+        "label": "Интенсивность рассуждений",
+        "overridden": "Переопределено провайдером",
+        "tooltip": "Интенсивность рассуждений в запросе Codex (reasoning.effort), показанная без изменений."
+      },
+      "reasoningEffortOpenai": {
+        "label": "Интенсивность рассуждений",
+        "overridden": "Переопределено провайдером",
+        "tooltip": "Интенсивность рассуждений в запросе OpenAI chat/completions (reasoning_effort / reasoning.effort), показанная без изменений."
+      },
       "logicTrace": {
         "title": "Цепочка решений",
+        "singleRouteSelectionTitle": "Выбор провайдера в режиме защиты одним маршрутом",
         "noDecisionData": "Нет данных о решениях",
         "providersCount": "{count} поставщиков",
         "healthyCount": "{count} исправных",
@@ -407,6 +590,12 @@
         "originDecisionLoading": "Загрузка исходного решения...",
         "originDecisionUnavailable": "Запись исходного решения недоступна",
         "originDecisionExpand": "Просмотр исходного выбора"
+      },
+      "replayServe": {
+        "title": "Обслужено из Replay-кэша",
+        "desc": "Запрос обслужен из Replay-кэша (идентичный запрос уже выполняется или завершён). Обращение к провайдеру не выполнялось, затрат нет.",
+        "replayId": "Replay ID",
+        "sourceRequestId": "Исходный запрос"
       }
     },
     "providerChain": {
@@ -437,6 +626,7 @@
       "totalCost": "Общая стоимость",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + контекст {context}",
       "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
       "context1m": "1M Контекст",
       "context1mEnabled": "Окно контекста 1M включено",
@@ -446,6 +636,7 @@
         "local_manual": "Локальная ручная цена",
         "cloud_exact": "Точная облачная цена провайдера",
         "cloud_model_fallback": "Цена провайдера из резервной модели",
+        "cloud_official": "Официальная облачная цена",
         "priority_fallback": "Приоритетная резервная цена",
         "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
         "official_fallback": "Официальная цена"
@@ -523,19 +714,21 @@
       "cost": "Стоимость",
       "cacheHitRequests": "Запросы (учтены в hit rate)",
       "cacheHitRate": "Попадания в кэш",
+      "cacheCoefficient": "Коэффициент кэша",
+      "cacheCoefficientTooltip": "Чем выше коэффициент кэша, тем реже переключаются аккаунты поставщика и тем менее заметна деградация кэша. 0.9 и выше — отлично, 0.8 и выше — хорошо.",
       "cacheReadTokens": "Токены чтения из кэша",
       "totalTokens": "Всего токенов",
       "cacheCreationConsumedAmount": "Расход на создание кэша",
       "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
       "avgResponseTime": "Среднее время ответа",
-      "avgTtfbMs": "Средний TTFB",
+      "avgTtftMs": "Средний TTFT",
       "avgTokensPerSecond": "Средн. ток/с",
       "avgCostPerRequest": "Ср. стоимость/запрос",
       "avgCostPerMillionTokens": "Ср. стоимость/1М токенов",
       "unknownModel": "Неизвестно",
       "successRateUnavailable": "Н/Д",
-      "successRateBasisDisclosure": "В режиме redirected billing одна строка может объединять несколько исходных моделей, поэтому здесь успешность скрыта, чтобы не вводить в заблуждение."
+      "successRateBasisDisclosure": "За выбранный период у этой модели нет учитываемых успешных или неуспешных исходов, поэтому успешность не рассчитывается."
     },
     "expandModelStats": "Развернуть модели",
     "collapseModelStats": "Свернуть модели",
@@ -628,6 +821,8 @@
     },
     "details": {
       "title": "Сообщения сеанса",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "Идентификатор Session клиента",
       "messages": "Список сообщений",
       "info": "Информация сеанса",
       "timeline": "Хронология",
@@ -740,11 +935,16 @@
       "loadError": "Ошибка загрузки",
       "fetchFailed": "Не удалось получить",
       "unknownError": "Неизвестная ошибка",
+      "error": "Не удалось загрузить сведения о Session",
       "storageNotEnabled": "Не сохранено",
       "storageNotEnabledHint": "Подсказка: проверьте REDIS_URL и ENABLE_RATE_LIMIT=true (кэш деталей сессии). Чтобы сохранять сообщения без маскировки, установите STORE_SESSION_MESSAGES=true."
     },
     "errors": {
-      "copyFailed": "Не удалось скопировать"
+      "copyFailed": "Не удалось скопировать",
+      "fetchSessionsFailed": "Не удалось загрузить список Session",
+      "fetchSessionsTimeout": "Время ожидания списка Session истекло",
+      "fetchSettingsFailed": "Не удалось загрузить системные настройки",
+      "retry": "Повторить"
     },
     "requestList": {
       "title": "Список запросов",
@@ -755,7 +955,9 @@
       "prev": "Назад",
       "next": "Вперед",
       "orderAsc": "Переключить на прямой порядок (старые первыми)",
-      "orderDesc": "Переключить на обратный порядок (новые первыми)"
+      "orderDesc": "Переключить на обратный порядок (новые первыми)",
+      "itemTitle": "Запрос #{sequence} - {model}",
+      "unknownModel": "Неизвестная модель"
     },
     "back": "Назад",
     "loadingError": "Не удалось загрузить"
@@ -1692,6 +1894,12 @@
         "confirmDescription": "Это навсегда удалит все логи запросов и статистику использования для этого пользователя. Это действие нельзя отменить.",
         "confirm": "Да, сбросить все",
         "loading": "Сброс...",
+        "queued": "Сброс поставлен в очередь",
+        "running": "Статистика сбрасывается",
+        "completed": "Сброс завершен",
+        "failed": "Сброс не выполнен. Можно повторить.",
+        "statusUnavailable": "Не удалось обновить статус сброса",
+        "retryStatus": "Повторить проверку",
         "success": "Вся статистика сброшена"
       }
     },

@@ -12,6 +12,7 @@ import { cleanupLogs } from "./service";
  * 队列实例（延迟初始化，避免模块加载时连接 Redis）
  */
 let _cleanupQueue: Queue.Queue | null = null;
+const AUTO_CLEANUP_JOB_NAME = "auto-cleanup";
 
 /**
  * 获取或创建清理队列实例（延迟初始化）
@@ -68,7 +69,7 @@ function setupQueueProcessor(queue: Queue.Queue): void {
   /**
    * 处理清理任务
    */
-  queue.process(async (job: Job) => {
+  queue.process(AUTO_CLEANUP_JOB_NAME, async (job: Job) => {
     // Compute beforeDate dynamically at execution time so cron jobs roll forward correctly.
     // retentionDays is stored in job data; beforeDate must NOT be serialized into Redis.
     const retentionDays: number = job.data.retentionDays ?? 30;
@@ -148,7 +149,7 @@ export async function scheduleAutoCleanup() {
 
     // 添加新的定时任务
     await queue.add(
-      "auto-cleanup",
+      AUTO_CLEANUP_JOB_NAME,
       {
         retentionDays,
         conditions: {},

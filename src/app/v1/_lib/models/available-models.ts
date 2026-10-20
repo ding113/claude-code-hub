@@ -29,6 +29,19 @@ export interface FetchedModel {
 /** 模型列表请求的默认超时（毫秒） */
 const DEFAULT_MODELS_TIMEOUT_MS = 10000;
 
+/** Codex CLI 使用空远端清单时会回退到内置模型目录。 */
+const CODEX_MODELS_MANIFEST_ETAG = 'W/"cch-codex-bundled-v1"';
+
+function matchesIfNoneMatch(value: string | undefined, etag: string): boolean {
+  if (!value) return false;
+
+  const opaqueTag = etag.replace(/^W\//, "");
+  return value.split(",").some((candidate) => {
+    const normalized = candidate.trim();
+    return normalized === "*" || normalized.replace(/^W\//, "") === opaqueTag;
+  });
+}
+
 /**
  * 获取 provider 的请求超时配置
  */
@@ -543,9 +556,23 @@ export const handleOpenAICompatibleModels = createFixedProviderTypesModelsHandle
 export async function handleAvailableModels(c: Context): Promise<Response> {
   try {
     const { user, key } = await authenticateRequest(c);
-
     const responseFormat = detectResponseFormat(c);
     const clientFormatOverride = detectClientFormatOverride(c);
+
+    if (
+      c.req.path === "/v1/models" &&
+      responseFormat === "openai" &&
+      clientFormatOverride === null &&
+      c.req.query("client_version")?.trim()
+    ) {
+      c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
+      c.header("Cache-Control", "no-cache");
+      if (matchesIfNoneMatch(c.req.header("if-none-match"), CODEX_MODELS_MANIFEST_ETAG)) {
+        return c.body(null, 304);
+      }
+      return c.json({ models: [] });
+    }
+
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
 
     logger.debug("[AvailableModels] Request received", {

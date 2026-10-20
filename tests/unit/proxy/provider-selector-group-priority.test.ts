@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 import { ProxyProviderResolver } from "@/app/v1/_lib/proxy/provider-selector";
 
@@ -127,6 +128,21 @@ describe("resolveEffectivePriority", () => {
     });
     // "cli,admin" - only "cli" matches, should return 3
     expect(ProxyProviderResolver.resolveEffectivePriority(provider, "cli,admin")).toBe(3);
+  });
+
+  it("resolves Discovery priority from the authenticated key group", () => {
+    const provider = makeProvider({
+      priority: 10,
+      groupPriorities: { cli: 1 },
+    });
+    const session = {
+      authState: {
+        key: { providerGroup: "cli" },
+        user: { providerGroup: "chat" },
+      },
+    } as unknown as ProxySession;
+
+    expect(ProxyProviderResolver.resolveEffectivePriorityForSession(provider, session)).toBe(1);
   });
 });
 

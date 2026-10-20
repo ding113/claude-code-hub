@@ -61,13 +61,13 @@
     "filters": {
       "user": "使用者",
       "provider": "供應商",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "搜尋使用者...",
       "searchProvider": "搜尋供應商...",
-      "searchSessionId": "搜尋 Session ID...",
+      "searchSessionId": "搜尋 Session 或 Prefix ID...",
       "noUserFound": "未找到匹配的使用者",
       "noProviderFound": "未找到匹配的供應商",
-      "noSessionFound": "未找到符合的 Session ID",
+      "noSessionFound": "未找到符合的 Session 或 Prefix ID",
       "model": "Model",
       "actualResponseModelMismatch": "計費/實際模型不一致",
       "endpoint": "端點",
@@ -88,6 +88,12 @@
       "minRetryCount": "重試次數≥",
       "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "enabled": "已開啟",
+      "replay": {
+        "label": "Replay",
+        "all": "全部請求",
+        "only": "僅 Replay 請求",
+        "exclude": "排除 Replay 請求"
+      },
       "apply": "套用篩選",
       "reset": "重設",
       "last7days": "近 7 天",
@@ -131,6 +137,8 @@
       "ip": "IP",
       "provider": "供應商",
       "model": "計費模型",
+      "reasoningEffort": "思考強度",
+      "reasoningEffortTooltip": "該模型請求的思考強度",
       "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
@@ -162,6 +170,7 @@
       "prevPage": "上一頁",
       "nextPage": "下一頁",
       "blocked": "已攔截",
+      "replay": "Replay",
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
@@ -212,6 +221,23 @@
         "viewFullError": "查看完整錯誤",
         "viewSession": "查看工作階段"
       },
+      "cachePerformance": {
+        "title": "快取表現",
+        "actualRate": "實際快取率",
+        "theoreticalRate": "理論快取率",
+        "coefficient": "本次請求快取係數",
+        "rawCoefficient": "單次請求原始係數，不套用供應商視窗信心折扣。",
+        "estimateNote": "理論快取率根據最長正規化前綴估算（位元組數 / 4）。",
+        "availability": {
+          "available": "請求符合條件，可測量前綴快取估算。",
+          "no_input": "此請求沒有記錄輸入 token。",
+          "no_affinity_key": "未記錄 Prefix ID，因此理論快取率和快取係數不可用。",
+          "attempt_failed": "請求嘗試失敗，快取係數已排除。",
+          "not_observable": "無法觀測上游快取用量，快取係數已排除。",
+          "stream_truncated": "回應串流被截斷，快取係數已排除。",
+          "not_recorded": "此請求未記錄單次前綴快取指標。"
+        }
+      },
       "specialSettings": {
         "title": "特殊設定"
       },
@@ -225,6 +251,7 @@
         "title": "攔截資訊",
         "type": "攔截類型",
         "sensitiveWord": "敏感詞攔截",
+        "localCapacity": "本地處理容量不足",
         "word": "敏感詞",
         "matchType": "匹配類型",
         "matchTypeContains": "包含比對",
@@ -299,6 +326,7 @@
         "title": "計費詳情",
         "input": "輸入",
         "output": "輸出",
+        "cacheWrite": "快取寫入",
         "cacheWrite5m": "快取寫入（5m）",
         "cacheWrite1h": "快取寫入（1h）",
         "cacheRead": "快取讀取",
@@ -316,6 +344,7 @@
           "local_manual": "本地手動價格",
           "cloud_exact": "雲端精確供應商價格",
           "cloud_model_fallback": "回退模型的供應商價格",
+          "cloud_official": "雲端官方價格",
           "priority_fallback": "優先級回退價格",
           "single_provider_top_level": "頂層單供應商價格",
           "official_fallback": "官方價格"
@@ -345,30 +374,35 @@
       "performance": {
         "title": "效能資料",
         "ttfb": "首字節時間（TTFB）",
+        "ttft": "首 Token 時間（TTFT）",
+        "ttftShort": "TTFT",
         "duration": "總耗時",
-        "outputRate": "輸出速率"
+        "outputRate": "輸出速率",
+        "outputTokens": "輸出 Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "暫無效能資料",
-        "ttfbGauge": "首字節時間",
+        "ttftGauge": "首 Token 時間",
         "outputRateGauge": "輸出速率",
         "latencyBreakdown": "延遲分解",
         "generationTime": "生成時間",
+        "segmentTtfb": "TTFB",
+        "segmentTtft": "等待首 Token",
+        "segmentTotal": "總計",
         "assessment": {
           "excellent": "優秀",
           "good": "良好",
           "warning": "警告",
           "poor": "較差"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1s",
-          "ttfbWarning": "TTFB 1-2s",
-          "ttfbPoor": "TTFB > 3s"
         }
       },
       "metadata": {
         "noMetadata": "暫無中繼資料",
         "sessionInfo": "工作階段資訊",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "用戶端 Session ID",
         "clientInfo": "用戶端資訊",
         "billingInfo": "計費資訊",
         "technicalTimeline": "技術時間軸",
@@ -379,8 +413,157 @@
         "overridden": "已被供應商覆寫",
         "tooltip": "用戶端在請求體中宣告的思考強度（output_config.effort），按原值顯示，代理不會重新命名或轉換等級。"
       },
+      "routingTrace": {
+        "title": "路由方式",
+        "modes": {
+          "discovery": "有界供應商 Discovery",
+          "legacy_hedge": "舊版 Hedge 競速",
+          "legacy_serial": "舊版串行故障轉移",
+          "single_upstream": "單上游模式",
+          "lease_conflict": "單路保護"
+        },
+        "bypassed": "本請求未使用 Discovery：{reason}",
+        "bypassReasons": {
+          "disabled": "Discovery 未啟用",
+          "non_streaming": "非串流請求",
+          "retry_not_allowed": "該端點不允許重試",
+          "provider_switch_not_allowed": "該端點不允許切換供應商",
+          "raw_passthrough": "原始透傳請求",
+          "unsupported_protocol": "Discovery 不支援該協議",
+          "websocket": "WebSocket 請求",
+          "streaming_hedge_disabled": "本請求已停用串流競速",
+          "raw_cross_provider_fallback": "已啟用原始跨供應商故障轉移",
+          "missing_session": "缺少 Session 識別",
+          "missing_key": "缺少 API Key 識別",
+          "rollout_ineligible": "本請求不在目前灰度範圍內",
+          "redis_capability_unavailable": "Redis 綁定能力不可用",
+          "binding_conflict": "Session 綁定狀態衝突",
+          "lease_conflict": "另一個請求持有 Discovery 租約，本請求只使用一個上游",
+          "lease_unavailable": "Discovery 租約不可用",
+          "unknown": "未滿足 Discovery 准入條件"
+        },
+        "discoveryTitle": "Discovery 輪次",
+        "discoveryCompact": "{rounds} 輪 · {attempts} 次",
+        "routeMode": "路由類型",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "冷啟動",
+          "rediscovery": "重新發現"
+        },
+        "finalProvider": "最終供應商",
+        "roundsLabel": "輪次",
+        "attemptsLabel": "嘗試",
+        "winnerOrigin": "贏家來源",
+        "viewDetails": "查看 Discovery 詳情",
+        "stickyPhase": "Sticky 探測",
+        "round": "第 {round} 輪",
+        "roundUnknown": "輪次未記錄",
+        "attempts": "{count} 次嘗試",
+        "noAttempts": "沒有記錄到供應商嘗試",
+        "providerFallback": "供應商 {id}",
+        "elapsed": "+{elapsed}ms",
+        "priority": "優先級 {priority}",
+        "roles": {
+          "sticky": "Sticky",
+          "normal": "候選",
+          "fallback": "備援"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "正常候選",
+          "fallback": "備援接管"
+        },
+        "roleTransition": "{from} → {to}",
+        "outcomes": {
+          "success": "成功完成",
+          "pending": "處理中",
+          "ready": "已就緒",
+          "held": "已就緒，暫緩交付",
+          "winner": "勝出",
+          "failed": "失敗",
+          "cancelled": "已中止",
+          "timeout": "SLA 逾時",
+          "client_abort": "用戶端已斷開",
+          "deadline": "總時限到期"
+        },
+        "terminalOutcome": "請求結果",
+        "bindingResult": "Sticky 綁定",
+        "bindingActions": {
+          "create": "建立",
+          "renew": "續期",
+          "clear": "解除綁定",
+          "none": "不變更"
+        },
+        "bindingFallbackWinner": "未寫入 · 備援贏家",
+        "bindingOutcomes": {
+          "updated": "綁定已更新",
+          "cleared": "綁定已解除",
+          "skipped": "已略過",
+          "failed": "失敗",
+          "unknown": "未知狀態"
+        },
+        "fallbackPromoted": "提升為保底請求",
+        "winnerCommitted": "已提交贏家",
+        "roundStarted": "輪次開始",
+        "events": {
+          "started": "請求已送出",
+          "ready": "已收到有效首個字元",
+          "held": "依路由規則暫緩交付",
+          "fallbackPromoted": "已提升為備援",
+          "winnerCommitted": "已提交為贏家",
+          "finished": "結束：{outcome}"
+        },
+        "traceTruncated": "追蹤事件達到儲存上限，部分事件已省略。",
+        "summary": "{rounds} 輪 · {attempts} 次嘗試 · 最大並發 {maxActive}",
+        "config": "設定快照",
+        "configConcurrency": "並發數",
+        "configLegacyHedgeMaxInFlight": "Legacy hedge 並發上限",
+        "configMaxRounds": "最大輪數",
+        "configDiscoverySla": "每輪 SLA",
+        "configStickySla": "Sticky SLA",
+        "configTotalTimeout": "總逾時",
+        "configStickyCooldown": "Sticky 逾時冷卻",
+        "configStickyBindingTtl": "Sticky 綁定有效期（SESSION_TTL）",
+        "slotSaturation": "Hedge 槽位已飽和（{count} 次）",
+        "slotSaturationEvent": "{provider} · {active}/{cap} 個活躍 · 已耗時 {elapsed}ms",
+        "attemptDetails": {
+          "providerId": "供應商 ID",
+          "attempt": "嘗試次數",
+          "status": "HTTP 狀態",
+          "inferred": "推斷",
+          "endpoint": "端點",
+          "error": "上游錯誤",
+          "cancellation": "取消緣由",
+          "timeline": "嘗試時間線",
+          "billing": "費用與用量",
+          "billed": "已計入總費用",
+          "billedCost": "已計入費用",
+          "winnerCost": "贏家費用",
+          "notObtained": "已中止，未取得用量"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "其他 Discovery 嘗試已勝出",
+          "discovery_sla_timeout": "Discovery SLA 已逾期",
+          "round_timeout": "本輪 SLA 已到期",
+          "sticky_timeout": "Sticky SLA 已逾期",
+          "request_deadline": "Discovery 總時限已到期",
+          "client_abort": "客戶端已斷開",
+          "winner_committed": "其他供應商已提交為贏家"
+        }
+      },
+      "reasoningEffort": {
+        "label": "思考強度",
+        "overridden": "已被供應商覆寫",
+        "tooltip": "Codex 請求中的思考強度（reasoning.effort），按原值顯示。"
+      },
+      "reasoningEffortOpenai": {
+        "label": "思考強度",
+        "overridden": "已被供應商覆寫",
+        "tooltip": "OpenAI chat/completions 請求中的思考強度（reasoning_effort / reasoning.effort），按原值顯示。"
+      },
       "logicTrace": {
         "title": "決策鏈",
+        "singleRouteSelectionTitle": "單路保護下的供應商選擇",
         "noDecisionData": "暫無決策資料",
         "providersCount": "{count} 個供應商",
         "healthyCount": "{count} 個健康",
@@ -407,6 +590,12 @@
         "originDecisionLoading": "正在載入原始決策...",
         "originDecisionUnavailable": "原始決策記錄不可用",
         "originDecisionExpand": "查看原始選擇"
+      },
+      "replayServe": {
+        "title": "由 Replay 快取服務",
+        "desc": "該請求由 Replay 快取直接服務（相同請求正在進行或已完成），未發起上游供應商呼叫，不產生費用。",
+        "replayId": "Replay ID",
+        "sourceRequestId": "來源請求"
       }
     },
     "providerChain": {
@@ -437,6 +626,7 @@
       "totalCost": "總費用",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} 上下文",
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
       "context1mEnabled": "1M 上下文視窗已啟用",
@@ -446,6 +636,7 @@
         "local_manual": "本地手動價格",
         "cloud_exact": "雲端精確供應商價格",
         "cloud_model_fallback": "回退模型的供應商價格",
+        "cloud_official": "雲端官方價格",
         "priority_fallback": "優先級回退價格",
         "single_provider_top_level": "頂層單供應商價格",
         "official_fallback": "官方價格"
@@ -523,19 +714,21 @@
       "cost": "費用",
       "cacheHitRequests": "快取命中請求數（納入快取命中率計算的請求總數）",
       "cacheHitRate": "快取命中率",
+      "cacheCoefficient": "快取係數",
+      "cacheCoefficientTooltip": "快取係數越大，供應商切號越少，失緩現象越不明顯。0.9 以上為優秀，0.8 以上為良好。",
       "cacheReadTokens": "快取讀取 Token 數",
       "totalTokens": "總 Token 數",
       "cacheCreationConsumedAmount": "快取建立消耗金額",
       "totalConsumedAmount": "總消耗金額",
       "successRate": "成功率（%）",
       "avgResponseTime": "平均回覆時間",
-      "avgTtfbMs": "平均 TTFB（ms）",
+      "avgTtftMs": "平均 TTFT（ms）",
       "avgTokensPerSecond": "平均輸出速率",
       "avgCostPerRequest": "平均每次請求成本",
       "avgCostPerMillionTokens": "平均每百萬 Token 成本",
       "unknownModel": "未知",
       "successRateUnavailable": "不適用",
-      "successRateBasisDisclosure": "在 redirected 計費模型模式下，一列可能合併多個原始模型，因此這裡不顯示成功率以避免口徑誤導。"
+      "successRateBasisDisclosure": "所選時間範圍內該模型沒有可計數的成功或失敗結果，因此無法計算成功率。"
     },
     "expandModelStats": "展開模型詳情",
     "collapseModelStats": "收起模型詳情",
@@ -628,6 +821,8 @@
     },
     "details": {
       "title": "會話訊息",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "用戶端 Session ID",
       "messages": "訊息列表",
       "info": "會話資訊",
       "timeline": "時間線",
@@ -740,11 +935,16 @@
       "loadError": "載入失敗",
       "fetchFailed": "取得失敗",
       "unknownError": "未知錯誤",
+      "error": "Session 詳情載入失敗",
       "storageNotEnabled": "未儲存",
       "storageNotEnabledHint": "提示：請檢查 REDIS_URL 與 ENABLE_RATE_LIMIT=true（用於 Session 詳情快取）；如需儲存未脫敏的 messages，請設定 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
-      "copyFailed": "複製失敗"
+      "copyFailed": "複製失敗",
+      "fetchSessionsFailed": "取得 Session 清單失敗",
+      "fetchSessionsTimeout": "取得 Session 清單逾時",
+      "fetchSettingsFailed": "取得系統設定失敗",
+      "retry": "重試"
     },
     "requestList": {
       "title": "請求列表",
@@ -755,7 +955,9 @@
       "prev": "上一頁",
       "next": "下一頁",
       "orderAsc": "切換為正序（最早的在前）",
-      "orderDesc": "切換為倒序（最新的在前）"
+      "orderDesc": "切換為倒序（最新的在前）",
+      "itemTitle": "請求 #{sequence} - {model}",
+      "unknownModel": "未知模型"
     },
     "back": "返回上一頁",
     "loadingError": "載入失敗"
@@ -1695,6 +1897,12 @@
         "confirmDescription": "這將永久刪除該使用者的所有請求日誌和使用統計。此操作無法撤銷。",
         "confirm": "是的，重設全部",
         "loading": "重設中...",
+        "queued": "重設工作已排入佇列",
+        "running": "正在重設統計",
+        "completed": "重設已完成",
+        "failed": "重設失敗，可以重試",
+        "statusUnavailable": "暫時無法更新重設狀態",
+        "retryStatus": "重試狀態查詢",
         "success": "所有統計已重置"
       }
     },

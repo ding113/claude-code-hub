@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getSessionMessages } from "@/lib/api-client/v1/actions/active-sessions";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 
 interface SessionMessagesDialogProps {
   sessionId: string;
@@ -20,6 +21,7 @@ interface SessionMessagesDialogProps {
 
 export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps) {
   const t = useTranslations("dashboard.sessions");
+  const tErrors = useTranslations("errors");
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<unknown | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +37,11 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
       if (result.ok) {
         setMessages(result.data);
       } else {
-        setError(result.error || t("status.fetchFailed"));
+        setError(
+          result.errorCode
+            ? getErrorMessage(tErrors, result.errorCode, result.errorParams)
+            : result.error || t("status.fetchFailed")
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("status.unknownError"));

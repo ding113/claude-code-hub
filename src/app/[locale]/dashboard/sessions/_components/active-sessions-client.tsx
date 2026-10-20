@@ -1,28 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "@/i18n/routing";
-import { getAllSessions } from "@/lib/api-client/v1/actions/active-sessions";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
-import type { ActiveSessionInfo } from "@/types/session";
+import { fetchAllSessionsPage, type PaginatedSessionsData } from "./active-sessions-query";
 import { ActiveSessionsTable } from "./active-sessions-table";
 
 const REFRESH_INTERVAL = 3000; // 3秒刷新一次
 const PAGE_SIZE = 20;
-
-interface PaginatedSessionsData {
-  active: ActiveSessionInfo[];
-  inactive: ActiveSessionInfo[];
-  totalActive: number;
-  totalInactive: number;
-  hasMoreActive: boolean;
-  hasMoreInactive: boolean;
-}
 
 /**
  * 活跃 Session 实时监控页面
@@ -35,15 +25,11 @@ export function ActiveSessionsClient() {
   const [activePage, setActivePage] = useState(1);
   const [inactivePage, setInactivePage] = useState(1);
 
-  const { data, isLoading, error, refetch } = useQuery<PaginatedSessionsData, Error>({
+  const { data, isLoading, isFetching, error, refetch } = useQuery<PaginatedSessionsData, Error>({
     queryKey: ["all-sessions", activePage, inactivePage],
-    queryFn: async () => {
-      const result = await getAllSessions(activePage, inactivePage, PAGE_SIZE);
-      if (!result.ok) {
-        throw new Error(result.error || "FETCH_SESSIONS_FAILED");
-      }
-      return result.data;
-    },
+    queryFn: ({ signal }) =>
+      fetchAllSessionsPage({ activePage, inactivePage, pageSize: PAGE_SIZE, signal }),
+    retry: false,
     refetchInterval: REFRESH_INTERVAL,
   });
 
@@ -64,6 +50,9 @@ export function ActiveSessionsClient() {
   const getErrorMessage = (error: Error): string => {
     if (error.message === "FETCH_SESSIONS_FAILED") {
       return t("errors.fetchSessionsFailed");
+    }
+    if (error.message === "FETCH_SESSIONS_TIMEOUT") {
+      return t("errors.fetchSessionsTimeout");
     }
     if (error.message === "FETCH_SETTINGS_FAILED") {
       return t("errors.fetchSettingsFailed");
@@ -126,14 +115,34 @@ export function ActiveSessionsClient() {
         </div>
       </div>
 
-      {error ? (
-        <div className="text-center text-destructive py-8">
-          {t("loadingError")}: {getErrorMessage(error)}
+      {error && !data ? (
+        <div className="flex flex-col items-center gap-3 text-center text-destructive py-8">
+          <p>
+            {t("loadingError")}: {getErrorMessage(error)}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {t("errors.retry")}
+          </Button>
         </div>
       ) : (
         <>
+          {error ? (
+            <div className="flex items-center justify-between gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              <p>
+                {t("loadingError")}: {getErrorMessage(error)}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {t("errors.retry")}
+              </Button>
+            </div>
+          ) : null}
           {/* 活跃 Session 区域 */}
           <Section title={t("activeSessions")}>
+            {isFetching && !isLoading ? (
+              <p className="mb-3 text-xs text-muted-foreground">{t("refreshing")}</p>
+            ) : null}
             <ActiveSessionsTable
               sessions={activeSessions}
               isLoading={isLoading}

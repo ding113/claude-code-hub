@@ -37,11 +37,12 @@ const userSession = {
 
 const settings: SystemSettings = {
   id: 1,
-  siteTitle: "Claude Code Hub",
+  siteTitle: "CC Hub",
   allowGlobalUsageView: true,
   currencyDisplay: "USD",
   billingModelSource: "original",
   codexPriorityBillingSource: "requested",
+  legacyHedgeMaxInFlight: 2,
   timezone: "Asia/Shanghai",
   enableAutoCleanup: false,
   cleanupRetentionDays: 30,
@@ -78,6 +79,7 @@ const settings: SystemSettings = {
   quotaLeaseCapUsd: null,
   publicStatusWindowHours: 24,
   publicStatusAggregationIntervalMinutes: 5,
+  replayCacheTtlMinutes: 30,
   ipExtractionConfig: null,
   ipGeoLookupEnabled: true,
   createdAt: new Date("2026-04-28T00:00:00.000Z"),
@@ -92,7 +94,7 @@ describe("v1 system config endpoints", () => {
     getSystemSettingsRepoMock.mockResolvedValue(settings);
     saveSystemSettingsMock.mockResolvedValue({
       ok: true,
-      data: { ...settings, siteTitle: "CCH Ops", timezone: "UTC" },
+      data: { ...settings, siteTitle: "CCH Ops", timezone: "UTC", replayCacheTtlMinutes: 45 },
     });
     getServerTimeZoneMock.mockResolvedValue({ ok: true, data: { timeZone: "Asia/Shanghai" } });
   });
@@ -105,7 +107,7 @@ describe("v1 system config endpoints", () => {
     });
     expect(got.response.status).toBe(200);
     expect(got.json).toMatchObject({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       updatedAt: "2026-04-28T00:00:00.000Z",
     });
 
@@ -113,13 +115,18 @@ describe("v1 system config endpoints", () => {
       method: "PUT",
       pathname: "/api/v1/system/settings",
       headers: { Authorization: "Bearer admin-token" },
-      body: { siteTitle: "CCH Ops", timezone: "UTC" },
+      body: { siteTitle: "CCH Ops", timezone: "UTC", replayCacheTtlMinutes: 45 },
     });
     expect(updated.response.status).toBe(200);
-    expect(updated.json).toMatchObject({ siteTitle: "CCH Ops", timezone: "UTC" });
+    expect(updated.json).toMatchObject({
+      siteTitle: "CCH Ops",
+      timezone: "UTC",
+      replayCacheTtlMinutes: 45,
+    });
     expect(saveSystemSettingsMock).toHaveBeenCalledWith({
       siteTitle: "CCH Ops",
       timezone: "UTC",
+      replayCacheTtlMinutes: 45,
     });
   });
 
@@ -144,7 +151,7 @@ describe("v1 system config endpoints", () => {
 
     expect(got.response.status).toBe(200);
     expect(got.json).toEqual({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       currencyDisplay: "USD",
       billingModelSource: "original",
     });
@@ -174,6 +181,66 @@ describe("v1 system config endpoints", () => {
     });
     expect(invalidTimezone.response.status).toBe(400);
     expect(invalidTimezone.json).toMatchObject({ errorCode: "request.validation_failed" });
+
+    const invalidReplayTtl = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/system/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { replayCacheTtlMinutes: 4 },
+    });
+    expect(invalidReplayTtl.response.status).toBe(400);
+    expect(invalidReplayTtl.json).toMatchObject({ errorCode: "REPLAY_CACHE_TTL_INVALID" });
+
+    const invalidReplayTtlUpper = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/system/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { replayCacheTtlMinutes: 121 },
+    });
+    expect(invalidReplayTtlUpper.response.status).toBe(400);
+    expect(invalidReplayTtlUpper.json).toMatchObject({ errorCode: "REPLAY_CACHE_TTL_INVALID" });
+
+    for (const value of [5, 120]) {
+      const validReplayTtl = await callV1Route({
+        method: "PUT",
+        pathname: "/api/v1/system/settings",
+        headers: { Authorization: "Bearer admin-token" },
+        body: { replayCacheTtlMinutes: value },
+      });
+      expect(validReplayTtl.response.status).toBe(200);
+    }
+  });
+
+  test("returns a stable error code for out-of-range Discovery settings", async () => {
+    const invalidDiscovery = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/system/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { discoveryConcurrency: 33 },
+    });
+
+    expect(invalidDiscovery.response.status).toBe(400);
+    expect(invalidDiscovery.json).toMatchObject({
+      errorCode: "DISCOVERY_SETTINGS_INVALID",
+    });
+    expect(saveSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  test("returns a stable error code for invalid legacy hedge concurrency", async () => {
+    for (const value of [0, 5, true, [2]]) {
+      const invalid = await callV1Route({
+        method: "PUT",
+        pathname: "/api/v1/system/settings",
+        headers: { Authorization: "Bearer admin-token" },
+        body: { legacyHedgeMaxInFlight: value },
+      });
+
+      expect(invalid.response.status).toBe(400);
+      expect(invalid.json).toMatchObject({
+        errorCode: "LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID",
+      });
+    }
+    expect(saveSystemSettingsMock).not.toHaveBeenCalled();
   });
 
   test("rejects malformed and non-json system settings update bodies", async () => {

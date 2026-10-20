@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code Hub - Kubernetes / k3s One-Click Deployment
+# CC Hub - Kubernetes / k3s One-Click Deployment
 # 兼容 k3s 与标准 Kubernetes (EKS/GKE/AKS/self-hosted)
 # 详见: docs/k8s-deployment.md
 set -euo pipefail
@@ -123,7 +123,7 @@ REDIS_PASSWORD=""
 ###############################################################################
 show_help() {
     cat << EOF
-Claude Code Hub - K8s/k3s One-Click Deployment Script v${VERSION}
+CC Hub - K8s/k3s One-Click Deployment Script v${VERSION}
 
 Usage: $0 [OPTIONS]
 
@@ -225,7 +225,7 @@ print_header() {
     echo -e "${BLUE}"
     echo "+=================================================================+"
     echo "|                                                                 |"
-    echo "|       Claude Code Hub - K8s / k3s One-Click Deployment          |"
+    echo "|             CC Hub - K8s / k3s One-Click Deployment             |"
     echo "|                    Version ${VERSION}                                  |"
     echo "|                                                                 |"
     echo "+=================================================================+"
@@ -864,9 +864,9 @@ print_success_message() {
     echo -e "${GREEN}+================================================================+${NC}"
     echo -e "${GREEN}|                                                                |${NC}"
     if [[ "$UPDATE_MODE" == true ]]; then
-        echo -e "${GREEN}|              Claude Code Hub Upgrade Complete!                 |${NC}"
+        echo -e "${GREEN}|                    CC Hub Upgrade Complete!                    |${NC}"
     else
-        echo -e "${GREEN}|              Claude Code Hub Deployment Complete!              |${NC}"
+        echo -e "${GREEN}|                  CC Hub Deployment Complete!                   |${NC}"
     fi
     echo -e "${GREEN}|                                                                |${NC}"
     echo -e "${GREEN}+================================================================+${NC}"

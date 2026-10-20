@@ -8,6 +8,9 @@ import {
 import { parseHonoJsonBody } from "@/lib/api/v1/_shared/request-body";
 import { jsonResponse } from "@/lib/api/v1/_shared/response-helpers";
 import { SystemSettingsUpdateSchema } from "@/lib/api/v1/schemas/system-config";
+import { getDiscoveryValidationErrorCode } from "@/lib/validation/discovery-settings";
+import { getReplayCacheTtlValidationErrorCode } from "@/lib/validation/replay-settings";
+import { getLegacyHedgeMaxInFlightValidationErrorCode } from "@/lib/validation/schemas";
 
 export async function getSystemSettings(c: Context): Promise<Response> {
   const actions = await import("@/actions/system-config");
@@ -27,7 +30,12 @@ export async function getSystemDisplaySettings(_c: Context): Promise<Response> {
 }
 
 export async function updateSystemSettings(c: Context): Promise<Response> {
-  const body = await parseHonoJsonBody(c, SystemSettingsUpdateSchema);
+  const body = await parseHonoJsonBody(c, SystemSettingsUpdateSchema, {
+    validationErrorCode: (error) =>
+      getDiscoveryValidationErrorCode(error.issues) ??
+      getReplayCacheTtlValidationErrorCode(error.issues) ??
+      getLegacyHedgeMaxInFlightValidationErrorCode(error.issues),
+  });
   if (!body.ok) return body.response;
   const actions = await import("@/actions/system-config");
   const result = await callAction(

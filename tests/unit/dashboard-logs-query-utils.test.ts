@@ -87,4 +87,23 @@ describe("dashboard logs url query utils", () => {
     const query = buildLogsUrlQuery({ minRetryCount: 0 });
     expect(query.get("minRetry")).toBe("0");
   });
+
+  test("parseLogsUrlFilters only maps actualResponseModelMismatch for 'true'", () => {
+    expect(parseLogsUrlFilters({ actualResponseModelMismatch: "true" })).toEqual(
+      expect.objectContaining({ actualResponseModelMismatch: true })
+    );
+    expect(
+      parseLogsUrlFilters({ actualResponseModelMismatch: "false" }).actualResponseModelMismatch
+    ).toBeUndefined();
+  });
+
+  test("buildLogsUrlQuery prefers '!200' over an explicit statusCode", () => {
+    const query = buildLogsUrlQuery({ excludeStatusCode200: true, statusCode: 500 });
+    expect(query.get("statusCode")).toBe("!200");
+  });
+
+  test("buildLogsUrlQuery serializes actualResponseModelMismatch flag", () => {
+    const query = buildLogsUrlQuery({ actualResponseModelMismatch: true });
+    expect(query.get("actualResponseModelMismatch")).toBe("true");
+  });
 });

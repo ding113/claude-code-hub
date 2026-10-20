@@ -11,6 +11,7 @@ export interface LogsUrlFilters {
   actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
+  replayFilter?: "all" | "replay" | "non-replay";
   page?: number;
 }
 
@@ -46,6 +47,13 @@ export function parseLogsUrlFilters(searchParams: {
 
   const actualResponseModelMismatch =
     parseStringParam(searchParams.actualResponseModelMismatch) === "true" ? true : undefined;
+  const replayFilterParam = parseStringParam(searchParams.replayFilter);
+  const replayFilter =
+    replayFilterParam === "all" ||
+    replayFilterParam === "replay" ||
+    replayFilterParam === "non-replay"
+      ? replayFilterParam
+      : undefined;
 
   return {
     userId: parseIntParam(searchParams.userId),
@@ -60,6 +68,7 @@ export function parseLogsUrlFilters(searchParams: {
     actualResponseModelMismatch,
     endpoint: parseStringParam(searchParams.endpoint),
     minRetryCount: parseIntParam(searchParams.minRetry),
+    replayFilter,
     page,
   };
 }
@@ -89,6 +98,10 @@ export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
 
   if (filters.minRetryCount !== undefined) {
     query.set("minRetry", filters.minRetryCount.toString());
+  }
+
+  if (filters.replayFilter && filters.replayFilter !== "all") {
+    query.set("replayFilter", filters.replayFilter);
   }
 
   if (filters.page !== undefined && filters.page > 1) {

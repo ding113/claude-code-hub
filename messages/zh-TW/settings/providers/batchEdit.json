@@ -57,6 +57,15 @@
     "thinkingBudget": "思考預算",
     "adaptiveThinking": "自適應思考"
   },
+  "errors": {
+    "nothingToApply": "沒有可套用的變更。",
+    "previewExpired": "預覽已過期，請重新產生預覽。",
+    "previewStale": "供應商設定在預覽後發生變更，請重新產生預覽。",
+    "idempotencyConflict": "此冪等鍵已用於其他操作。",
+    "undoExpired": "復原時限已過期或已被使用。",
+    "undoConflict": "復原權杖與此次操作不符。",
+    "undoStale": "供應商已無法自動復原，請重新整理並檢查目前狀態。"
+  },
   "toast": {
     "previewFailed": "預覽失敗: {error}",
     "unknownError": "未知錯誤",

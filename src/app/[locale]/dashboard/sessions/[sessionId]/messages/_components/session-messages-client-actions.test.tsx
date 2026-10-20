@@ -28,9 +28,10 @@ vi.mock("next-intl", () => {
 });
 
 let seqParamValue: string | null = null;
+let sessionIdParamValue = "0123456789abcdef";
 vi.mock("next/navigation", () => {
   return {
-    useParams: () => ({ sessionId: "0123456789abcdef" }),
+    useParams: () => ({ sessionId: sessionIdParamValue }),
     useSearchParams: () => ({
       get: (key: string) => {
         if (key !== "seq") return null;
@@ -57,7 +58,7 @@ vi.mock("@/i18n/routing", () => {
 
 const getSessionDetailsMock = vi.fn();
 const terminateActiveSessionMock = vi.fn();
-vi.mock("@/actions/active-sessions", () => {
+vi.mock("@/lib/api-client/v1/actions/active-sessions", () => {
   return {
     getSessionDetails: (...args: unknown[]) => getSessionDetailsMock(...args),
     terminateActiveSession: (...args: unknown[]) => terminateActiveSessionMock(...args),
@@ -75,7 +76,19 @@ vi.mock("sonner", () => {
 
 vi.mock("./request-list-sidebar", () => {
   return {
-    RequestListSidebar: () => <div data-testid="mock-request-list-sidebar" />,
+    RequestListSidebar: (props: {
+      onSelect: (sourceSessionId: string, sequence: number, requestId: number) => void;
+    }) => (
+      <div data-testid="mock-request-list-sidebar">
+        <button
+          type="button"
+          data-testid="mock-select-physical-request"
+          onClick={() => props.onSelect("physical-selected", 1, 201)}
+        >
+          select request
+        </button>
+      </div>
+    ),
   };
 });
 
@@ -168,7 +181,11 @@ function buildDetailsData(
   overrides: Partial<{
     snapshots: SessionDetailSnapshots | null;
     sessionStats: unknown | null;
+    currentSourceSessionId: string | null;
+    canonicalSessionId: string;
     currentSequence: number | null;
+    prevRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
+    nextRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
     prevSequence: number | null;
     nextSequence: number | null;
   }> = {}
@@ -188,7 +205,11 @@ function buildDetailsData(
     snapshots: createSnapshots(),
     specialSettings: null,
     sessionStats: null,
+    canonicalSessionId: "pfx:scope:canonical",
+    currentSourceSessionId: "physical-current",
     currentSequence: 7,
+    prevRequest: null,
+    nextRequest: null,
     prevSequence: null,
     nextSequence: null,
     ...overrides,
@@ -247,9 +268,30 @@ afterEach(() => {
   routerBackMock.mockReset();
   vi.useRealTimers();
   seqParamValue = null;
+  sessionIdParamValue = "0123456789abcdef";
 });
 
 describe("SessionMessagesClient (request export actions)", () => {
+  test("decodes an URL-encoded canonical Session ID before loading details", async () => {
+    sessionIdParamValue = "pfx%3A9d403aeabe1f236d%3A1ee9a5d1bd4d98ce4bed39daca4b943e";
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData(),
+    });
+
+    const { unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(getSessionDetailsMock).toHaveBeenCalledWith(
+      "pfx:9d403aeabe1f236d:1ee9a5d1bd4d98ce4bed39daca4b943e",
+      undefined,
+      undefined,
+      undefined
+    );
+
+    unmount();
+  });
+
   test("selected seq in URL overrides currentSequence for request export", async () => {
     seqParamValue = "3";
     getSessionDetailsMock.mockResolvedValue({
@@ -330,6 +372,8 @@ describe("SessionMessagesClient (request export actions)", () => {
           cacheTtlApplied: "mixed",
           totalCostUsd: "0.123456",
         },
+        prevRequest: { requestId: 206, sourceSessionId: "physical-prev", requestSequence: 6 },
+        nextRequest: { requestId: 208, sourceSessionId: "physical-next", requestSequence: 8 },
         prevSequence: 6,
         nextSequence: 8,
       }),
@@ -351,12 +395,32 @@ describe("SessionMessagesClient (request export actions)", () => {
     click(nextBtn as HTMLButtonElement);
 
     expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=6"
+      "/dashboard/sessions/0123456789abcdef/messages?seq=6&sourceSessionId=physical-prev&requestId=206"
     );
     expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=8"
+      "/dashboard/sessions/0123456789abcdef/messages?seq=8&sourceSessionId=physical-next&requestId=208"
     );
     expect(container.querySelector("[data-testid='mock-view-mode']")?.textContent).toBe("before");
+
+    unmount();
+  });
+
+  test("stores the physical source Session together with the selected sequence", async () => {
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({ currentSequence: 1 }),
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    click(
+      container.querySelector("[data-testid='mock-select-physical-request']") as HTMLButtonElement
+    );
+
+    expect(routerReplaceMock).toHaveBeenCalledWith(
+      "/dashboard/sessions/0123456789abcdef/messages?seq=1&sourceSessionId=physical-selected&requestId=201"
+    );
 
     unmount();
   });
@@ -525,13 +589,15 @@ describe("SessionMessagesClient (request export actions)", () => {
   test("shows error when getSessionDetails returns ok:false", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: false,
-      error: "ERR_FETCH",
+      error: "legacy fallback",
+      errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
     });
 
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    expect(container.textContent).toContain("ERR_FETCH");
+    expect(container.textContent).toContain("SESSION_REQUEST_SOURCE_MISMATCH");
+    expect(container.textContent).not.toContain("legacy fallback");
 
     unmount();
   });

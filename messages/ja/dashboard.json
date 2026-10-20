@@ -61,13 +61,13 @@
     "filters": {
       "user": "ユーザー",
       "provider": "プロバイダー",
-      "sessionId": "セッションID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "ユーザーを検索...",
       "searchProvider": "プロバイダーを検索...",
-      "searchSessionId": "セッションIDを検索...",
+      "searchSessionId": "Session または Prefix ID を検索...",
       "noUserFound": "一致するユーザーが見つかりません",
       "noProviderFound": "一致するプロバイダーが見つかりません",
-      "noSessionFound": "一致するセッションIDが見つかりません",
+      "noSessionFound": "一致する Session または Prefix ID が見つかりません",
       "model": "モデル",
       "actualResponseModelMismatch": "課金/実応答モデル不一致",
       "endpoint": "エンドポイント",
@@ -88,6 +88,12 @@
       "minRetryCount": "リトライ回数≥",
       "minRetryCountPlaceholder": "回数を入力(0 で制限なし)",
       "enabled": "オン",
+      "replay": {
+        "label": "Replay",
+        "all": "すべてのリクエスト",
+        "only": "Replay のみ",
+        "exclude": "Replay を除外"
+      },
       "apply": "フィルターを適用",
       "reset": "リセット",
       "last7days": "7日",
@@ -131,6 +137,8 @@
       "ip": "IP",
       "provider": "プロバイダー",
       "model": "課金モデル",
+      "reasoningEffort": "推論強度",
+      "reasoningEffortTooltip": "このモデルリクエストの推論強度",
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
@@ -162,6 +170,7 @@
       "prevPage": "前へ",
       "nextPage": "次へ",
       "blocked": "ブロック済み",
+      "replay": "Replay",
       "nonBilling": "非課金",
       "skipped": "スキップ",
       "specialSettings": "特殊設定",
@@ -212,6 +221,23 @@
         "viewFullError": "完全なエラーを表示",
         "viewSession": "セッションを表示"
       },
+      "cachePerformance": {
+        "title": "キャッシュ性能",
+        "actualRate": "実測キャッシュ率",
+        "theoreticalRate": "理論キャッシュ率",
+        "coefficient": "リクエストキャッシュ係数",
+        "rawCoefficient": "単一リクエストの生係数。プロバイダーの信頼度補正は適用しません。",
+        "estimateNote": "理論キャッシュ率は最長の正規化プレフィックス (バイト数 / 4) から推定されます。",
+        "availability": {
+          "available": "測定可能なプレフィックスキャッシュ推定値を持つ対象リクエストです。",
+          "no_input": "入力トークンが記録されていません。",
+          "no_affinity_key": "Prefix ID が記録されていないため、理論率と係数は利用できません。",
+          "attempt_failed": "リクエスト試行が失敗したため、係数は除外されています。",
+          "not_observable": "上流のキャッシュ使用量を観測できないため、係数は除外されています。",
+          "stream_truncated": "ストリームが途中で切断されたため、係数は除外されています。",
+          "not_recorded": "このリクエストではリクエスト単位のプレフィックスキャッシュ指標が記録されていません。"
+        }
+      },
       "specialSettings": {
         "title": "特殊設定"
       },
@@ -225,6 +251,7 @@
         "title": "ブロック情報",
         "type": "ブロックタイプ",
         "sensitiveWord": "機密語句ブロック",
+        "localCapacity": "ローカル処理容量不足",
         "word": "機密語句",
         "matchType": "一致タイプ",
         "matchTypeContains": "部分一致",
@@ -299,6 +326,7 @@
         "title": "課金詳細",
         "input": "入力",
         "output": "出力",
+        "cacheWrite": "キャッシュ書き込み",
         "cacheWrite5m": "キャッシュ書き込み (5m)",
         "cacheWrite1h": "キャッシュ書き込み (1h)",
         "cacheRead": "キャッシュ読み取り",
@@ -316,6 +344,7 @@
           "local_manual": "ローカル手動価格",
           "cloud_exact": "クラウドの正確なプロバイダー価格",
           "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
+          "cloud_official": "クラウド公式価格",
           "priority_fallback": "優先フォールバック価格",
           "single_provider_top_level": "トップレベル単一プロバイダー価格",
           "official_fallback": "公式価格"
@@ -345,30 +374,35 @@
       "performance": {
         "title": "パフォーマンス",
         "ttfb": "TTFB",
+        "ttft": "TTFT",
+        "ttftShort": "TTFT",
         "duration": "総所要時間",
-        "outputRate": "出力速度"
+        "outputRate": "出力速度",
+        "outputTokens": "出力トークン"
       },
       "performanceTab": {
         "noPerformanceData": "パフォーマンスデータがありません",
-        "ttfbGauge": "初バイト到達時間",
+        "ttftGauge": "初トークン到達時間",
         "outputRateGauge": "出力速度",
         "latencyBreakdown": "レイテンシ内訳",
         "generationTime": "生成時間",
+        "segmentTtfb": "TTFB",
+        "segmentTtft": "トークン待機",
+        "segmentTotal": "合計",
         "assessment": {
           "excellent": "優秀",
           "good": "良好",
           "warning": "警告",
           "poor": "不良"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1s",
-          "ttfbWarning": "TTFB 1-2s",
-          "ttfbPoor": "TTFB > 3s"
         }
       },
       "metadata": {
         "noMetadata": "メタデータがありません",
         "sessionInfo": "セッション情報",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "クライアント Session ID",
         "clientInfo": "クライアント情報",
         "billingInfo": "課金情報",
         "technicalTimeline": "技術タイムライン",
@@ -379,8 +413,157 @@
         "overridden": "プロバイダーにより上書き",
         "tooltip": "クライアントがリクエストボディで指定した思考強度 (output_config.effort)。プロキシは値をそのまま表示し、レベル名を変換しません。"
       },
+      "routingTrace": {
+        "title": "ルーティングモード",
+        "modes": {
+          "discovery": "限定 Discovery",
+          "legacy_hedge": "従来の Hedge 競争",
+          "legacy_serial": "従来の直列フェイルオーバー",
+          "single_upstream": "単一アップストリーム",
+          "lease_conflict": "単一経路保護"
+        },
+        "bypassed": "このリクエストでは Discovery を使用していません：{reason}",
+        "bypassReasons": {
+          "disabled": "Discovery が無効です",
+          "non_streaming": "非ストリーミングリクエストです",
+          "retry_not_allowed": "このエンドポイントでは再試行できません",
+          "provider_switch_not_allowed": "このエンドポイントではプロバイダーを切り替えられません",
+          "raw_passthrough": "Raw パススルーリクエストです",
+          "unsupported_protocol": "Discovery が対応していないプロトコルです",
+          "websocket": "WebSocket リクエストです",
+          "streaming_hedge_disabled": "このリクエストではストリーミング競争が無効です",
+          "raw_cross_provider_fallback": "Raw クロスプロバイダーフォールバックが有効です",
+          "missing_session": "Session 識別子がありません",
+          "missing_key": "API Key 識別子がありません",
+          "rollout_ineligible": "現在のロールアウト対象外です",
+          "redis_capability_unavailable": "Redis バインディング機能を利用できません",
+          "binding_conflict": "Session バインディングが競合しています",
+          "lease_conflict": "別のリクエストが Discovery リースを保持しているため、このリクエストは単一アップストリームを使用します",
+          "lease_unavailable": "Discovery リースを利用できません",
+          "unknown": "Discovery の適格条件を満たしていません"
+        },
+        "discoveryTitle": "Discovery ラウンド",
+        "discoveryCompact": "{rounds}R · {attempts} 回",
+        "routeMode": "ルーティング方式",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "コールドスタート",
+          "rediscovery": "再探索"
+        },
+        "finalProvider": "最終プロバイダー",
+        "roundsLabel": "ラウンド",
+        "attemptsLabel": "試行",
+        "winnerOrigin": "勝者の経路",
+        "viewDetails": "Discovery の詳細を表示",
+        "stickyPhase": "Sticky プローブ",
+        "round": "ラウンド {round}",
+        "roundUnknown": "ラウンド未記録",
+        "attempts": "{count} 回の試行",
+        "noAttempts": "プロバイダー試行の記録がありません",
+        "providerFallback": "プロバイダー {id}",
+        "elapsed": "+{elapsed}ms",
+        "priority": "優先度 {priority}",
+        "roles": {
+          "sticky": "Sticky",
+          "normal": "候補",
+          "fallback": "フォールバック"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "通常候補",
+          "fallback": "フォールバック引き継ぎ"
+        },
+        "roleTransition": "{from} → {to}",
+        "outcomes": {
+          "success": "正常終了",
+          "pending": "待機中",
+          "ready": "準備完了",
+          "held": "準備完了、保留中",
+          "winner": "勝者",
+          "failed": "失敗",
+          "cancelled": "キャンセル済み",
+          "timeout": "SLA タイムアウト",
+          "client_abort": "クライアント切断",
+          "deadline": "全体期限"
+        },
+        "terminalOutcome": "リクエスト結果",
+        "bindingResult": "Sticky バインド",
+        "bindingActions": {
+          "create": "作成",
+          "renew": "更新",
+          "clear": "解除",
+          "none": "変更なし"
+        },
+        "bindingFallbackWinner": "書き込みなし · フォールバック勝者",
+        "bindingOutcomes": {
+          "updated": "更新済み",
+          "cleared": "解除済み",
+          "skipped": "スキップ",
+          "failed": "失敗",
+          "unknown": "不明"
+        },
+        "fallbackPromoted": "フォールバックに昇格",
+        "winnerCommitted": "勝者を確定",
+        "roundStarted": "ラウンド開始",
+        "events": {
+          "started": "リクエスト開始",
+          "ready": "有効な先頭データを受信",
+          "held": "ルーティング規則により配信を保留",
+          "fallbackPromoted": "フォールバックに昇格",
+          "winnerCommitted": "勝者として確定",
+          "finished": "完了：{outcome}"
+        },
+        "traceTruncated": "保存上限に達したため、一部のイベントは省略されました。",
+        "summary": "{rounds} ラウンド · {attempts} 試行 · 最大同時実行 {maxActive}",
+        "config": "設定スナップショット",
+        "configConcurrency": "同時実行数",
+        "configLegacyHedgeMaxInFlight": "Legacy hedge 上限",
+        "configMaxRounds": "最大ラウンド数",
+        "configDiscoverySla": "ラウンド SLA",
+        "configStickySla": "Sticky SLA",
+        "configTotalTimeout": "全体タイムアウト",
+        "configStickyCooldown": "Sticky タイムアウトのクールダウン",
+        "configStickyBindingTtl": "Sticky バインドの有効期間 (SESSION_TTL)",
+        "slotSaturation": "Hedge スロット飽和 ({count} 件)",
+        "slotSaturationEvent": "{provider} · {active}/{cap} 件がアクティブ · 経過 {elapsed}ms",
+        "attemptDetails": {
+          "providerId": "Provider ID",
+          "attempt": "試行回数",
+          "status": "HTTP ステータス",
+          "inferred": "推定",
+          "endpoint": "エンドポイント",
+          "error": "上流エラー",
+          "cancellation": "キャンセル理由",
+          "timeline": "試行タイムライン",
+          "billing": "費用と使用量",
+          "billed": "合計費用に計上済み",
+          "billedCost": "計上費用",
+          "winnerCost": "勝者の費用",
+          "notObtained": "キャンセル済み、使用量未取得"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "別の Discovery 試行が勝利しました",
+          "discovery_sla_timeout": "Discovery SLA の期限に達しました",
+          "round_timeout": "ラウンド SLA の期限に達しました",
+          "sticky_timeout": "Sticky SLA の期限に達しました",
+          "request_deadline": "Discovery の合計期限に達しました",
+          "client_abort": "クライアントが切断しました",
+          "winner_committed": "別の Provider が勝者として確定しました"
+        }
+      },
+      "reasoningEffort": {
+        "label": "推論強度",
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "Codex リクエストの推論強度 (reasoning.effort) をそのまま表示します。"
+      },
+      "reasoningEffortOpenai": {
+        "label": "推論強度",
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "OpenAI chat/completions リクエストの推論強度 (reasoning_effort / reasoning.effort) をそのまま表示します。"
+      },
       "logicTrace": {
         "title": "決定チェーン",
+        "singleRouteSelectionTitle": "単一経路保護での Provider 選択",
         "noDecisionData": "決定データがありません",
         "providersCount": "{count} プロバイダー",
         "healthyCount": "{count} 健全",
@@ -407,6 +590,12 @@
         "originDecisionLoading": "元の決定を読み込み中...",
         "originDecisionUnavailable": "元の決定記録は利用できません",
         "originDecisionExpand": "元の選択を表示"
+      },
+      "replayServe": {
+        "title": "Replay キャッシュから応答",
+        "desc": "このリクエストは Replay キャッシュから直接応答されました(同一リクエストが進行中または完了済み)。上流プロバイダーへの呼び出しは行われず、費用は発生しません。",
+        "replayId": "Replay ID",
+        "sourceRequestId": "元のリクエスト"
       }
     },
     "providerChain": {
@@ -437,6 +626,7 @@
       "totalCost": "合計費用",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} コンテキスト",
       "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
       "context1mEnabled": "1Mコンテキストウィンドウ有効",
@@ -446,6 +636,7 @@
         "local_manual": "ローカル手動価格",
         "cloud_exact": "クラウドの正確なプロバイダー価格",
         "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
+        "cloud_official": "クラウド公式価格",
         "priority_fallback": "優先フォールバック価格",
         "single_provider_top_level": "トップレベル単一プロバイダー価格",
         "official_fallback": "公式価格"
@@ -523,19 +714,21 @@
       "cost": "コスト",
       "cacheHitRequests": "キャッシュ対象リクエスト数(命中率計算対象)",
       "cacheHitRate": "キャッシュ命中率",
+      "cacheCoefficient": "キャッシュ係数",
+      "cacheCoefficientTooltip": "キャッシュ係数が大きいほど、プロバイダーのアカウント切り替えが少なく、キャッシュ劣化が目立ちにくくなります。0.9 以上は優秀、0.8 以上は良好です。",
       "cacheReadTokens": "キャッシュ読取トークン数",
       "totalTokens": "総トークン数",
       "cacheCreationConsumedAmount": "キャッシュ作成消費額",
       "totalConsumedAmount": "総消費額",
       "successRate": "成功率(%)",
       "avgResponseTime": "平均応答時間",
-      "avgTtfbMs": "平均TTFB",
+      "avgTtftMs": "平均TTFT",
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
       "avgCostPerMillionTokens": "100万トークンあたりコスト",
       "unknownModel": "不明",
       "successRateUnavailable": "利用不可",
-      "successRateBasisDisclosure": "redirected 課金モデルでは 1 行に複数の元モデルが混在しうるため、誤解を避けるためここでは成功率を表示しません。"
+      "successRateBasisDisclosure": "選択した期間にこのモデルの集計可能な成功/失敗結果がないため、成功率を計算できません。"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",
@@ -628,6 +821,8 @@
     },
     "details": {
       "title": "セッション メッセージ",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "クライアント Session ID",
       "messages": "メッセージリスト",
       "info": "セッション情報",
       "timeline": "タイムライン",
@@ -740,11 +935,16 @@
       "loadError": "読み込み失敗",
       "fetchFailed": "取得失敗",
       "unknownError": "不明なエラー",
+      "error": "Session 詳細を読み込めませんでした",
       "storageNotEnabled": "未保存",
       "storageNotEnabledHint": "ヒント: REDIS_URL と ENABLE_RATE_LIMIT=true を確認してください (セッション詳細キャッシュ)。未マスクの messages を保存するには STORE_SESSION_MESSAGES=true を設定してください。"
     },
     "errors": {
-      "copyFailed": "コピー失敗"
+      "copyFailed": "コピー失敗",
+      "fetchSessionsFailed": "Session 一覧の取得に失敗しました",
+      "fetchSessionsTimeout": "Session 一覧の取得がタイムアウトしました",
+      "fetchSettingsFailed": "システム設定の取得に失敗しました",
+      "retry": "再試行"
     },
     "requestList": {
       "title": "リクエスト一覧",
@@ -755,7 +955,9 @@
       "prev": "前へ",
       "next": "次へ",
       "orderAsc": "昇順に切り替え(古い順)",
-      "orderDesc": "降順に切り替え(新しい順)"
+      "orderDesc": "降順に切り替え(新しい順)",
+      "itemTitle": "リクエスト #{sequence} - {model}",
+      "unknownModel": "不明なモデル"
     },
     "back": "戻る",
     "loadingError": "読み込み失敗"
@@ -1687,6 +1889,12 @@
         "confirmDescription": "このユーザーのすべてのリクエストログと使用統計を完全に削除します。この操作は取り消せません。",
         "confirm": "はい、すべてリセット",
         "loading": "リセット中...",
+        "queued": "リセットをキューに追加しました",
+        "running": "統計をリセットしています",
+        "completed": "リセットが完了しました",
+        "failed": "リセットに失敗しました。再試行できます。",
+        "statusUnavailable": "リセット状態を更新できません",
+        "retryStatus": "状態を再取得",
         "success": "すべての統計がリセットされました"
       }
     },

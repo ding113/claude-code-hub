@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const pipelineCommands: Array<unknown[]> = [];
 
 const pipeline = {
+  eval: vi.fn((...args: unknown[]) => {
+    pipelineCommands.push(["eval", ...args]);
+    return pipeline;
+  }),
   zadd: vi.fn((...args: unknown[]) => {
     pipelineCommands.push(["zadd", ...args]);
     return pipeline;
@@ -119,12 +123,13 @@ describe("RateLimitService rolling window cache warm", () => {
       providerResetMode: "fixed",
     });
 
-    const evalCalls = redisClient.eval.mock.calls;
+    const evalCalls = pipelineCommands.filter((call) => call[0] === "eval");
     expect(evalCalls.length).toBeGreaterThanOrEqual(2);
 
     const [firstCall] = evalCalls;
-    expect(firstCall[2]).toBe("key:1:cost_5h_rolling");
-    expect(firstCall[4]).toBe(String(nowMs - 1000));
-    expect(firstCall[6]).toBe("123");
+    expect(firstCall[3]).toBe("key:1:cost_5h_rolling");
+    expect(firstCall[5]).toBe(String(nowMs - 1000));
+    expect(firstCall[7]).toBe("123");
+    expect(redisClient.eval).not.toHaveBeenCalled();
   });
 });

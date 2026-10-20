@@ -155,7 +155,7 @@ const BatchGetProviderEndpointProbeLogsBatchSchema = z.object({
 
 async function getAdminSession() {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return null;
   }
   return session;

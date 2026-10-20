@@ -52,4 +52,4 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 USER node
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "cluster.js"]

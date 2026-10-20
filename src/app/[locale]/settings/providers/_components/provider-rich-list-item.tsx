@@ -77,6 +77,7 @@ import type {
   ProviderVendor,
 } from "@/types/provider";
 import type { User } from "@/types/user";
+import { ProviderBalanceBadge } from "./balance/provider-balance-badge";
 import { ProviderForm } from "./forms/provider-form";
 import { GroupEditCombobox } from "./group-edit-combobox";
 import { InlineEditPopover } from "./inline-edit-popover";
@@ -935,6 +936,12 @@ function ProviderRichListItemInner({
             </div>
           </div>
         </div>
+
+        {/* Desktop: upstream balance */}
+        <ProviderBalanceBadge
+          providerId={provider.id}
+          className="hidden lg:block flex-shrink-0 min-w-[100px]"
+        />
 
         {/* Desktop: today usage */}
         <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px] rounded-md bg-muted/30 px-2.5 py-1.5">

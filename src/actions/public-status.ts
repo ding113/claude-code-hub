@@ -70,7 +70,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
     const t = await getTranslations("settings");
     const tError = await getTranslations("errors");
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED") };
     }
     if (!PUBLIC_STATUS_INTERVAL_SET.has(input.publicStatusAggregationIntervalMinutes)) {

@@ -1,8 +1,18 @@
+import { normalizeEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { extractAnthropicEffortFromRequestBody } from "@/lib/utils/anthropic-effort";
+import { extractCodexReasoningEffortFromRequestBody } from "@/lib/utils/codex-reasoning-effort";
+import { extractOpenAIReasoningEffortFromRequestBody } from "@/lib/utils/openai-reasoning-effort";
 import { createMessageRequest } from "@/repository/message";
 import type { ProxySession } from "./session";
 
+/** 在供应商确定后创建请求使用记录，并补齐需要随记录持久化的请求审计。 */
 export class ProxyMessageService {
+  /**
+   * 为当前代理请求创建持久化上下文。
+   *
+   * 思考强度必须在创建记录前写入 special_settings，后续供应商覆写审计才能与客户端
+   * 原始值合并，准确展示实际转发给上游的等级。
+   */
   static async ensureContext(session: ProxySession): Promise<void> {
     const authState = session.authState;
     const provider = session.provider;
@@ -18,10 +28,11 @@ export class ProxyMessageService {
       return;
     }
 
-    // Extract endpoint from URL pathname (nullable)
-    const endpoint = session.getEndpoint() ?? undefined;
+    // v2 compaction 记录为 compact 管理端点，以复用非对话日志和计费语义。
+    const endpoint = session.getManagedEndpoint?.() ?? session.getEndpoint() ?? undefined;
+    const sessionIdentity = session.getSessionIdentityMetadata();
 
-    // ⭐ 修复模型重定向记录问题：
+    // 修复模型重定向记录问题：
     // 由于 ensureContext 在模型重定向之前被调用（guard-pipeline 阶段），
     // 此时 session.getOriginalModel() 可能返回 null。
     // 因此需要在这里提前保存当前模型作为 original_model，
@@ -49,12 +60,58 @@ export class ProxyMessageService {
       }
     }
 
+    const hasCodexReasoningEffortAudit = session
+      .getSpecialSettings()
+      ?.some((setting) => setting.type === "codex_reasoning_effort");
+
+    // Codex 客户端请求值先于供应商参数覆写入库，使用记录据此展示“请求值 -> 实际值”。
+    if (provider.providerType === "codex" && !hasCodexReasoningEffortAudit) {
+      const reasoningEffort = extractCodexReasoningEffortFromRequestBody(session.request.message);
+      if (reasoningEffort) {
+        session.addSpecialSetting({
+          type: "codex_reasoning_effort",
+          scope: "request",
+          hit: true,
+          effort: reasoningEffort,
+        });
+      }
+    }
+
+    // openai-compatible 供应商的 chat/completions 请求：解析并记录思考强度审计。
+    // 兼容顶层 reasoning_effort（OpenAI 官方及多数 openai-compatible 供应商）与嵌套
+    // reasoning.effort（OpenRouter / Ollama / Vercel AI Gateway 等），见 openai-reasoning-effort。
+    const hasOpenAIReasoningEffortAudit = session
+      .getSpecialSettings()
+      ?.some((setting) => setting.type === "openai_reasoning_effort");
+
+    if (
+      provider.providerType === "openai-compatible" &&
+      normalizeEndpointPath(endpoint ?? "") === V1_ENDPOINT_PATHS.CHAT_COMPLETIONS &&
+      !hasOpenAIReasoningEffortAudit
+    ) {
+      const extraction = extractOpenAIReasoningEffortFromRequestBody(session.request.message);
+      if (extraction) {
+        session.addSpecialSetting({
+          type: "openai_reasoning_effort",
+          scope: "request",
+          hit: true,
+          effort: extraction.effort,
+          source: extraction.source,
+        });
+      }
+    }
+
     const messageRequest = await createMessageRequest({
       provider_id: provider.id,
       user_id: authState.user.id,
       key: authState.apiKey,
       model: session.request.model ?? undefined,
       session_id: session.sessionId ?? undefined, // 传入 session_id
+      session_identity: sessionIdentity.identity || session.sessionId || undefined,
+      session_identity_kind: sessionIdentity.kind,
+      affinity_scope_tag: sessionIdentity.scopeTag,
+      affinity_fingerprint: sessionIdentity.fingerprint,
+      affinity_fingerprint_chain: sessionIdentity.fingerprints,
       request_sequence: session.getRequestSequence(), // 传入请求序号（Session 内）
       cost_multiplier: provider.costMultiplier, // 传入 cost_multiplier
       group_cost_multiplier: session.getGroupCostMultiplier(), // 传入分组倍率

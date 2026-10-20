@@ -13,6 +13,7 @@ import {
   categorizeErrorAsync,
   isClientAbortError,
 } from "@/app/v1/_lib/proxy/errors";
+import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 
 describe("isClientAbortError - 499 source awareness", () => {
   // Scenario 1: Local abort (isLocalAbort=true) -> CLIENT_ABORT
@@ -99,6 +100,17 @@ describe("categorizeErrorAsync - 499 source awareness", () => {
       providerName: "test-provider",
     });
     expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.PROVIDER_ERROR);
+  });
+});
+
+describe("categorizeErrorAsync - local database overload", () => {
+  it("should classify a wrapped DB admission rejection separately from network errors", async () => {
+    const error = new Error("Failed query", {
+      cause: new DbPoolAdmissionError("data", 32),
+    });
+
+    const category = await categorizeErrorAsync(error);
+    expect(ErrorCategory[category]).toBe("LOCAL_OVERLOAD");
   });
 });
 

@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "本機請求處理容量不足，請稍後重試。",
   "_comment": "Error messages for Chinese Traditional",
 
   "REQUIRED_FIELD": "{field}不能為空",
@@ -30,12 +31,15 @@
   "PERMISSION_DENIED": "權限不足",
   "TOKEN_REQUIRED": "需要提供認證令牌",
   "INVALID_TOKEN": "無效的認證令牌",
+  "SESSION_REQUEST_SOURCE_MISMATCH": "請求來源不屬於此 Session",
+  "SESSION_REQUEST_SELECTOR_INCOMPLETE": "前綴 Session 請求必須同時指定實體來源與請求序號",
   "PROXY_INVALID_API_KEY": "API 金鑰無效。提供的金鑰不存在或已被刪除。",
   "PROXY_API_KEY_DISABLED": "API 金鑰已被停用。請聯絡管理員重新啟用，或使用其他可用金鑰。",
   "PROXY_API_KEY_EXPIRED": "API 金鑰已過期。請聯絡管理員續期或更換金鑰。",
 
   "INTERNAL_ERROR": "系統內部錯誤，請稍後重試",
   "DATABASE_ERROR": "資料庫錯誤",
+  "INVALID_NORMALIZED_BODY": "規範化後的請求體無法序列化",
   "NOT_FOUND": "資源不存在",
   "OPERATION_FAILED": "操作失敗",
   "USER_5H_FIXED_RESET_REQUIRES_REDIS": "重設固定 5H 限額需要 Redis 可用",

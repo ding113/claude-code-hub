@@ -9,6 +9,8 @@ export interface ClearUserCostCacheOptions {
   keyIds: number[];
   keyHashes: string[];
   includeActiveSessions?: boolean;
+  allowWhenRateLimitDisabled?: boolean;
+  preserveFixed5hCostKeys?: boolean;
 }
 
 export interface ClearUserCostCacheResult {
@@ -41,6 +43,55 @@ export interface ClearUser5hCostCacheResult {
   errorCount?: number;
 }
 
+const STATISTICS_RESET_PREPARE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const PREPARE_FIXED_5H_RESET_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return redis.call('GET', KEYS[1])
+end
+local now = redis.call('TIME')
+local cutoff_ms = (tonumber(now[1]) * 1000) + math.floor(tonumber(now[2]) / 1000)
+for index = 2, #KEYS do
+  redis.call('DEL', KEYS[index])
+end
+redis.call('SETEX', KEYS[1], ARGV[1], tostring(cutoff_ms))
+return tostring(cutoff_ms)`;
+
+export async function prepareUserStatisticsResetFixed5h(input: {
+  resetId: string;
+  userId: number;
+  keyIds: number[];
+}): Promise<string | null> {
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (redis?.status !== "ready") return null;
+
+  const keys = [
+    `cch:user-statistics-reset:fixed5h:${input.resetId}`,
+    `user:${input.userId}:cost_5h_fixed`,
+    buildLeaseKey("user", input.userId, "5h", "fixed"),
+    ...input.keyIds.flatMap((keyId) => [
+      `key:${keyId}:cost_5h_fixed`,
+      buildLeaseKey("key", keyId, "5h", "fixed"),
+    ]),
+  ];
+
+  const cutoffMilliseconds = await redis.eval(
+    PREPARE_FIXED_5H_RESET_LUA,
+    keys.length,
+    ...keys,
+    STATISTICS_RESET_PREPARE_TTL_SECONDS
+  );
+  if (
+    (typeof cutoffMilliseconds !== "number" && typeof cutoffMilliseconds !== "string") ||
+    cutoffMilliseconds === ""
+  ) {
+    return null;
+  }
+  const cutoffValue = Number(cutoffMilliseconds);
+  if (!Number.isFinite(cutoffValue) || cutoffValue <= 0) return null;
+  const cutoff = new Date(cutoffValue);
+  return Number.isFinite(cutoff.getTime()) ? cutoff.toISOString() : null;
+}
+
 /**
  * Scan and delete all Redis cost-cache keys for a user and their API keys.
  *
@@ -52,29 +103,40 @@ export interface ClearUser5hCostCacheResult {
 export async function clearUserCostCache(
   options: ClearUserCostCacheOptions
 ): Promise<ClearUserCostCacheResult | null> {
-  const { userId, keyIds, keyHashes, includeActiveSessions = false } = options;
+  const {
+    userId,
+    keyIds,
+    keyHashes,
+    includeActiveSessions = false,
+    allowWhenRateLimitDisabled = false,
+    preserveFixed5hCostKeys = false,
+  } = options;
 
-  const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  const redis = getRedisClient({ allowWhenRateLimitDisabled });
+  if (redis?.status !== "ready") {
     return null;
   }
 
   const startTime = Date.now();
+  let scanErrorCount = 0;
 
   // Scan all cost patterns in parallel
   const scanResults = await Promise.all([
     ...keyIds.map((keyId) =>
       scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan key cost pattern", { keyId, error: err });
         return [];
       })
     ),
     scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan user cost pattern", { userId, error: err });
       return [];
     }),
     // Total cost cache keys (with optional resetAt suffix)
     scanPattern(redis, `total_cost:user:${userId}`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan total cost pattern", {
         userId,
         pattern: `total_cost:user:${userId}`,
@@ -83,6 +145,7 @@ export async function clearUserCostCache(
       return [];
     }),
     scanPattern(redis, `total_cost:user:${userId}:*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan total cost pattern", {
         userId,
         pattern: `total_cost:user:${userId}:*`,
@@ -92,6 +155,7 @@ export async function clearUserCostCache(
     }),
     ...keyHashes.map((keyHash) =>
       scanPattern(redis, `total_cost:key:${keyHash}`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan total cost key pattern", {
           keyHash,
           error: err instanceof Error ? err.message : String(err),
@@ -101,6 +165,7 @@ export async function clearUserCostCache(
     ),
     ...keyHashes.map((keyHash) =>
       scanPattern(redis, `total_cost:key:${keyHash}:*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan total cost key pattern", {
           keyHash,
           error: err instanceof Error ? err.message : String(err),
@@ -111,6 +176,7 @@ export async function clearUserCostCache(
     // Lease cache keys (budget slices cached by LeaseService)
     ...keyIds.map((keyId) =>
       scanPattern(redis, `lease:key:${keyId}:*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan lease key pattern", {
           keyId,
           error: err instanceof Error ? err.message : String(err),
@@ -119,6 +185,7 @@ export async function clearUserCostCache(
       })
     ),
     scanPattern(redis, `lease:user:${userId}:*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan lease user pattern", {
         userId,
         error: err instanceof Error ? err.message : String(err),
@@ -127,7 +194,9 @@ export async function clearUserCostCache(
     }),
   ]);
 
-  const allCostKeys = scanResults.flat();
+  const allCostKeys = scanResults
+    .flat()
+    .filter((key) => !preserveFixed5hCostKeys || !key.endsWith(":cost_5h_fixed"));
   let activeSessionsDeleted = 0;
 
   // Only create pipeline if there is work to do
@@ -136,6 +205,8 @@ export async function clearUserCostCache(
       costKeysDeleted: 0,
       activeSessionsDeleted: 0,
       durationMs: Date.now() - startTime,
+      cleanupFailed: scanErrorCount > 0,
+      errorCount: scanErrorCount,
     };
   }
 
@@ -165,14 +236,16 @@ export async function clearUserCostCache(
       activeSessionsDeleted,
       durationMs: Date.now() - startTime,
       cleanupFailed: true,
+      errorCount: scanErrorCount + 1,
     };
   }
 
   // Check for pipeline errors
   const errors = results?.filter(([err]) => err);
-  if (errors && errors.length > 0) {
+  const errorCount = scanErrorCount + (errors?.length ?? 0);
+  if (errorCount > 0) {
     logger.warn("Some Redis deletes failed during cost cache cleanup", {
-      errorCount: errors.length,
+      errorCount,
       userId,
     });
   }
@@ -181,8 +254,8 @@ export async function clearUserCostCache(
     costKeysDeleted: allCostKeys.length,
     activeSessionsDeleted,
     durationMs: Date.now() - startTime,
-    cleanupFailed: !!errors && errors.length > 0,
-    errorCount: errors?.length || 0,
+    cleanupFailed: errorCount > 0,
+    errorCount,
   };
 }
 
@@ -192,7 +265,7 @@ export async function clearUser5hCostCache(
   const { userId, resetMode } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 
@@ -249,7 +322,7 @@ export async function clearSingleKeyCostCache(
   const { keyId, keyHash } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 
@@ -334,7 +407,7 @@ export async function clearSingleProviderCostCache(
   const { providerId } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 

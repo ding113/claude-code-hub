@@ -112,6 +112,7 @@ function toLegacyUsageLogsPage(body: unknown): UsageLogsBatchResult {
   const page = body as {
     logs?: UsageLogsBatchResult["logs"];
     items?: UsageLogsBatchResult["logs"];
+    sourceSessionIdsByIdentity?: UsageLogsBatchResult["sourceSessionIdsByIdentity"];
     pageInfo?: {
       nextCursor?: UsageLogsBatchResult["nextCursor"] | string;
       hasMore?: boolean;
@@ -129,6 +130,7 @@ function toLegacyUsageLogsPage(body: unknown): UsageLogsBatchResult {
   };
   return {
     logs: page.logs ?? page.items ?? [],
+    sourceSessionIdsByIdentity: page.sourceSessionIdsByIdentity,
     nextCursor: normalizeLegacyCursor(page.nextCursor ?? page.pageInfo?.nextCursor),
     hasMore: page.hasMore ?? page.pageInfo?.hasMore ?? false,
     ...((page.total ?? page.pageInfo?.total !== undefined)

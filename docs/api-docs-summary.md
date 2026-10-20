@@ -158,5 +158,5 @@ $ bun run typecheck
 
 ---
 
-**维护者**: Claude Code Hub Team
+**维护者**: CC Hub Team
 **最后更新**: 2025-12-17

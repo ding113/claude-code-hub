@@ -51,11 +51,11 @@ describe("system settings public-status republish", () => {
     });
     mockGetSystemSettings.mockResolvedValue({
       id: 1,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
     });
     mockUpdateSystemSettings.mockResolvedValue({
       id: 1,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       publicStatusWindowHours: 24,
       publicStatusAggregationIntervalMinutes: 5,
     });

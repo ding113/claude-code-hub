@@ -3,6 +3,7 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { startCacheCleanup } from "@/lib/cache/session-cache";
 import { getBenignBrokenPipeCode } from "@/lib/lifecycle/benign-errors";
 import { logger } from "@/lib/logger";
@@ -18,6 +19,10 @@ const instrumentationState = globalThis as unknown as {
   __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_STARTED__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_CACHE_EFFECTIVENESS_STARTED__?: boolean;
+  __CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_REPLAY_CLEANUP_STARTED__?: boolean;
+  __CCH_REPLAY_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
   __CCH_LIFECYCLE_MARKERS_LOGGED__?: boolean;
@@ -33,7 +38,8 @@ const instrumentationState = globalThis as unknown as {
  * 处理器，并在崩溃时尝试写入 Node 诊断报告（report.*.json）。
  *
  * 必要的 node 启动参数（在 Dockerfile 中配置）：
- *   --report-on-fatalerror --report-uncaught-exception --report-directory=/app/reports
+ *   --report-on-fatalerror --report-uncaught-exception --report-exclude-env
+ *   --report-directory=/app/reports
  *
  * 这两个 process.on(...) 不会与现有的 SIGTERM / SIGINT 处理器冲突。
  */
@@ -43,15 +49,30 @@ export function registerCrashDiagnostics(): void {
   }
   instrumentationState.__CCH_CRASH_HANDLERS_REGISTERED__ = true;
 
+  const toSafeCrashError = (error: unknown): Error => {
+    const databaseError = findSafeDatabaseError(error);
+    if (databaseError) return new Error(databaseError.message);
+    return error instanceof Error ? error : new Error(String(error));
+  };
+
   const writeReport = (trigger: string, err: unknown): string | undefined => {
     try {
       const report = (
         process as NodeJS.Process & {
-          report?: { writeReport: (filename?: string, err?: unknown) => string };
+          report?: {
+            excludeEnv?: boolean;
+            writeReport: (filename?: string, err?: unknown) => string;
+          };
         }
       ).report;
       if (report?.writeReport) {
-        return report.writeReport(`report.${trigger}.${Date.now()}.json`, err as Error);
+        // Diagnostic reports are durable artifacts. Exclude the entire
+        // environment rather than maintaining an incomplete secret allowlist.
+        report.excludeEnv = true;
+        return report.writeReport(
+          `report.${trigger}.${process.pid}.${Date.now()}.json`,
+          toSafeCrashError(err)
+        );
       }
     } catch {
       // 写入诊断报告失败不应再抛出
@@ -95,12 +116,13 @@ export function registerCrashDiagnostics(): void {
       return;
     }
 
-    const reportPath = writeReport("uncaughtException", err);
-    writeFatalStderr("uncaughtException", err, reportPath);
+    const safeError = toSafeCrashError(err);
+    const reportPath = writeReport("uncaughtException", safeError);
+    writeFatalStderr("uncaughtException", safeError, reportPath);
     logger.fatal("[Lifecycle] uncaughtException", {
-      error: err.message,
-      errorName: err.name,
-      stack: err.stack,
+      error: safeError.message,
+      errorName: safeError.name,
+      stack: safeError.stack,
       reportPath,
     });
     // 与 Node 默认行为一致：捕获后退出，避免后续运行在不一致状态
@@ -126,7 +148,7 @@ export function registerCrashDiagnostics(): void {
       return;
     }
 
-    const err = reason instanceof Error ? reason : new Error(String(reason));
+    const err = toSafeCrashError(reason);
     const reportPath = writeReport("unhandledRejection", err);
     writeFatalStderr("unhandledRejection", err, reportPath);
     logger.fatal("[Lifecycle] unhandledRejection", {
@@ -164,6 +186,12 @@ function logStartupMarker(): void {
  *
  * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
+async function reloadErrorRuleDetectorCache(): Promise<void> {
+  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+  await errorRuleDetector.reload();
+  logger.info("Error rule detector cache loaded successfully");
+}
+
 async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   // 同步默认错误规则到数据库 - 每次启动都完整同步
   const { syncDefaultErrorRules } = await import("@/repository/error-rules");
@@ -173,9 +201,7 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   );
 
   // 加载错误规则缓存 - 让关键错误传播
-  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-  await errorRuleDetector.reload();
-  logger.info("Error rule detector cache loaded successfully");
+  await reloadErrorRuleDetectorCache();
 }
 
 /**
@@ -218,6 +244,127 @@ async function startCloudPriceSyncScheduler(): Promise<void> {
   }
 }
 
+async function startRoutingTraceOutboxRecovery(): Promise<void> {
+  if (!process.env.REDIS_URL) return;
+  try {
+    const { startRoutingTraceOutboxReplayScheduler } = await import(
+      "@/repository/routing-trace-outbox"
+    );
+    await startRoutingTraceOutboxReplayScheduler();
+    logger.info("[Instrumentation] Routing trace outbox recovery started");
+  } catch (error) {
+    logger.warn("[Instrumentation] Routing trace outbox recovery failed to start", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * F3b：缓存效果窗口聚合定时任务（每 5 分钟，ENABLE_CACHE_EFFECTIVENESS 开启时）。
+ * 服务内部有 advisory lock 防多副本重复跑；tick 失败仅记日志。
+ */
+async function startCacheEffectivenessScheduler(): Promise<void> {
+  if (instrumentationState.__CCH_CACHE_EFFECTIVENESS_STARTED__) {
+    return;
+  }
+
+  try {
+    // 开关支持系统设置运行时覆写：调度器常驻，每 tick 异步刷新有效开关——
+    // 低流量实例没有请求路径保鲜快照，只读同步快照会一直陈旧
+    const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+    const { aggregateCacheEffectiveness } = await import("@/lib/cache-effectiveness/service");
+    const intervalMs = 5 * 60 * 1000;
+
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = setInterval(() => {
+      void (async () => {
+        const settings = await getProxyRuntimeSettings();
+        if (!settings.cacheEffectivenessEnabled) return;
+        await aggregateCacheEffectiveness();
+      })().catch((error) => {
+        logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
+          ...describeSchedulerError(error),
+        });
+      });
+    }, intervalMs);
+
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_STARTED__ = true;
+    logger.info("[Instrumentation] Cache effectiveness scheduler started", {
+      intervalSeconds: intervalMs / 1000,
+    });
+  } catch (error) {
+    logger.warn("[Instrumentation] Cache effectiveness scheduler init failed", {
+      ...describeSchedulerError(error),
+    });
+  }
+}
+
+export function describeSchedulerError(error: unknown): {
+  error: string;
+  errorName?: string;
+  errorCause?: string;
+  errorCauseName?: string;
+  errorCauseCode?: string | number;
+} {
+  const outerError = error instanceof Error ? error : undefined;
+  const cause = outerError?.cause;
+  const causeObject = cause && typeof cause === "object" ? cause : undefined;
+  const causeCode = causeObject && "code" in causeObject ? causeObject.code : undefined;
+  return {
+    error: outerError?.message ?? String(error),
+    errorName: outerError?.name,
+    errorCause:
+      cause instanceof Error
+        ? cause.message.slice(0, 500)
+        : cause
+          ? String(cause).slice(0, 500)
+          : undefined,
+    errorCauseName: cause instanceof Error ? cause.name : undefined,
+    errorCauseCode:
+      typeof causeCode === "string" || typeof causeCode === "number" ? causeCode : undefined,
+  };
+}
+
+/** Replay PG 持久层过期行清理：数据库就绪后立即执行，之后每 10 分钟执行。 */
+export async function startReplayCleanupScheduler(): Promise<void> {
+  if (instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__) {
+    return;
+  }
+
+  try {
+    const { runReplayCleanupTick } = await import("@/lib/replay-cleanup");
+    const intervalMs = 10 * 60 * 1000;
+
+    const runTick = () => {
+      void runReplayCleanupTick()
+        .then((result) => {
+          if (result.deleted > 0) {
+            logger.info(result, "[Instrumentation] Replay cleanup tick completed");
+          }
+        })
+        .catch((error) => {
+          logger.warn(
+            { ...describeSchedulerError(error) },
+            "[Instrumentation] Replay cleanup tick failed"
+          );
+        });
+    };
+
+    runTick();
+    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(runTick, intervalMs);
+
+    instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
+    logger.info(
+      { intervalSeconds: intervalMs / 1000 },
+      "[Instrumentation] Replay cleanup scheduler started"
+    );
+  } catch (error) {
+    logger.warn(
+      { ...describeSchedulerError(error) },
+      "[Instrumentation] Replay cleanup scheduler init failed"
+    );
+  }
+}
+
 /**
  * 多实例：订阅 API Key 变更广播，触发本机 Vacuum Filter 失效并重建。
  *
@@ -255,6 +402,49 @@ async function startApiKeyVacuumFilterSync(): Promise<void> {
   }
 }
 
+/**
+ * 多核心 worker 在 ready 前建立计费倍率缓存订阅，避免首次请求刚写入本地缓存、
+ * 订阅尚未完成时漏过其他进程的更新广播。外部多实例部署仍由热路径懒初始化。
+ */
+async function startGroupMultiplierCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureGroupMultiplierCacheSubscription } = await import(
+      "@/lib/cache/provider-group-multiplier-cache"
+    );
+    return await ensureGroupMultiplierCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] Provider group multiplier cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/** 多核心 worker 在 ready 前订阅系统设置更新，避免计费与路由开关跨进程漂移。 */
+async function startSystemSettingsCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureSystemSettingsCacheSubscription } = await import(
+      "@/lib/config/system-settings-cache"
+    );
+    return await ensureSystemSettingsCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] System settings cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function warmupApiKeyVacuumFilter(): void {
   // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
   try {
@@ -267,6 +457,26 @@ function warmupApiKeyVacuumFilter(): void {
 
   // 多实例：订阅 key 变更广播以触发本机 filter 重建
   void startApiKeyVacuumFilterSync();
+}
+
+async function warmupProxyRuntimeSettings(): Promise<void> {
+  try {
+    const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+    await getProxyRuntimeSettings();
+  } catch (error) {
+    logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * 同一进程 cluster 内仅 slot 0 持有单例调度器和队列 consumer。每个网关 worker
+ * 仍需初始化进程本地缓存、生命周期 hook 与可观测性。单进程和外部横向扩容部署
+ * 不携带此标记，因此保持原有行为。
+ */
+export function shouldRunBackgroundTasks(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CCH_MULTICORE_BACKGROUND_OWNER !== "0";
 }
 
 export async function register() {
@@ -312,13 +522,57 @@ export async function register() {
       bindLifecycleGlobals();
     }
 
+    if (process.env.CCH_MULTICORE_ACTIVE === "1") {
+      const [multiplierSyncEnabled, settingsSyncEnabled] = await Promise.all([
+        startGroupMultiplierCacheSync(),
+        startSystemSettingsCacheSync(),
+      ]);
+      if (!multiplierSyncEnabled) {
+        logger.warn(
+          "[Multicore] Provider group multiplier invalidation unavailable; using TTL fallback"
+        );
+      }
+      if (!settingsSyncEnabled) {
+        logger.warn("[Multicore] System settings invalidation unavailable; using TTL fallback");
+      }
+    }
+
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
     if (process.env.NODE_ENV === "production") {
+      if (!shouldRunBackgroundTasks()) {
+        logger.info("[Multicore] Initializing request-only gateway worker", {
+          workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+          workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? null,
+        });
+
+        // 主进程先启动 slot 0，待其报告 ready 后才 fork 仅处理请求的 worker，
+        // 因此迁移和默认规则同步已完成；这里只验证共享存储并初始化进程本地状态。
+        const { checkDatabaseConnection } = await import("@/lib/migrate");
+        const isConnected = await checkDatabaseConnection();
+        if (!isConnected) {
+          logger.error("Cannot start gateway worker without database connection");
+          process.exit(1);
+        }
+
+        warmupApiKeyVacuumFilter();
+        try {
+          await reloadErrorRuleDetectorCache();
+        } catch (error) {
+          logger.error(
+            "[Instrumentation] Non-critical: Error rule detector initialization failed",
+            error
+          );
+        }
+        await warmupProxyRuntimeSettings();
+        logger.info("[Multicore] Request-only gateway worker ready");
+        return;
+      }
+
       const { checkDatabaseConnection, runMigrations, withAdvisoryLock } = await import(
         "@/lib/migrate"
       );
 
-      logger.info("Initializing Claude Code Hub");
+      logger.info("Initializing CC Hub");
 
       // 等待数据库连接
       const isConnected = await checkDatabaseConnection();
@@ -343,13 +597,20 @@ export async function register() {
         });
       }
 
+      await startRoutingTraceOutboxRecovery();
+
       // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
-      import("@/lib/ledger-backfill")
-        .then(({ backfillUsageLedger }) =>
-          backfillUsageLedger().then((result) => {
-            logger.info("[Instrumentation] Ledger backfill complete", result);
-          })
-        )
+      Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
+        .then(([{ AsyncTaskManager }, { backfillUsageLedger }]) => {
+          AsyncTaskManager.register(
+            "startup-ledger-backfill",
+            async (signal) => {
+              const result = await backfillUsageLedger(signal);
+              logger.info("[Instrumentation] Ledger backfill complete", result);
+            },
+            { taskType: "startup-ledger-backfill", staleTimeoutMs: Number.POSITIVE_INFINITY }
+          );
+        })
         .catch((err) => {
           logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
             error: err instanceof Error ? err.message : String(err),
@@ -430,6 +691,34 @@ export async function register() {
       const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
       await scheduleNotifications();
 
+      const { startUserStatisticsResetQueue } = await import(
+        "@/lib/user-statistics-reset/reset-queue"
+      );
+      startUserStatisticsResetQueue();
+      (
+        globalThis as typeof globalThis & {
+          __CCH_STOP_BACKGROUND_QUEUES__?: () => Promise<void>;
+        }
+      ).__CCH_STOP_BACKGROUND_QUEUES__ = async () => {
+        const [{ stopCleanupQueue }, { stopNotificationQueue }, { stopUserStatisticsResetQueue }] =
+          await Promise.all([
+            import("@/lib/log-cleanup/cleanup-queue"),
+            import("@/lib/notification/notification-queue"),
+            import("@/lib/user-statistics-reset/reset-queue"),
+          ]);
+        const results = await Promise.allSettled([
+          stopCleanupQueue(),
+          stopNotificationQueue(),
+          stopUserStatisticsResetQueue(),
+        ]);
+        const failures = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : []
+        );
+        if (failures.length > 0) {
+          throw new AggregateError(failures, "Failed to stop background queues");
+        }
+      };
+
       // 初始化智能探测调度器（如果启用）
       const { startProbeScheduler, isSmartProbingEnabled } = await import(
         "@/lib/circuit-breaker-probe"
@@ -450,11 +739,27 @@ export async function register() {
         });
       }
 
+      const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+        "@/lib/public-status/startup-reconciliation"
+      );
+      await reconcilePublicStatusSiteTitleAtStartup();
+
       try {
         const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         startPublicStatusRebuildScheduler();
       } catch (error) {
         logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
+        const { startAvailabilityProjectionWorker } = await import(
+          "@/lib/availability/projection-worker"
+        );
+        startAvailabilityProjectionWorker();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start availability projection worker", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -480,6 +785,12 @@ export async function register() {
         });
       }
 
+      await startCacheEffectivenessScheduler();
+      await startReplayCleanupScheduler();
+
+      // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+      await warmupProxyRuntimeSettings();
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -491,14 +802,20 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+        await startRoutingTraceOutboxRecovery();
 
         // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
-        import("@/lib/ledger-backfill")
-          .then(({ backfillUsageLedger }) =>
-            backfillUsageLedger().then((result) => {
-              logger.info("[Instrumentation] Ledger backfill complete", result);
-            })
-          )
+        Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
+          .then(([{ AsyncTaskManager }, { backfillUsageLedger }]) => {
+            AsyncTaskManager.register(
+              "startup-ledger-backfill",
+              async (signal) => {
+                const result = await backfillUsageLedger(signal);
+                logger.info("[Instrumentation] Ledger backfill complete", result);
+              },
+              { taskType: "startup-ledger-backfill", staleTimeoutMs: Number.POSITIVE_INFINITY }
+            );
+          })
           .catch((err) => {
             logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
               error: err instanceof Error ? err.message : String(err),
@@ -589,6 +906,11 @@ export async function register() {
           });
         }
 
+        const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+          "@/lib/public-status/startup-reconciliation"
+        );
+        await reconcilePublicStatusSiteTitleAtStartup();
+
         try {
           const { startPublicStatusRebuildScheduler } = await import(
             "@/lib/public-status/scheduler"
@@ -596,6 +918,17 @@ export async function register() {
           startPublicStatusRebuildScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { startAvailabilityProjectionWorker } = await import(
+            "@/lib/availability/projection-worker"
+          );
+          startAvailabilityProjectionWorker();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start availability projection worker", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
@@ -620,6 +953,12 @@ export async function register() {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+
+        await startCacheEffectivenessScheduler();
+        await startReplayCleanupScheduler();
+
+        // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+        await warmupProxyRuntimeSettings();
       } else {
         logger.warn(
           "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"

@@ -38,6 +38,15 @@ const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actio
 const keys = await vi.importActual<typeof import("@/lib/api-client/v1/actions/keys")>(
   "@/lib/api-client/v1/actions/keys"
 );
+const activeSessions = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/active-sessions")
+>("@/lib/api-client/v1/actions/active-sessions");
+const sessionResponse = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/session-response")
+>("@/lib/api-client/v1/actions/session-response");
+const sessionOriginChain = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/session-origin-chain")
+>("@/lib/api-client/v1/actions/session-origin-chain");
 
 describe("v1 action compatibility client", () => {
   beforeEach(() => {
@@ -47,6 +56,90 @@ describe("v1 action compatibility client", () => {
   // Always restore globals, even if a stubbed-fetch test throws mid-assertion.
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  test("preserves the physical source Session when fetching an aggregated Session request", async () => {
+    getMock.mockResolvedValue({ currentSequence: 1 });
+
+    await activeSessions.getSessionDetails("pfx:scope:fingerprint", 1, "physical-session", 203);
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/pfx%3Ascope%3Afingerprint?requestSequence=1&sourceSessionId=physical-session&requestId=203"
+    );
+  });
+
+  test("passes an AbortSignal to the all-sessions request", async () => {
+    getMock.mockResolvedValue({ active: [], inactive: [] });
+    const controller = new AbortController();
+
+    await activeSessions.getAllSessions(2, 3, 20, { signal: controller.signal });
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions?state=all&activePage=2&inactivePage=3&pageSize=20",
+      { signal: controller.signal }
+    );
+  });
+
+  test("marks statistics reset polling transport failures as retryable network errors", async () => {
+    getMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(users.getUserStatisticsReset(42, "reset-id")).resolves.toMatchObject({
+      ok: false,
+      errorCode: "NETWORK_ERROR",
+    });
+  });
+
+  test("passes an AbortSignal to statistics reset polling", async () => {
+    getMock.mockResolvedValue({ status: "running" });
+    const controller = new AbortController();
+
+    await users.getUserStatisticsReset(42, "reset-id", { signal: controller.signal });
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/users/42/statistics-resets/reset-id", {
+      signal: controller.signal,
+    });
+  });
+
+  test("preserves the physical request locator for every Session payload endpoint", async () => {
+    getMock.mockResolvedValue({ exists: true, response: "ok" });
+
+    await activeSessions.getSessionMessages("pfx:scope:fingerprint", 2, "physical-session");
+    await activeSessions.hasSessionMessages("pfx:scope:fingerprint", 2, "physical-session");
+    await sessionResponse.getSessionResponse("pfx:scope:fingerprint", 2, "physical-session");
+    await sessionOriginChain.getSessionOriginChain("pfx:scope:fingerprint", 2, "physical-session");
+
+    const query = "requestSequence=2&sourceSessionId=physical-session";
+    expect(getMock).toHaveBeenNthCalledWith(
+      1,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      2,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages/exists?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      3,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/response?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      4,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/origin-chain?${query}`
+    );
+  });
+
+  test("preserves the stable request id for message existence checks", async () => {
+    getMock.mockResolvedValue({ exists: true });
+
+    await activeSessions.hasSessionMessages(
+      "pfx:scope:fingerprint",
+      undefined,
+      "physical-session",
+      203
+    );
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages/exists?sourceSessionId=physical-session&requestId=203"
+    );
   });
 
   test("preserves provider edit undo metadata from response headers", async () => {
@@ -128,13 +221,13 @@ describe("v1 action compatibility client", () => {
         })
       )
       .mockResolvedValueOnce({
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         currencyDisplay: "USD",
         billingModelSource: "original",
       });
 
     await expect(systemConfig.getSystemSettings()).resolves.toEqual({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       currencyDisplay: "USD",
       billingModelSource: "original",
     });
@@ -501,6 +594,26 @@ describe("v1 action compatibility client", () => {
       ok: false,
       error: "Bad request",
       errorCode: "CANNOT_DELETE_LAST_KEY",
+      errorParams: undefined,
+    });
+  });
+
+  test("preserves the last-enabled-key business code through toggleKeyEnabled", async () => {
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 400,
+        errorCode: "CANNOT_DISABLE_LAST_KEY",
+        detail: "Bad request",
+      })
+    );
+
+    const result = await keys.toggleKeyEnabled(7, false);
+
+    expect(postMock).toHaveBeenCalledWith("/api/v1/keys/7:enable", { enabled: false }, undefined);
+    expect(result).toEqual({
+      ok: false,
+      error: "Bad request",
+      errorCode: "CANNOT_DISABLE_LAST_KEY",
       errorParams: undefined,
     });
   });

@@ -117,19 +117,19 @@ function createSession({
 }
 
 describe("ProxySession endpoint policy", () => {
-  it.each([
-    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-    "/V1/RESPONSES/COMPACT/",
-  ])("应在创建时解析 raw passthrough policy: %s", (pathname) => {
-    const session = createSession({
-      redirectedModel: null,
-      requestUrl: new URL(`http://localhost${pathname}`),
-    });
+  it.each([V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS, "/V1/RESPONSES/COMPACT/"])(
+    "应在创建时解析 raw passthrough policy: %s",
+    (pathname) => {
+      const session = createSession({
+        redirectedModel: null,
+        requestUrl: new URL(`http://localhost${pathname}`),
+      });
 
-    const policy = session.getEndpointPolicy();
-    expect(isRawPassthroughEndpointPolicy(policy)).toBe(true);
-    expect(policy.trackConcurrentRequests).toBe(false);
-  });
+      const policy = session.getEndpointPolicy();
+      expect(isRawPassthroughEndpointPolicy(policy)).toBe(true);
+      expect(policy.trackConcurrentRequests).toBe(false);
+    }
+  );
 
   it("应在请求路径后续变更后保持创建时 policy 不变", () => {
     const session = createSession({
@@ -160,6 +160,49 @@ describe("ProxySession endpoint policy", () => {
     expect(isRawPassthroughEndpointPolicy(policy)).toBe(false);
     expect(policy.kind).toBe("default");
     expect(policy.trackConcurrentRequests).toBe(true);
+  });
+});
+
+describe("ProxySession high-concurrency policy", () => {
+  it("只关闭调试快照与实时观测", () => {
+    const session = createSession({ redirectedModel: null });
+
+    expect(session.shouldPersistSessionDebugArtifacts()).toBe(true);
+    expect(session.shouldTrackSessionObservability()).toBe(true);
+
+    session.setHighConcurrencyModeEnabled(true);
+
+    expect(session.shouldPersistSessionDebugArtifacts()).toBe(false);
+    expect(session.shouldTrackSessionObservability()).toBe(false);
+  });
+});
+
+describe("ProxySession provider reuse identity", () => {
+  it("稳定 Session ID 在单条增量请求中也允许复用供应商", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestMessage: { input: [{ role: "user", content: "next turn" }] },
+    });
+
+    session.setSessionId("stable-client-session", { allowSingleTurnProviderReuse: true });
+
+    expect(session.shouldReuseProvider()).toBe(true);
+  });
+
+  it("内容哈希或随机降级身份仍要求多条上下文", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestMessage: { messages: [{ role: "user", content: "same short prompt" }] },
+    });
+
+    session.setSessionId("derived-session");
+    expect(session.shouldReuseProvider()).toBe(false);
+
+    session.request.message.messages = [
+      { role: "user", content: "first" },
+      { role: "assistant", content: "second" },
+    ];
+    expect(session.shouldReuseProvider()).toBe(true);
   });
 });
 

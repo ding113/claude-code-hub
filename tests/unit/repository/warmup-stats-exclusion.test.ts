@@ -1,4 +1,17 @@
+import type { SQL } from "drizzle-orm";
+import { CasingCache } from "drizzle-orm/casing";
 import { describe, expect, test, vi } from "vitest";
+import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
+
+function compileSql(sqlObj: SQL): string {
+  return sqlObj.toQuery({
+    escapeName: (name: string) => `"${name}"`,
+    escapeParam: (num: number, _value: unknown) => `$${num}`,
+    escapeString: (value: string) => `'${value}'`,
+    casing: new CasingCache(),
+    paramStartIndex: { value: 1 },
+  }).sql;
+}
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -53,6 +66,12 @@ function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
 }
 
 describe("Warmup 请求：不计入任何聚合统计", () => {
+  test("ledger billing condition excludes blocked and Replay audit rows", () => {
+    const condition = compileSql(LEDGER_BILLING_CONDITION).toLowerCase();
+    expect(condition).toContain('"usage_ledger"."blocked_by" is null');
+    expect(condition).toContain('"usage_ledger"."is_replay" = false');
+  });
+
   test("usage logs：分页 total 包含 warmup，但 summary.totalRequests 排除 warmup", async () => {
     vi.resetModules();
 
@@ -107,7 +126,7 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
     expect(firstSelect).toEqual(expect.objectContaining({ totalRequests: expect.anything() }));
   });
 
-  test("usage logs stats：WHERE 条件应包含 blocked_by IS NULL 过滤", async () => {
+  test("usage logs stats：默认审计口径仅排除 blocked 请求", async () => {
     vi.resetModules();
 
     const whereArgs: unknown[] = [];
@@ -148,7 +167,7 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
     expect(whereSql.toLowerCase()).toContain("is null");
   });
 
-  test("provider statistics：SQL 应使用 blocked_by IS NULL 计费过滤", async () => {
+  test("provider statistics：SQL 应排除 blocked 与 Replay 请求", async () => {
     vi.resetModules();
 
     const executeMock = vi.fn(async () => [
@@ -198,5 +217,7 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
     const querySql = sqlToString(queryArg);
     expect(querySql.toLowerCase()).toContain("blocked_by");
     expect(querySql.toLowerCase()).toContain("is null");
+    expect(querySql.toLowerCase()).toContain("is_replay");
+    expect(querySql.toLowerCase()).toContain("false");
   });
 });

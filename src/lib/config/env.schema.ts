@@ -29,6 +29,7 @@ const optionalNumber = (schema: z.ZodNumber) =>
 /**
  * 环境变量验证schema
  */
+// biome-ignore format: preserve the established environment schema layout
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DSN: optionalPreprocessed((val) => {
@@ -39,7 +40,8 @@ export const EnvSchema = z.object({
   }, z.string().url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
-  // - 这些值为“每个应用进程”的连接池上限
+  // - 单进程时 DB_POOL_MAX 是 data/control/writer 三类 pool 的连接总预算
+  // - 内置 cluster launcher 会在启动 worker 前把容器级总预算分摊为这里读取的进程分片
   DB_POOL_MAX: optionalNumber(
     z.number().int().min(1, "DB_POOL_MAX 不能小于 1").max(200, "DB_POOL_MAX 不能大于 200")
   ),
@@ -57,6 +59,22 @@ export const EnvSchema = z.object({
       .min(1, "DB_POOL_CONNECT_TIMEOUT 不能小于 1")
       .max(120, "DB_POOL_CONNECT_TIMEOUT 不能大于 120")
   ),
+  // 活动语句超时（毫秒），必须早于流式结算的 120 秒应用层 deadline
+  DB_STATEMENT_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(1000, "DB_STATEMENT_TIMEOUT_MS 不能小于 1000")
+      .max(119000, "DB_STATEMENT_TIMEOUT_MS 不能大于 119000")
+  ).default(90_000),
+  // 等待数据库锁的最长时间（毫秒）
+  DB_LOCK_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(100, "DB_LOCK_TIMEOUT_MS 不能小于 100")
+      .max(60000, "DB_LOCK_TIMEOUT_MS 不能大于 60000")
+  ).default(5_000),
   // message_request 写入模式
   // - sync：同步写入（兼容旧行为，但高并发下会增加请求尾部阻塞）
   // - async：异步批量写入（默认，降低 DB 写放大与连接占用）
@@ -105,9 +123,19 @@ export const EnvSchema = z.object({
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串
   AUTO_MIGRATE: z.string().default("true").transform(booleanTransform),
+  // 迁移时并发建索引的锁等待与单条语句上限；大表或长事务较多时调高，超时会终止启动
+  MIGRATION_INDEX_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(5_000),
+  MIGRATION_INDEX_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(60_000).default(900_000),
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
+  REDIS_COMMAND_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(100, "REDIS_COMMAND_TIMEOUT_MS 不能小于 100")
+      .max(120000, "REDIS_COMMAND_TIMEOUT_MS 不能大于 120000")
+  ).default(10_000),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
   ENABLE_LEGACY_ACTIONS_API: z.string().default("true").transform(booleanTransform),
@@ -126,6 +154,13 @@ export const EnvSchema = z.object({
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
   // - true：原样存储 message 内容（注意隐私和存储空间影响）
   STORE_SESSION_MESSAGES: z.string().default("false").transform(booleanTransform),
+  // 单份请求调试 artifact（requestBody/messages/before/after body）的 Redis 存储上限。
+  SESSION_REQUEST_ARTIFACT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(5 * 1024 * 1024),
   // 会话响应体存储开关
   // - true (默认)：存储响应体（SSE/JSON），用于调试/回放/问题定位（Redis 临时缓存，默认 5 分钟）
   // - false：不存储响应体（注意：不影响本次请求处理；仅影响后续在 UI/诊断中查看 response body）
@@ -134,6 +169,15 @@ export const EnvSchema = z.object({
   // - 该开关只影响“写入 Redis 的响应体内容”，不影响内部统计逻辑读取响应体（例如 tokens/费用统计、SSE 结束后的假 200 检测）。
   // - message 内容是否脱敏仍由 STORE_SESSION_MESSAGES 控制。
   STORE_SESSION_RESPONSE_BODY: z.string().default("true").transform(booleanTransform),
+  // 两阶段发布开关。false 时保持旧 key 写入，所有实例升级后再启用单 key 去重布局。
+  SESSION_RESPONSE_BODY_DEDUP_ENABLED: z.string().default("false").transform(booleanTransform),
+  // 会话响应正文写入 Redis 的字节上限。旧布局按单份限制，去重布局按唯一正文总字节限制。
+  SESSION_RESPONSE_BODY_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(5 * 1024 * 1024),
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
@@ -160,6 +204,71 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
+  // 响应结束后后台消费者继续持有请求内存的最长宽限（毫秒）。超时后强制归还租约并记录
+  // 卡住的所有者标签；实际宽限不会短于 HEDGE_LOSER_DRAIN_TIMEOUT_MS + 30 秒。
+  REQUEST_MEMORY_BACKGROUND_GRACE_MS: z.coerce.number().int().min(1000).default(150_000),
+
+  // 客户端断线后的 detached stream 使用进程级带权预算；内置 cluster 会先分摊容器总预算。
+  DETACHED_STREAM_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(4096).default(64),
+  DETACHED_STREAM_BUDGET_BYTES: z.coerce
+    .number()
+    .int()
+    .min(3 * 1024 * 1024 + 64 * 1024)
+    .max(1024 * 1024 * 1024)
+    .default(64 * 1024 * 1024),
+  DETACHED_STREAM_METERING_RESERVE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(1024 * 1024 * 1024)
+    .default(16 * 1024 * 1024),
+
+  // ===== CCHP 网关移植功能开关 =====
+  // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
+  STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("enforce"),
+  // 门控 precommit 缓冲上限：超限即视为该供应商流异常，failover 释放内存
+  // （字节计数排除请求回显帧，见 stream-gate/frame-classifier.ts isRequestEchoFrame）
+  STREAM_GATE_PREBUFFER_EVENT_CAP: z.coerce.number().int().min(1).max(4096).default(64),
+  STREAM_GATE_PREBUFFER_BYTE_CAP: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(64 * 1024 * 1024)
+    .default(10 * 1024 * 1024),
+  // 所有正在门禁 precommit 阶段及等待下游消费的前缀共享该进程级预算。
+  // 内置 cluster 会先分摊容器总预算，避免每个 worker 各拿一整份。
+  STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: z.coerce
+    .number()
+    .int()
+    .min(128 * 1024)
+    .max(2 * 1024 * 1024 * 1024)
+    .default(256 * 1024 * 1024),
+  // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
+  ENABLE_REQUEST_REPLAY: z.string().default("true").transform(booleanTransform),
+  // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中
+  REPLAY_LIVE_DEDUP_ENABLED: z.string().default("true").transform(booleanTransform),
+  // 客户端断开后上游继续引流的最长时长（毫秒；替代默认 60s drain 上限）
+  REPLAY_MAX_DETACHED_MS: z.coerce.number().int().min(10_000).max(1_800_000).default(300_000),
+  // 单节点并发 spool 上限（超出的请求不做 replay，回退现状）
+  REPLAY_MAX_CONCURRENT_SPOOLS: z.coerce.number().int().min(1).max(1024).default(64),
+  // Redis 热层 TTL（活跃/刚完成的响应块与元数据）
+  REPLAY_TTL_SECONDS: z.coerce.number().int().min(60).max(7200).default(600),
+  // 单响应缓存上限（超限即放弃 spool，fail-open 回现状）
+  REPLAY_MAX_PAYLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(8 * 1024 * 1024),
+  // 最长前缀亲和路由：链式指纹匹配的供应商粘性（软提名，仍走全套硬校验）
+  ENABLE_PREFIX_AFFINITY: z.string().default("false").transform(booleanTransform),
+  // 亲和绑定滑动 TTL（秒）：读即续期，目标是把供应商粘性拉长到接近 prompt cache 保留期
+  PREFIX_AFFINITY_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
+  // 指纹链回看窗口（尾部边界数）：覆盖编辑回退场景的拐点，超过 8 收益递减
+  PREFIX_AFFINITY_WINDOW: z.coerce.number().int().min(1).max(64).default(8),
+  // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由，默认开启）
+  ENABLE_CACHE_EFFECTIVENESS: z.string().default("true").transform(booleanTransform),
+
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 
   // Langfuse Observability (optional, auto-enabled when keys are set)
@@ -168,6 +277,9 @@ export const EnvSchema = z.object({
   LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
   LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
   LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
+  // v5 first-class attributes; consumed by LangfuseSpanProcessor
+  LANGFUSE_TRACING_ENVIRONMENT: z.string().optional(),
+  LANGFUSE_RELEASE: z.string().optional(),
 
   // IP 归属地查询服务
   // 默认使用官方托管服务；可通过 IP_GEO_API_URL 自托管
@@ -175,6 +287,14 @@ export const EnvSchema = z.object({
   IP_GEO_API_TOKEN: z.string().optional(),
   IP_GEO_CACHE_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   IP_GEO_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(1500),
+}).superRefine((env, context) => {
+  if (env.DETACHED_STREAM_METERING_RESERVE_BYTES > env.DETACHED_STREAM_BUDGET_BYTES) {
+    context.addIssue({
+      code: "custom",
+      path: ["DETACHED_STREAM_METERING_RESERVE_BYTES"],
+      message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
+    });
+  }
 });
 
 /**

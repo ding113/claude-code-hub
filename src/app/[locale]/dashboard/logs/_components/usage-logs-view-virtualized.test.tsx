@@ -14,6 +14,12 @@ const searchParamMocks = vi.hoisted(() => ({
   value: new URLSearchParams(),
 }));
 
+const filterPropMocks = vi.hoisted(() => ({
+  panel: undefined as UsageLogFilters | undefined,
+  table: undefined as UsageLogFilters | undefined,
+  controls: undefined as UsageLogFilters | undefined,
+}));
+
 vi.mock("next-intl", () => ({
   useLocale: () => "zh-CN",
   useTranslations: () => (key: string) => key,
@@ -77,57 +83,69 @@ vi.mock("./column-visibility-dropdown", () => ({
 }));
 
 vi.mock("./usage-logs-stats-panel", () => ({
-  UsageLogsStatsPanel: () => <div data-testid="usage-logs-stats-panel" />,
+  UsageLogsStatsPanel: ({ filters }: { filters: UsageLogFilters }) => {
+    filterPropMocks.panel = filters;
+    return <div data-testid="usage-logs-stats-panel" />;
+  },
 }));
 
 vi.mock("./virtualized-logs-table", () => ({
-  VirtualizedLogsTable: () => <div data-testid="virtualized-logs-table" />,
+  VirtualizedLogsTable: ({ filters }: { filters: UsageLogFilters }) => {
+    filterPropMocks.table = filters;
+    return <div data-testid="virtualized-logs-table" />;
+  },
 }));
 
 vi.mock("./usage-logs-filters", () => ({
   UsageLogsFilters: ({
+    filters,
     onChange,
     onReset,
   }: {
+    filters: UsageLogFilters;
     onChange: (filters: UsageLogFilters) => void;
     onReset: () => void;
-  }) => (
-    <div>
-      <button
-        type="button"
-        onClick={() =>
-          onChange({
-            userId: 2,
-            keyId: 3,
-            providerId: 4,
-            sessionId: "session-abc",
-            startTime: 1000,
-            endTime: 2000,
-            statusCode: 500,
-            model: "claude-sonnet",
-            actualResponseModelMismatch: true,
-            endpoint: "/v1/messages",
-            minRetryCount: 1,
-          })
-        }
-      >
-        apply all filters
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          onChange({
-            excludeStatusCode200: true,
-          })
-        }
-      >
-        apply exclude 200
-      </button>
-      <button type="button" onClick={onReset}>
-        reset filters
-      </button>
-    </div>
-  ),
+  }) => {
+    filterPropMocks.controls = filters;
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() =>
+            onChange({
+              userId: 2,
+              keyId: 3,
+              providerId: 4,
+              sessionId: "session-abc",
+              startTime: 1000,
+              endTime: 2000,
+              statusCode: 500,
+              model: "claude-sonnet",
+              actualResponseModelMismatch: true,
+              endpoint: "/v1/messages",
+              minRetryCount: 1,
+              replayFilter: "replay",
+            })
+          }
+        >
+          apply all filters
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onChange({
+              excludeStatusCode200: true,
+            })
+          }
+        >
+          apply exclude 200
+        </button>
+        <button type="button" onClick={onReset}>
+          reset filters
+        </button>
+      </div>
+    );
+  },
 }));
 
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
@@ -177,6 +195,9 @@ describe("UsageLogsViewVirtualized filter navigation", () => {
     routerMocks.pushedHref = "";
     routerMocks.push.mockClear();
     searchParamMocks.value = new URLSearchParams();
+    filterPropMocks.panel = undefined;
+    filterPropMocks.table = undefined;
+    filterPropMocks.controls = undefined;
     document.body.innerHTML = "";
   });
 
@@ -186,8 +207,33 @@ describe("UsageLogsViewVirtualized filter navigation", () => {
     clickButton(container, "apply all filters");
 
     expect(routerMocks.pushedHref).toBe(
-      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&actualResponseModelMismatch=true&endpoint=%2Fv1%2Fmessages&minRetry=1"
+      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&actualResponseModelMismatch=true&endpoint=%2Fv1%2Fmessages&minRetry=1&replayFilter=replay"
     );
+
+    unmount();
+  });
+
+  it("propagates the Replay URL filter to controls, stats, and table", () => {
+    searchParamMocks.value = new URLSearchParams("replayFilter=non-replay");
+
+    const { unmount } = renderUsageLogsView();
+
+    expect(filterPropMocks.controls?.replayFilter).toBe("non-replay");
+    expect(filterPropMocks.panel?.replayFilter).toBe("non-replay");
+    expect(filterPropMocks.table?.replayFilter).toBe("non-replay");
+
+    unmount();
+  });
+
+  it('treats replayFilter="all" as no statistics filter', () => {
+    searchParamMocks.value = new URLSearchParams("replayFilter=all");
+
+    const { container, unmount } = renderUsageLogsView();
+
+    expect(filterPropMocks.controls?.replayFilter).toBe("all");
+    expect(filterPropMocks.table?.replayFilter).toBe("all");
+    expect(filterPropMocks.panel).toBeUndefined();
+    expect(container.querySelector('[data-testid="usage-logs-stats-panel"]')).toBeNull();
 
     unmount();
   });

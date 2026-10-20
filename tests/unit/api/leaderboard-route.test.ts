@@ -111,10 +111,11 @@ describe("GET /api/leaderboard", () => {
           totalCost: 5.0,
           totalTokens: 500000,
           successRate: 0.95,
-          avgTtfbMs: 200,
+          avgTtftMs: 200,
           avgTokensPerSecond: 50,
           avgCostPerRequest: 0.05,
           avgCostPerMillionTokens: 10.0,
+          cacheCoefficientBp: 8600,
         },
       ]);
 
@@ -130,6 +131,7 @@ describe("GET /api/leaderboard", () => {
       // Additive fields must be present
       expect(entry).toHaveProperty("avgCostPerRequest", 0.05);
       expect(entry).toHaveProperty("avgCostPerMillionTokens", 10.0);
+      expect(entry).toHaveProperty("cacheCoefficientBp", 8600);
       // Formatted variants should exist
       expect(entry).toHaveProperty("avgCostPerRequestFormatted");
       expect(entry).toHaveProperty("avgCostPerMillionTokensFormatted");
@@ -149,7 +151,7 @@ describe("GET /api/leaderboard", () => {
           totalCost: 0,
           totalTokens: 0,
           successRate: 0,
-          avgTtfbMs: 0,
+          avgTtftMs: 0,
           avgTokensPerSecond: 0,
           avgCostPerRequest: null,
           avgCostPerMillionTokens: null,
@@ -175,12 +177,11 @@ describe("GET /api/leaderboard", () => {
           totalRequests: 12,
           totalCost: 3.5,
           totalTokens: 12345,
-          successRate: null,
+          successRate: 0.9,
           rowIdentityBasis: "redirected",
-          successRateBasis: "unavailable",
+          successRateBasis: "redirected",
           costTokensBasis: "redirected",
           basisDisclosureRequired: true,
-          successRateUnavailableReason: "redirected_billing_model",
         },
       ]);
 
@@ -192,12 +193,11 @@ describe("GET /api/leaderboard", () => {
       expect(response.status).toBe(200);
       expect(body[0]).toMatchObject({
         model: "glm-4.6",
-        successRate: null,
+        successRate: 0.9,
         rowIdentityBasis: "redirected",
-        successRateBasis: "unavailable",
+        successRateBasis: "redirected",
         costTokensBasis: "redirected",
         basisDisclosureRequired: true,
-        successRateUnavailableReason: "redirected_billing_model",
       });
     });
 
@@ -214,6 +214,7 @@ describe("GET /api/leaderboard", () => {
           totalInputTokens: 20000,
           totalTokens: 20000,
           cacheHitRate: 0.5,
+          cacheCoefficientBp: 6450,
           modelStats: [
             {
               model: "claude-3-opus",
@@ -242,6 +243,7 @@ describe("GET /api/leaderboard", () => {
       expect(body).toHaveLength(1);
 
       const entry = body[0];
+      expect(entry).toHaveProperty("cacheCoefficientBp", 6450);
       expect(entry).toHaveProperty("modelStats");
       expect(entry.modelStats).toHaveLength(2);
       expect(entry.modelStats[0]).toHaveProperty("model", "claude-3-opus");
@@ -303,7 +305,7 @@ describe("GET /api/leaderboard", () => {
           totalCost: 1.5,
           totalTokens: 1000,
           successRate: 1,
-          avgTtfbMs: 100,
+          avgTtftMs: 100,
           avgTokensPerSecond: 20,
           avgCostPerRequest: 0.15,
           avgCostPerMillionTokens: 1500,
@@ -314,7 +316,7 @@ describe("GET /api/leaderboard", () => {
               totalCost: 1.0,
               totalTokens: 600,
               successRate: 1,
-              avgTtfbMs: 110,
+              avgTtftMs: 110,
               avgTokensPerSecond: 25,
               avgCostPerRequest: 0.1667,
               avgCostPerMillionTokens: 1666.7,
@@ -355,7 +357,7 @@ describe("GET /api/leaderboard", () => {
           totalCost: 1.0,
           totalTokens: 1000,
           successRate: 1,
-          avgTtfbMs: 100,
+          avgTtftMs: 100,
           avgTokensPerSecond: 20,
           avgCostPerRequest: 0.1,
           avgCostPerMillionTokens: 1000,

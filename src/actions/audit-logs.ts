@@ -61,7 +61,7 @@ export async function getAuditLogsBatch(
   const tErrors = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tErrors("PERMISSION_DENIED"),
@@ -116,7 +116,7 @@ export async function getAuditLogDetail(id: number): Promise<ActionResult<AuditL
   const tErrors = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tErrors("PERMISSION_DENIED"),

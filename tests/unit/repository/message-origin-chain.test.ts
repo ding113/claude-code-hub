@@ -41,6 +41,7 @@ function sqlToString(sqlObj: unknown): string {
 function createThenableQuery<T>(
   result: T,
   opts?: {
+    innerJoinArgs?: unknown[];
     whereArgs?: unknown[];
     orderByArgs?: unknown[];
     limitArgs?: unknown[];
@@ -49,6 +50,10 @@ function createThenableQuery<T>(
   const query: any = Promise.resolve(result);
 
   query.from = vi.fn(() => query);
+  query.innerJoin = vi.fn((...args: unknown[]) => {
+    opts?.innerJoinArgs?.push(args);
+    return query;
+  });
   query.where = vi.fn((arg: unknown) => {
     opts?.whereArgs?.push(arg);
     return query;
@@ -66,6 +71,55 @@ function createThenableQuery<T>(
 }
 
 describe("repository/message findSessionOriginChain", () => {
+  test("resolves the nearest origin chain within the selected request owner and key", async () => {
+    vi.resetModules();
+
+    const originWhereArgs: unknown[] = [];
+    const originJoinArgs: unknown[] = [];
+    const originOrderByArgs: unknown[] = [];
+    const chain: ProviderChainItem[] = [
+      {
+        id: 401,
+        name: "provider-selected-origin",
+        reason: "initial_selection",
+      },
+    ];
+
+    const selectMock = vi.fn(() =>
+      createThenableQuery([{ providerChain: chain }], {
+        innerJoinArgs: originJoinArgs,
+        whereArgs: originWhereArgs,
+        orderByArgs: originOrderByArgs,
+      })
+    );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { findSessionOriginChain } = await import("@/repository/message");
+    const result = await findSessionOriginChain(777, 55, 9);
+
+    expect(result).toEqual(chain);
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(originWhereArgs).toHaveLength(1);
+
+    const originWhereSql = sqlToString([originJoinArgs, originWhereArgs[0]]).toLowerCase();
+    expect(originWhereSql).toContain("session_id");
+    expect(originWhereSql).toContain("user_id");
+    expect(originWhereSql).toContain("created_at");
+    expect(originWhereSql).toContain("initial_selection");
+
+    const originOrderSql = sqlToString(originOrderByArgs[0]).toLowerCase();
+    expect(originOrderSql).toContain("case");
+    expect(originOrderSql).toContain("created_at");
+    expect(originOrderSql).toContain("id");
+    expect(originOrderSql).toContain("desc");
+  });
+
   test("happy path: 返回 session 首条非 warmup 的完整 providerChain", async () => {
     vi.resetModules();
 
@@ -95,7 +149,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-happy");
+    const result = await findSessionOriginChain(101, 7, 9);
 
     expect(result).toEqual(chain);
     expect(whereArgs.length).toBeGreaterThan(0);
@@ -107,8 +161,9 @@ describe("repository/message findSessionOriginChain", () => {
 
     expect(orderByArgs.length).toBeGreaterThan(0);
     const orderSql = sqlToString(orderByArgs[0]).toLowerCase();
-    expect(orderSql).toContain("request_sequence");
-    expect(orderSql).toContain("asc");
+    expect(orderSql).toContain("created_at");
+    expect(orderSql).toContain("id");
+    expect(orderSql).toContain("desc");
 
     expect(limitArgs).toEqual([1]);
   });
@@ -136,7 +191,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-warmup-first");
+    const result = await findSessionOriginChain(202, 7, 9);
 
     expect(result).toEqual(chain);
   });
@@ -154,7 +209,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-not-found");
+    const result = await findSessionOriginChain(303, 7, 9);
 
     expect(result).toBeNull();
   });
@@ -172,7 +227,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-all-warmup");
+    const result = await findSessionOriginChain(404, 7, 9);
 
     expect(result).toBeNull();
   });
@@ -190,7 +245,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-null-provider-chain");
+    const result = await findSessionOriginChain(505, 7, 9);
 
     expect(result).toBeNull();
   });
@@ -208,7 +263,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    const result = await findSessionOriginChain("session-all-reuse");
+    const result = await findSessionOriginChain(606, 7, 9);
 
     expect(result).toBeNull();
   });
@@ -238,7 +293,7 @@ describe("repository/message findSessionOriginChain", () => {
     }));
 
     const { findSessionOriginChain } = await import("@/repository/message");
-    await findSessionOriginChain("session-jsonb-filter");
+    await findSessionOriginChain(707, 7, 9);
 
     expect(whereArgs.length).toBeGreaterThan(0);
     const whereSql = sqlToString(whereArgs[0]).toLowerCase();

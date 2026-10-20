@@ -61,13 +61,13 @@
     "filters": {
       "user": "用户",
       "provider": "供应商",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "搜索用户...",
       "searchProvider": "搜索供应商...",
-      "searchSessionId": "搜索 Session ID...",
+      "searchSessionId": "搜索 Session 或 Prefix ID...",
       "noUserFound": "未找到匹配的用户",
       "noProviderFound": "未找到匹配的供应商",
-      "noSessionFound": "未找到匹配的 Session ID",
+      "noSessionFound": "未找到匹配的 Session 或 Prefix ID",
       "model": "模型",
       "actualResponseModelMismatch": "计费/实际模型不一致",
       "endpoint": "端点",
@@ -88,6 +88,12 @@
       "minRetryCount": "重试次数≥",
       "minRetryCountPlaceholder": "输入次数（0 表示不限）",
       "enabled": "已开启",
+      "replay": {
+        "label": "Replay",
+        "all": "全部请求",
+        "only": "仅 Replay 请求",
+        "exclude": "排除 Replay 请求"
+      },
       "apply": "应用筛选",
       "reset": "重置",
       "last7days": "近7天",
@@ -131,6 +137,8 @@
       "ip": "IP",
       "provider": "供应商",
       "model": "计费模型",
+      "reasoningEffort": "思考强度",
+      "reasoningEffortTooltip": "该模型请求的思考强度",
       "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
@@ -162,6 +170,7 @@
       "prevPage": "上一页",
       "nextPage": "下一页",
       "blocked": "被拦截",
+      "replay": "Replay",
       "nonBilling": "非计费",
       "skipped": "已跳过",
       "specialSettings": "特殊设置",
@@ -212,6 +221,23 @@
         "viewFullError": "查看完整错误",
         "viewSession": "查看会话"
       },
+      "cachePerformance": {
+        "title": "缓存表现",
+        "actualRate": "实际缓存率",
+        "theoreticalRate": "理论缓存率",
+        "coefficient": "本请求缓存系数",
+        "rawCoefficient": "单请求原始系数，不应用供应商窗口置信度折扣。",
+        "estimateNote": "理论缓存率根据最长规范化前缀估算（字节数 / 4）。",
+        "availability": {
+          "available": "请求符合条件，前缀缓存估算可测量。",
+          "no_input": "该请求没有记录输入令牌。",
+          "no_affinity_key": "未记录 Prefix ID，因此理论缓存率和缓存系数不可用。",
+          "attempt_failed": "请求尝试失败，缓存系数已排除。",
+          "not_observable": "无法观测上游缓存用量，缓存系数已排除。",
+          "stream_truncated": "响应流被截断，缓存系数已排除。",
+          "not_recorded": "该请求未记录单请求前缀缓存指标。"
+        }
+      },
       "specialSettings": {
         "title": "特殊设置"
       },
@@ -225,6 +251,7 @@
         "title": "拦截信息",
         "type": "拦截类型",
         "sensitiveWord": "敏感词拦截",
+        "localCapacity": "本地处理容量不足",
         "word": "敏感词",
         "matchType": "匹配类型",
         "matchTypeContains": "包含匹配",
@@ -299,6 +326,7 @@
         "title": "计费详情",
         "input": "输入",
         "output": "输出",
+        "cacheWrite": "缓存写入",
         "cacheWrite5m": "缓存写入 (5m)",
         "cacheWrite1h": "缓存写入 (1h)",
         "cacheRead": "缓存读取",
@@ -316,6 +344,7 @@
           "local_manual": "本地手动价格",
           "cloud_exact": "云端精确提供商价格",
           "cloud_model_fallback": "回退模型的提供商价格",
+          "cloud_official": "云端官方价格",
           "priority_fallback": "优先级回退价格",
           "single_provider_top_level": "顶层单提供商价格",
           "official_fallback": "官方价格"
@@ -345,30 +374,35 @@
       "performance": {
         "title": "性能数据",
         "ttfb": "首字节时间（TTFB）",
+        "ttft": "首 Token 时间（TTFT）",
+        "ttftShort": "TTFT",
         "duration": "总耗时",
-        "outputRate": "输出速率"
+        "outputRate": "输出速率",
+        "outputTokens": "输出 Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "暂无性能数据",
-        "ttfbGauge": "首字节时间",
+        "ttftGauge": "首 Token 时间",
         "outputRateGauge": "输出速率",
         "latencyBreakdown": "延迟分解",
         "generationTime": "生成时间",
+        "segmentTtfb": "TTFB",
+        "segmentTtft": "等待首 Token",
+        "segmentTotal": "总计",
         "assessment": {
           "excellent": "优秀",
           "good": "良好",
           "warning": "警告",
           "poor": "较差"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1s",
-          "ttfbWarning": "TTFB 1-2s",
-          "ttfbPoor": "TTFB > 3s"
         }
       },
       "metadata": {
         "noMetadata": "暂无元数据",
         "sessionInfo": "会话信息",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "客户端 Session ID",
         "clientInfo": "客户端信息",
         "billingInfo": "计费信息",
         "technicalTimeline": "技术时间线",
@@ -379,8 +413,157 @@
         "overridden": "已被供应商覆写",
         "tooltip": "客户端在请求体中声明的思考强度（output_config.effort），按原值显示，代理不会重命名或转换等级。"
       },
+      "routingTrace": {
+        "title": "路由模式",
+        "modes": {
+          "discovery": "有界供应商 Discovery",
+          "legacy_hedge": "旧版 Hedge 竞速",
+          "legacy_serial": "旧版串行故障转移",
+          "single_upstream": "单上游模式",
+          "lease_conflict": "单路保护"
+        },
+        "bypassed": "本请求未使用 Discovery：{reason}",
+        "bypassReasons": {
+          "disabled": "Discovery 未启用",
+          "non_streaming": "非流式请求",
+          "retry_not_allowed": "该端点不允许重试",
+          "provider_switch_not_allowed": "该端点不允许切换供应商",
+          "raw_passthrough": "原始透传请求",
+          "unsupported_protocol": "Discovery 不支持该协议",
+          "websocket": "WebSocket 请求",
+          "streaming_hedge_disabled": "本请求已禁用流式竞速",
+          "raw_cross_provider_fallback": "已启用原始跨供应商故障转移",
+          "missing_session": "缺少 Session 标识",
+          "missing_key": "缺少 API Key 标识",
+          "rollout_ineligible": "本请求不在当前灰度范围内",
+          "redis_capability_unavailable": "Redis 绑定能力不可用",
+          "binding_conflict": "Session 绑定状态冲突",
+          "lease_conflict": "另一个请求持有 Discovery 租约，本请求只使用一个上游",
+          "lease_unavailable": "Discovery 租约不可用",
+          "unknown": "未满足 Discovery 准入条件"
+        },
+        "discoveryTitle": "Discovery 轮次",
+        "discoveryCompact": "{rounds} 轮 · {attempts} 次",
+        "routeMode": "路由方式",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "冷启动",
+          "rediscovery": "重新发现"
+        },
+        "finalProvider": "最终供应商",
+        "roundsLabel": "轮次",
+        "attemptsLabel": "尝试",
+        "winnerOrigin": "赢家来源",
+        "viewDetails": "查看 Discovery 详情",
+        "stickyPhase": "Sticky 探测",
+        "round": "第 {round} 轮",
+        "roundUnknown": "轮次未记录",
+        "attempts": "{count} 次尝试",
+        "noAttempts": "没有记录到供应商尝试",
+        "providerFallback": "供应商 {id}",
+        "elapsed": "+{elapsed}ms",
+        "priority": "优先级 {priority}",
+        "roles": {
+          "sticky": "Sticky",
+          "normal": "候选",
+          "fallback": "保底"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "正常候选",
+          "fallback": "保底接管"
+        },
+        "roleTransition": "{from} → {to}",
+        "outcomes": {
+          "success": "成功",
+          "pending": "等待中",
+          "ready": "已就绪",
+          "held": "已就绪，暂缓交付",
+          "winner": "胜出",
+          "failed": "失败",
+          "cancelled": "已取消",
+          "timeout": "SLA 超时",
+          "client_abort": "客户端已断开",
+          "deadline": "总时限到期"
+        },
+        "terminalOutcome": "请求结果",
+        "bindingResult": "Sticky 绑定",
+        "bindingActions": {
+          "create": "创建",
+          "renew": "续期",
+          "clear": "清除",
+          "none": "不变更"
+        },
+        "bindingFallbackWinner": "未写入 · 保底赢家",
+        "bindingOutcomes": {
+          "updated": "已更新",
+          "cleared": "已清除",
+          "skipped": "已跳过",
+          "failed": "失败",
+          "unknown": "未知"
+        },
+        "fallbackPromoted": "提升为保底请求",
+        "winnerCommitted": "已提交赢家",
+        "roundStarted": "轮次开始",
+        "events": {
+          "started": "请求已发出",
+          "ready": "已收到有效首字",
+          "held": "按路由规则暂缓交付",
+          "fallbackPromoted": "已提升为保底",
+          "winnerCommitted": "已提交为赢家",
+          "finished": "结束：{outcome}"
+        },
+        "traceTruncated": "追踪事件达到存储上限，部分事件已省略。",
+        "summary": "{rounds} 轮 · {attempts} 次尝试 · 最大并发 {maxActive}",
+        "config": "配置快照",
+        "configConcurrency": "并发数",
+        "configLegacyHedgeMaxInFlight": "Legacy hedge 并发上限",
+        "configMaxRounds": "最大轮数",
+        "configDiscoverySla": "每轮 SLA",
+        "configStickySla": "Sticky SLA",
+        "configTotalTimeout": "总超时",
+        "configStickyCooldown": "Sticky 超时冷却",
+        "configStickyBindingTtl": "Sticky 绑定有效期（SESSION_TTL）",
+        "slotSaturation": "Hedge 槽位已饱和（{count} 次）",
+        "slotSaturationEvent": "{provider} · {active}/{cap} 个活跃 · 已耗时 {elapsed}ms",
+        "attemptDetails": {
+          "providerId": "供应商 ID",
+          "attempt": "尝试次数",
+          "status": "HTTP 状态",
+          "inferred": "推断",
+          "endpoint": "端点",
+          "error": "上游错误",
+          "cancellation": "取消原因",
+          "timeline": "尝试时间线",
+          "billing": "费用与用量",
+          "billed": "已计入总费用",
+          "billedCost": "已计入费用",
+          "winnerCost": "赢家费用",
+          "notObtained": "已取消，未取得用量"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "其他 Discovery 尝试已胜出",
+          "discovery_sla_timeout": "Discovery SLA 已到期",
+          "round_timeout": "本轮 SLA 已到期",
+          "sticky_timeout": "Sticky SLA 已到期",
+          "request_deadline": "Discovery 总时限已到期",
+          "client_abort": "客户端已断开",
+          "winner_committed": "其他供应商已提交为赢家"
+        }
+      },
+      "reasoningEffort": {
+        "label": "思考强度",
+        "overridden": "已被供应商覆写",
+        "tooltip": "Codex 请求中的思考强度（reasoning.effort），按原值显示。"
+      },
+      "reasoningEffortOpenai": {
+        "label": "思考强度",
+        "overridden": "已被供应商覆写",
+        "tooltip": "OpenAI chat/completions 请求中的思考强度（reasoning_effort / reasoning.effort），按原值显示。"
+      },
       "logicTrace": {
         "title": "决策链",
+        "singleRouteSelectionTitle": "单路保护下的供应商选择",
         "noDecisionData": "暂无决策数据",
         "providersCount": "{count} 个供应商",
         "healthyCount": "{count} 个健康",
@@ -407,6 +590,12 @@
         "originDecisionLoading": "正在加载原始决策...",
         "originDecisionUnavailable": "原始决策记录不可用",
         "originDecisionExpand": "查看原始选择"
+      },
+      "replayServe": {
+        "title": "由 Replay 缓存服务",
+        "desc": "该请求由 Replay 缓存直接服务（相同请求正在进行或已完成），未发起上游供应商调用，不产生费用。",
+        "replayId": "Replay ID",
+        "sourceRequestId": "源请求"
       }
     },
     "providerChain": {
@@ -437,6 +626,7 @@
       "totalCost": "总费用",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} 上下文",
       "fastPriority": "优先服务等级（fast 模式）",
       "context1m": "1M 上下文",
       "context1mEnabled": "1M 上下文窗口已启用",
@@ -446,6 +636,7 @@
         "local_manual": "本地手动价格",
         "cloud_exact": "云端精确提供商价格",
         "cloud_model_fallback": "回退模型的提供商价格",
+        "cloud_official": "云端官方价格",
         "priority_fallback": "优先级回退价格",
         "single_provider_top_level": "顶层单提供商价格",
         "official_fallback": "官方价格"
@@ -523,19 +714,21 @@
       "cost": "成本",
       "cacheHitRequests": "缓存触发请求数",
       "cacheHitRate": "缓存命中率",
+      "cacheCoefficient": "缓存系数",
+      "cacheCoefficientTooltip": "缓存系数越大，供应商切号越少，失缓现象越不明显。0.9 以上为优秀，0.8 以上为良好。",
       "cacheReadTokens": "缓存读取 Token 数",
       "totalTokens": "总 Token 数",
       "cacheCreationConsumedAmount": "缓存创建消耗金额",
       "totalConsumedAmount": "总消耗金额",
       "successRate": "成功率",
       "avgResponseTime": "平均响应时间",
-      "avgTtfbMs": "平均 TTFB",
+      "avgTtftMs": "平均 TTFT",
       "avgTokensPerSecond": "平均输出速率",
       "avgCostPerRequest": "平均单次请求成本",
       "avgCostPerMillionTokens": "平均百万 Token 成本",
       "unknownModel": "未知",
       "successRateUnavailable": "不适用",
-      "successRateBasisDisclosure": "在 redirected 计费模型模式下，一行可能合并多个原始模型，因此这里不展示成功率以避免口径误导。"
+      "successRateBasisDisclosure": "所选时间段内该模型没有可计数的成功或失败结果，因此无法计算成功率。"
     },
     "expandModelStats": "展开模型详情",
     "collapseModelStats": "收起模型详情",
@@ -628,6 +821,8 @@
     },
     "details": {
       "title": "Session Messages",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "客户端 Session ID",
       "messages": "消息列表",
       "info": "会话信息",
       "timeline": "时间线",
@@ -740,11 +935,16 @@
       "loadError": "加载失败",
       "fetchFailed": "获取失败",
       "unknownError": "未知错误",
+      "error": "Session 详情加载失败",
       "storageNotEnabled": "未存储",
       "storageNotEnabledHint": "提示：请检查 REDIS_URL 与 ENABLE_RATE_LIMIT=true（用于会话详情缓存）；如需保存未脱敏 messages，请设置 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
-      "copyFailed": "复制失败"
+      "copyFailed": "复制失败",
+      "fetchSessionsFailed": "获取 Session 列表失败",
+      "fetchSessionsTimeout": "获取 Session 列表超时",
+      "fetchSettingsFailed": "获取系统设置失败",
+      "retry": "重试"
     },
     "requestList": {
       "title": "请求列表",
@@ -755,7 +955,9 @@
       "prev": "上一页",
       "next": "下一页",
       "orderAsc": "切换为正序（最早的在前）",
-      "orderDesc": "切换为倒序（最新的在前）"
+      "orderDesc": "切换为倒序（最新的在前）",
+      "itemTitle": "请求 #{sequence} - {model}",
+      "unknownModel": "未知模型"
     },
     "back": "返回",
     "loadingError": "加载失败"
@@ -1710,6 +1912,12 @@
         "confirmDescription": "这将永久删除该用户的所有请求日志和使用统计。此操作无法撤销。",
         "confirm": "是的，重置全部",
         "loading": "重置中...",
+        "queued": "重置任务已排队",
+        "running": "正在重置统计",
+        "completed": "重置已完成",
+        "failed": "重置失败，可以重试",
+        "statusUnavailable": "暂时无法更新重置状态",
+        "retryStatus": "重试状态查询",
         "success": "所有统计已重置"
       }
     },

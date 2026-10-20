@@ -104,12 +104,14 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
   // 失败标记
   if (
     item.reason === "retry_failed" ||
+    item.reason === "response_incomplete" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return "✗";
   }
@@ -146,12 +148,14 @@ export function isActualRequest(item: ProviderChainItem): boolean {
   // 失败记录
   if (
     item.reason === "retry_failed" ||
+    item.reason === "response_incomplete" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return true;
   }
@@ -465,6 +469,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.endpointPoolExhausted")}`;
       } else if (item.reason === "vendor_type_all_timeout") {
         desc += ` ${t("description.vendorTypeAllTimeout")}`;
+      } else if (item.reason === "response_incomplete") {
+        desc += ` ${t("reasons.response_incomplete")}`;
       }
 
       desc += "\n";
@@ -662,6 +668,19 @@ export function formatProviderTimeline(
       }
 
       timeline += `\n${t("timeline.resourceNotFoundNote")}`;
+      continue;
+    }
+
+    // === 协议明确返回未完成 ===
+    if (item.reason === "response_incomplete") {
+      timeline += `${t("reasons.response_incomplete")}\n\n`;
+      timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+      if (item.statusCode) {
+        timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
+      }
+      timeline += t("timeline.error", {
+        error: item.errorMessage || t("timeline.unknown"),
+      });
       continue;
     }
 

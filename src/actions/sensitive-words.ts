@@ -14,7 +14,7 @@ import type { ActionResult } from "./types";
 export async function listSensitiveWords(): Promise<repo.SensitiveWord[]> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.warn("[SensitiveWordsAction] Unauthorized access attempt");
       return [];
     }
@@ -36,7 +36,7 @@ export async function createSensitiveWordAction(data: {
 }): Promise<ActionResult<repo.SensitiveWord>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -132,7 +132,7 @@ export async function updateSensitiveWordAction(
 ): Promise<ActionResult<repo.SensitiveWord>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -211,7 +211,7 @@ export async function updateSensitiveWordAction(
 export async function deleteSensitiveWordAction(id: number): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -270,7 +270,7 @@ export async function refreshCacheAction(): Promise<
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -305,7 +305,7 @@ export async function refreshCacheAction(): Promise<
 export async function getCacheStats() {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return null;
     }
 

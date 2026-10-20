@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-Claude Code Hub is an intelligent AI API proxy platform designed for agile development teams, AI-driven development teams, startups, and small-medium software companies. It provides observable, highly available AI coding infrastructure with multi-provider auto-switching, circuit breaker, seamless retry, complete logging, and billing management - ideal for team collaboration and shared usage scenarios.
+CC Hub is an intelligent AI API proxy platform designed for agile development teams, AI-driven development teams, startups, and small-medium software companies. It provides observable, highly available AI coding infrastructure with multi-provider auto-switching, circuit breaker, seamless retry, complete logging, and billing management - ideal for team collaboration and shared usage scenarios.
 
 ---
 

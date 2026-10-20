@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -39,6 +40,7 @@ import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
+import { ThinkingEffortDisplay } from "./thinking-effort-display";
 
 interface UsageLogsTableProps {
   logs: UsageLogRow[];
@@ -50,6 +52,7 @@ interface UsageLogsTableProps {
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
+  hiddenColumns?: LogsTableColumn[];
 }
 
 export function UsageLogsTable({
@@ -62,10 +65,13 @@ export function UsageLogsTable({
   newLogIds,
   currencyCode = "USD",
   billingModelSource = "original",
+  hiddenColumns,
 }: UsageLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+  const hideReasoningEffortColumn = hiddenColumns?.includes("reasoningEffort") ?? false;
+  const visibleColumnCount = 13 - (hideReasoningEffortColumn ? 1 : 0);
   const getPricingSourceLabel = (source: string) =>
     t(`logs.billingDetails.pricingSource.${source}`);
 
@@ -105,6 +111,11 @@ export function UsageLogsTable({
               <TableHead className="w-[140px] max-w-[140px]">{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
+              {hideReasoningEffortColumn ? null : (
+                <TableHead title={t("logs.columns.reasoningEffortTooltip")}>
+                  {t("logs.columns.reasoningEffort")}
+                </TableHead>
+              )}
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cache")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cost")}</TableHead>
@@ -115,7 +126,10 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={visibleColumnCount}
+                  className="text-center text-muted-foreground"
+                >
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -147,6 +161,9 @@ export function UsageLogsTable({
                     : Number(actualCostMultiplier);
                 const hasCostBadge =
                   multiplier != null && Number.isFinite(multiplier) && multiplier !== 1;
+                const displayedSourceSessionIds = (
+                  log.sourceSessionIds?.length ? log.sourceSessionIds : [log.sourceSessionId]
+                ).filter((id): id is string => Boolean(id));
 
                 return (
                   <TableRow
@@ -172,15 +189,25 @@ export function UsageLogsTable({
                               <button
                                 type="button"
                                 className="w-full text-left truncate cursor-pointer hover:underline"
-                                data-session-id={log.sessionId}
+                                data-session-id={log.sourceSessionId ?? log.sessionId}
                                 onClick={handleCopySessionIdClick}
                               >
-                                {log.sessionId}
+                                {log.sourceSessionId ?? log.sessionId}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                               <p className="text-xs whitespace-normal break-words font-mono">
-                                {log.sessionId}
+                                {displayedSourceSessionIds.map((id) => (
+                                  <span className="block" key={id}>
+                                    {id}
+                                  </span>
+                                ))}
+                                {log.sessionId &&
+                                  !displayedSourceSessionIds.includes(log.sessionId) && (
+                                    <span className="mt-1 block text-muted-foreground">
+                                      {log.sessionId}
+                                    </span>
+                                  )}
                               </p>
                             </TooltipContent>
                           </Tooltip>
@@ -217,6 +244,7 @@ export function UsageLogsTable({
                             <div className="w-full">
                               <ProviderChainPopover
                                 chain={log.providerChain ?? []}
+                                routingTrace={log.routingTrace}
                                 finalProvider={
                                   getFinalProviderName(log.providerChain ?? []) ||
                                   log.providerName ||
@@ -260,7 +288,11 @@ export function UsageLogsTable({
                               )}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                          {shouldShowCostBadgeInCell(log.providerChain, multiplier) ? (
+                          {shouldShowCostBadgeInCell(
+                            log.providerChain,
+                            multiplier,
+                            log.routingTrace
+                          ) ? (
                             <Badge
                               variant="outline"
                               className={
@@ -297,6 +329,11 @@ export function UsageLogsTable({
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
+                    {hideReasoningEffortColumn ? null : (
+                      <TableCell className="relative z-20 w-[84px] max-w-[84px] overflow-visible font-mono text-xs">
+                        <ThinkingEffortDisplay specialSettings={log.specialSettings} />
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-mono text-xs">
                       <TooltipProvider>
                         <Tooltip delayDuration={250}>
@@ -560,13 +597,17 @@ export function UsageLogsTable({
                         const rate = calculateOutputRate(
                           log.outputTokens,
                           log.durationMs,
-                          log.ttfbMs
+                          log.firstByteMs
                         );
-                        const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
+                        const hideRate = shouldHideOutputRate(
+                          rate,
+                          log.durationMs,
+                          log.firstByteMs
+                        );
                         const secondLine = [
-                          log.ttfbMs != null &&
-                            log.ttfbMs > 0 &&
-                            `TTFB ${formatDuration(log.ttfbMs)}`,
+                          log.ttftMs != null &&
+                            log.ttftMs > 0 &&
+                            `${t("logs.details.performance.ttft")} ${formatDuration(log.ttftMs)}`,
                           rate !== null && !hideRate && `${rate.toFixed(0)} tok/s`,
                         ]
                           .filter(Boolean)
@@ -590,10 +631,16 @@ export function UsageLogsTable({
                                   {t("logs.details.performance.duration")}:{" "}
                                   {formatDuration(log.durationMs)}
                                 </div>
-                                {log.ttfbMs != null && (
+                                {log.ttftMs != null && (
+                                  <div>
+                                    {t("logs.details.performance.ttft")}:{" "}
+                                    {formatDuration(log.ttftMs)}
+                                  </div>
+                                )}
+                                {log.firstByteMs != null && (
                                   <div>
                                     {t("logs.details.performance.ttfb")}:{" "}
-                                    {formatDuration(log.ttfbMs)}
+                                    {formatDuration(log.firstByteMs)}
                                   </div>
                                 )}
                                 {rate !== null && !hideRate && (
@@ -613,10 +660,16 @@ export function UsageLogsTable({
                         statusCode={log.statusCode}
                         errorMessage={log.errorMessage}
                         providerChain={log.providerChain}
+                        routingTrace={log.routingTrace}
                         sessionId={log.sessionId}
+                        sourceSessionId={log.sourceSessionId}
+                        sessionIdentityKind={log.sessionIdentityKind}
                         requestSequence={log.requestSequence}
+                        requestId={log.id}
                         blockedBy={log.blockedBy}
                         blockedReason={log.blockedReason}
+                        isReplay={log.isReplay}
+                        replaySourceRequestId={log.replaySourceRequestId}
                         originalModel={log.originalModel}
                         currentModel={log.model}
                         actualResponseModel={log.actualResponseModel}
@@ -633,6 +686,14 @@ export function UsageLogsTable({
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}
                         cacheTtlApplied={log.cacheTtlApplied}
+                        theoreticalCacheTokens={log.theoreticalCacheTokens}
+                        cacheScoreEligible={log.cacheScoreEligible}
+                        cacheScoreExcludedReason={log.cacheScoreExcludedReason}
+                        cacheInputTotal={log.cacheInputTotal}
+                        actualCacheRate={log.actualCacheRate}
+                        theoreticalCacheRate={log.theoreticalCacheRate}
+                        requestCacheCoefficientBp={log.requestCacheCoefficientBp}
+                        requestCacheMetricAvailability={log.requestCacheMetricAvailability}
                         swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
@@ -641,7 +702,8 @@ export function UsageLogsTable({
                         hedgeLosers={log.hedgeLosers}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
-                        ttfbMs={log.ttfbMs}
+                        ttftMs={log.ttftMs}
+                        firstByteMs={log.firstByteMs}
                         externalOpen={dialogState.logId === log.id ? true : undefined}
                         onExternalOpenChange={(open) => {
                           if (!open) setDialogState({ logId: null, scrollToRedirect: false });

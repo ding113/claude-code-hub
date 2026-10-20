@@ -112,7 +112,7 @@ const VENDOR_ICON_COMPONENTS: Record<string, VendorIconComponent> = {
   zhipuai: Zhipu.Color,
   minimax: Minimax.Color,
   perplexity: Perplexity.Color,
-  stepfun: Stepfun.Color,
+  stepfun: Stepfun,
   baidu: Baidu.Color,
   tencent: Tencent.Color,
   bytedance: ByteDance.Color,

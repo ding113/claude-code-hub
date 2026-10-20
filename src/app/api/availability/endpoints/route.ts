@@ -21,7 +21,7 @@ function isProviderType(value: string | null): value is ProviderType {
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

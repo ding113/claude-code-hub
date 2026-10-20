@@ -16,7 +16,18 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: () => new AbortController(),
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      void Promise.resolve(factory(controller.signal)).catch(() => {});
+      return controller;
+    },
     touch: () => true,
     cleanup: () => {},
     cancel: () => {},
@@ -43,6 +54,7 @@ import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error
 const mockGetCachedSystemSettings = getCachedSystemSettings as unknown as ReturnType<typeof vi.fn>;
 
 type MinimalSession = {
+  getManagedEndpoint: () => string;
   getEndpoint: () => string | null;
   getOriginalModel: () => string | null;
   getCurrentModel: () => string | null;
@@ -51,6 +63,7 @@ type MinimalSession = {
 
 function makeSession(): MinimalSession {
   return {
+    getManagedEndpoint: () => "/v1/messages",
     getEndpoint: () => "/v1/messages",
     getOriginalModel: () => "claude-3-5-sonnet",
     getCurrentModel: () => "claude-3-5-sonnet",

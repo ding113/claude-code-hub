@@ -1,4 +1,4 @@
-# Claude Code Hub - One-Click Deployment Script for Windows
+﻿# CC Hub - One-Click Deployment Script for Windows
 # PowerShell 5.1+ required
 
 #Requires -Version 5.1
@@ -52,7 +52,7 @@ $script:FORCE_NEW = $false
 
 function Show-Help {
     $helpText = @"
-Claude Code Hub - One-Click Deployment Script v$VERSION
+CC Hub - One-Click Deployment Script v$VERSION
 
 Usage: .\deploy.ps1 [OPTIONS]
 
@@ -148,7 +148,7 @@ function Write-ColorOutput {
 function Show-Header {
     Write-ColorOutput "+=================================================================+" -Type Header
     Write-ColorOutput "|                                                                 |" -Type Header
-    Write-ColorOutput "|           Claude Code Hub - One-Click Deployment               |" -Type Header
+    Write-ColorOutput "|                  CC Hub - One-Click Deployment                  |" -Type Header
     Write-ColorOutput "|                      Version $VERSION                             |" -Type Header
     Write-ColorOutput "|                                                                 |" -Type Header
     Write-ColorOutput "+=================================================================+" -Type Header
@@ -752,10 +752,10 @@ function Show-SuccessMessage {
     Write-Host "+================================================================+" -ForegroundColor Green
     Write-Host "|                                                                |" -ForegroundColor Green
     if ($script:UPDATE_MODE) {
-        Write-Host "|          Claude Code Hub Updated Successfully!                |" -ForegroundColor Green
+        Write-Host "|                  CC Hub Updated Successfully!                  |" -ForegroundColor Green
     }
     else {
-        Write-Host "|          Claude Code Hub Deployed Successfully!               |" -ForegroundColor Green
+        Write-Host "|                 CC Hub Deployed Successfully!                  |" -ForegroundColor Green
     }
     Write-Host "|                                                                |" -ForegroundColor Green
     Write-Host "+================================================================+" -ForegroundColor Green

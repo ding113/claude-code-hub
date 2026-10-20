@@ -167,8 +167,8 @@ describe("GET /api/public-status contract", () => {
     vi.clearAllMocks();
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
-      siteTitle: "Claude Code Hub",
-      siteDescription: "Claude Code Hub public status",
+      siteTitle: "CC Hub",
+      siteDescription: "CC Hub public status",
       timeZone: "UTC",
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
@@ -195,7 +195,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "openaiCompatible",
               latestState: "operational",
               availabilityPct: 99.9,
-              latestTtfbMs: 420,
+              latestTtftMs: 420,
               latestTps: null,
               timeline: [],
             },
@@ -213,7 +213,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "anthropic",
               latestState: "failed",
               availabilityPct: 20,
-              latestTtfbMs: 900,
+              latestTtftMs: 900,
               latestTps: null,
               timeline: [
                 {
@@ -221,7 +221,7 @@ describe("GET /api/public-status contract", () => {
                   bucketEnd: "2026-04-22T09:35:00.000Z",
                   state: "failed",
                   availabilityPct: 20,
-                  ttfbMs: 900,
+                  ttftMs: 900,
                   tps: null,
                   sampleCount: 8,
                 },
@@ -255,8 +255,8 @@ describe("GET /api/public-status contract", () => {
         include: ["meta", "defaults", "groups", "timeline"],
       },
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
       groups: [
@@ -291,7 +291,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "openaiCompatible",
               latestState: "operational",
               availabilityPct: 99.9,
-              latestTtfbMs: 420,
+              latestTtftMs: 420,
               latestTps: null,
               timeline: [],
             },
@@ -302,7 +302,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "openaiCompatible",
               latestState: "operational",
               availabilityPct: 99.9,
-              latestTtfbMs: 390,
+              latestTtftMs: 390,
               latestTps: null,
               timeline: [],
             },
@@ -348,7 +348,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "anthropic",
               latestState: "failed",
               availabilityPct: 20,
-              latestTtfbMs: 900,
+              latestTtftMs: 900,
               latestTps: null,
               timeline: [
                 {
@@ -356,7 +356,7 @@ describe("GET /api/public-status contract", () => {
                   bucketEnd: "2026-04-22T09:35:00.000Z",
                   state: "failed",
                   availabilityPct: 20,
-                  ttfbMs: 900,
+                  ttftMs: 900,
                   tps: null,
                   sampleCount: 8,
                 },
@@ -375,7 +375,7 @@ describe("GET /api/public-status contract", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       meta: {
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
       },
       defaults: {
         intervalMinutes: 5,
@@ -404,7 +404,7 @@ describe("GET /api/public-status contract", () => {
               requestTypeBadge: "anthropic",
               latestState: "failed",
               availabilityPct: 20,
-              latestTtfbMs: 900,
+              latestTtftMs: 900,
               latestTps: null,
               timeline: [
                 {
@@ -412,7 +412,7 @@ describe("GET /api/public-status contract", () => {
                   bucketEnd: "2026-04-22T09:35:00.000Z",
                   state: "failed",
                   availabilityPct: 20,
-                  ttfbMs: 900,
+                  ttftMs: 900,
                   tps: null,
                   sampleCount: 8,
                 },

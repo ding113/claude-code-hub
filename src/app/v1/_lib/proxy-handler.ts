@@ -1,7 +1,13 @@
 import type { Context } from "hono";
-import { getCachedSystemSettings } from "@/lib/config";
+import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
+import { getCachedSystemSettings, getCachedSystemSettingsOnlyCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { getMemoryGovernor, isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
+import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
@@ -10,34 +16,77 @@ import { tryFakeStreamingPath } from "./proxy/fake-streaming/proxy-integration";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
+import { recordPreAuthLocalCapacityRejection } from "./proxy/local-capacity-log";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { normalizeResponseInput } from "./proxy/response-input-rectifier";
 import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
+  return withRequestMemoryLifetime(() => handleOwnedProxyRequest(c));
+}
+
+async function handleOwnedProxyRequest(c: Context): Promise<Response> {
+  const handlerStartedAt = Date.now();
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
+  let acquiredConcurrencySessionId: string | null = null;
+  let acquiredObservedSessionIdentity: string | null = null;
+
+  const trackObservedSession = async (resolvedSession: ProxySession): Promise<string | null> => {
+    if (!resolvedSession.shouldTrackSessionObservability()) return null;
+    const identity = resolvedSession.getSessionIdentityMetadata();
+    if (!identity.identity) return null;
+
+    void SessionTracker.trackObservedSession(identity.identity).catch((error) => {
+      logger.warn("[ProxyHandler] Failed to track observed session", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    const authState = resolvedSession.authState;
+    if (authState?.user && authState.key) {
+      void SessionManager.storeSessionInfo(identity.identity, {
+        userName: authState.user.name,
+        userId: authState.user.id,
+        keyId: authState.key.id,
+        keyName: authState.key.name,
+        model: resolvedSession.request.model,
+        apiType: resolvedSession.originalFormat === "openai" ? "codex" : "chat",
+      }).catch((error) => {
+        logger.warn("[ProxyHandler] Failed to store observed session info", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    return identity.identity;
+  };
   try {
-    session = await ProxySession.fromContext(c);
     try {
       cachedSystemSettings = await getCachedSystemSettings();
-      session.setHighConcurrencyModeEnabled(
-        cachedSystemSettings.enableHighConcurrencyMode ?? false
-      );
-      session.setRawCrossProviderFallbackEnabled(
-        cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
-      );
+      // 正文读取受内存准入约束，必须在读取入站正文之前同步开关。只同步进程缓存中的
+      // 当前设置：缓存失效期间完成的旧查询与读取失败时的默认对象不能改变全进程状态。
+      if (cachedSystemSettings === getCachedSystemSettingsOnlyCache()) {
+        getMemoryGovernor().setEnabled(cachedSystemSettings.enableMemoryAdmission);
+      }
     } catch (settingsError) {
+      const databaseError = findSafeDatabaseError(settingsError);
       logger.warn(
         "[ProxyHandler] Failed to load proxy system settings, fallback highConcurrency=false and rawCrossProviderFallback=false",
         {
-          error: settingsError,
+          error:
+            databaseError?.message ??
+            (settingsError instanceof Error ? settingsError.message : String(settingsError)),
+          databaseCode: databaseError?.code,
         }
       );
-      session.setHighConcurrencyModeEnabled(false);
-      session.setRawCrossProviderFallbackEnabled(false);
     }
+    session = await ProxySession.fromContext(c);
+    session.setHighConcurrencyModeEnabled(cachedSystemSettings?.enableHighConcurrencyMode ?? false);
+    session.setRawCrossProviderFallbackEnabled(
+      cachedSystemSettings
+        ? (cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true)
+        : false
+    );
 
     // 自动检测请求格式（端点优先，请求体补充）
     if (session.originalFormat === "claude") {
@@ -82,12 +131,24 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // Run guard chain; may return early Response
     const early = await pipeline.run(session);
     if (early) {
+      const isReplayServe = early.headers.has("x-cch-replay");
+      const isHandledWarmup = early.status === 200 && session.isWarmupRequest();
+      if (!isReplayServe && !isHandledWarmup) {
+        await trackObservedSession(session);
+      }
       return await attachSessionIdToErrorResponse(session.sessionId, early);
     }
+
+    const observedSessionIdentity = await trackObservedSession(session);
 
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
+      acquiredConcurrencySessionId = session.sessionId;
+    }
+    if (observedSessionIdentity && session.getEndpointPolicy().trackConcurrentRequests) {
+      await SessionTracker.incrementObservedConcurrentCount(observedSessionIdentity);
+      acquiredObservedSessionIdentity = observedSessionIdentity;
     }
 
     // 10. 记录请求开始
@@ -121,7 +182,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // Reuse the system settings already loaded above (with its fallback path)
     // instead of re-reading the cache. A transient cache miss must not turn an
     // otherwise-routable request into an error response.
-    if (cachedSystemSettings) {
+    if (cachedSystemSettings && !isRawPassthroughEndpointPolicy(session.getEndpointPolicy())) {
       const fakeStreamingResponse = await tryFakeStreamingPath(session, cachedSystemSettings);
       if (fakeStreamingResponse) {
         return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
@@ -134,9 +195,19 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
 
     return finalResponse;
   } catch (error) {
-    logger.error("Proxy handler error:", error);
+    const databaseError = findSafeDatabaseError(error);
+    logger.error("Proxy handler error:", {
+      error: databaseError?.message ?? (error instanceof Error ? error.message : String(error)),
+      databaseCode: databaseError?.code,
+      databasePool: databaseError?.pool,
+    });
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
+    }
+    if (isLocalCapacityError(error)) {
+      // 正文准入在认证之前：没有 session 可写库，尽力按请求头归属，不阻塞 429 响应。
+      void recordPreAuthLocalCapacityRejection(c, error.message, handlerStartedAt);
+      return await buildLocalCapacityResponse();
     }
 
     if (error instanceof ProxyError) {
@@ -146,8 +217,11 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session?.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
-      await SessionTracker.decrementConcurrentCount(session.sessionId);
+    if (acquiredConcurrencySessionId) {
+      await SessionTracker.decrementConcurrentCount(acquiredConcurrencySessionId);
+    }
+    if (acquiredObservedSessionIdentity) {
+      await SessionTracker.decrementObservedConcurrentCount(acquiredObservedSessionIdentity);
     }
   }
 }

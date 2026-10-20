@@ -20,7 +20,7 @@ const BILLING_HEADER_PATTERN = /^\s*x-anthropic-billing-header\s*:/i;
 
 /**
  * Remove x-anthropic-billing-header text blocks from the request system prompt.
- * Mutates the message object in place (matches existing rectifier conventions).
+ * Writes changes back through the top-level message object without mutating shared nested arrays.
  */
 export function rectifyBillingHeader(
   message: Record<string, unknown>
@@ -62,11 +62,7 @@ export function rectifyBillingHeader(
     }
 
     if (extractedValues.length > 0) {
-      // Mutate in place: replace system array contents
-      system.length = 0;
-      for (const item of filtered) {
-        system.push(item);
-      }
+      message.system = filtered;
       return { applied: true, removedCount: extractedValues.length, extractedValues };
     }
 

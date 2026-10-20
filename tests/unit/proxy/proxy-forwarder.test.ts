@@ -607,6 +607,63 @@ describe("ProxyForwarder - buildHeaders custom headers", () => {
     expect(resultHeaders.get(WS_FORWARD_FLAG_HEADER)).toBeNull();
     expect(resultHeaders.get(RESPONSES_WS_SESSION_HEADER)).toBeNull();
   });
+
+  it("应该把 {{header.*}} 模板解析为入站请求头", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([
+        ["user-agent", "Original-UA/1.0"],
+        ["x-request-id", "req-123"],
+      ]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      "x-copied-ua": "{{header.user-agent}}",
+      "x-copied-request-id": "{{header.X-Request-Id}}",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("x-copied-ua")).toBe("Original-UA/1.0");
+    expect(resultHeaders.get("x-copied-request-id")).toBe("req-123");
+  });
+
+  it("应该把 {{session.id}} 和 {{session.client_id}} 写入出站头", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    session.sessionId = "sess_assigned";
+    session.request.message = { metadata: { session_id: "client-sess-id" } };
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      "x-session-id": "{{session.id}}",
+      "x-client-session": "{{session.client_id}}",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("x-session-id")).toBe("sess_assigned");
+    expect(resultHeaders.get("x-client-session")).toBe("client-sess-id");
+  });
+
+  it("来源缺失的动态模板不应写出站头", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      "x-missing-header": "{{header.x-request-id}}",
+      "x-missing-session": "{{session.id}}",
+      "x-missing-client": "{{session.client_id}}",
+      "x-static": "keep-me",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("x-missing-header")).toBeNull();
+    expect(resultHeaders.get("x-missing-session")).toBeNull();
+    expect(resultHeaders.get("x-missing-client")).toBeNull();
+    expect(resultHeaders.get("x-static")).toBe("keep-me");
+  });
 });
 
 describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {

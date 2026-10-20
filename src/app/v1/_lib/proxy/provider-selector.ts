@@ -1,10 +1,20 @@
 import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
+import { buildPublicSessionIdentity, buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
-import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
+import {
+  getProxyRuntimeSettings,
+  isCacheEffectivenessEnabled,
+} from "@/lib/system-settings/proxy-runtime";
+import {
+  parseProviderGroups,
+  resolveBillingProviderGroups,
+  resolveProviderGroupsWithDefault,
+} from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -12,6 +22,13 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
+import { type AffinityLookupResult, getAffinityStore } from "./affinity/affinity-store";
+import { isAffinityRoutingEnabledWith } from "./affinity/config";
+import {
+  computeFingerprintChain,
+  fingerprintsDeepestFirst,
+  fingerprintTip,
+} from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
@@ -61,6 +78,46 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
   const providerTags = resolveProviderGroupsWithDefault(providerGroupTag);
 
   return providerTags.some((tag) => groups.includes(tag));
+}
+
+async function resolveGroupCostMultiplierForProvider(session: ProxySession): Promise<void> {
+  const effectiveGroup = getEffectiveProviderGroup(session);
+  const provider = session.provider;
+
+  if (!effectiveGroup || !provider) {
+    session.setGroupCostMultiplier(1.0);
+    return;
+  }
+
+  const billingGroups = resolveBillingProviderGroups(provider.groupTag, effectiveGroup);
+  if (billingGroups.length === 0) {
+    logger.warn(
+      "[ProviderResolver] Selected provider has no billing group intersection, falling back to 1.0",
+      {
+        providerId: provider.id,
+        providerName: provider.name,
+        providerGroups: provider.groupTag,
+        effectiveGroup,
+      }
+    );
+    session.setGroupCostMultiplier(1.0);
+    return;
+  }
+
+  const billingGroup = billingGroups.join(",");
+
+  try {
+    const multiplier = await getGroupCostMultiplier(billingGroup);
+    session.setGroupCostMultiplier(multiplier);
+  } catch (error) {
+    logger.warn("[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0", {
+      billingGroup,
+      effectiveGroup,
+      providerId: provider.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    session.setGroupCostMultiplier(1.0);
+  }
 }
 
 /**
@@ -141,39 +198,78 @@ export class ProxyProviderResolver {
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
-    // === 会话复用 ===
-    const reusedProvider = await ProxyProviderResolver.findReusable(session);
-    if (reusedProvider) {
-      session.setProvider(reusedProvider);
-
-      // 记录会话复用上下文
-      session.addProviderToChain(reusedProvider, {
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
-        circuitState: getCircuitState(reusedProvider.id),
-        decisionContext: {
-          totalProviders: 0, // 复用不需要筛选
-          enabledProviders: 0,
-          targetType: reusedProvider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [reusedProvider.priority || 0],
-          selectedPriority: reusedProvider.priority || 0,
-          candidatesAtPriority: [
-            {
-              id: reusedProvider.id,
-              name: reusedProvider.name,
-              weight: reusedProvider.weight,
-              costMultiplier: reusedProvider.costMultiplier,
-            },
-          ],
-          sessionId: session.sessionId || undefined,
-        },
+    // === F3a 前置：读一次运行时设置并计算指纹状态 ===
+    // 「忽略客户端 Session ID」开启且请求可指纹化时，粘性交给最长前缀亲和，
+    // 跳过 session-ID 绑定的读取；不可指纹化（如非 chat 体）仍走既有会话复用。
+    // 任何异常整体退回旧顺序（会话复用正常执行），绝不影响主选路。
+    let affinityRoutingEnabled = false;
+    let skipSessionBinding = false;
+    try {
+      const runtimeSettings = await getProxyRuntimeSettings();
+      affinityRoutingEnabled = isAffinityRoutingEnabledWith(runtimeSettings);
+      const fingerprintable = ProxyProviderResolver.ensureAffinityState(
+        session,
+        affinityRoutingEnabled
+      );
+      skipSessionBinding = runtimeSettings.affinityIgnoreClientSessionId && fingerprintable;
+    } catch (error) {
+      affinityRoutingEnabled = false;
+      skipSessionBinding = false;
+      logger.warn("ProviderSelector: Affinity settings unavailable, using legacy order", {
+        error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    // === 会话复用（「忽略客户端 Session ID」语义下仅跳过读取；写路径不变）===
+    if (!skipSessionBinding) {
+      const reusedProvider = await ProxyProviderResolver.findReusable(session);
+      if (reusedProvider) {
+        session.setProvider(reusedProvider);
+
+        // 记录会话复用上下文
+        session.addProviderToChain(reusedProvider, {
+          reason: "session_reuse",
+          selectionMethod: "session_reuse",
+          circuitState: getCircuitState(reusedProvider.id),
+          decisionContext: {
+            totalProviders: 0, // 复用不需要筛选
+            enabledProviders: 0,
+            targetType: reusedProvider.providerType as NonNullable<
+              ProviderChainItem["decisionContext"]
+            >["targetType"],
+            requestedModel: session.getOriginalModel() || "",
+            groupFilterApplied: false,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            priorityLevels: [reusedProvider.priority || 0],
+            selectedPriority: reusedProvider.priority || 0,
+            candidatesAtPriority: [
+              {
+                id: reusedProvider.id,
+                name: reusedProvider.name,
+                weight: reusedProvider.weight,
+                costMultiplier: reusedProvider.costMultiplier,
+              },
+            ],
+            sessionId: session.sessionId || undefined,
+          },
+        });
+
+        if (affinityRoutingEnabled && session.affinity) {
+          try {
+            await ProxyProviderResolver.lookupAffinityState(session);
+          } catch (error) {
+            logger.warn("ProviderSelector: Affinity writeback state initialization failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+    }
+
+    // === 前缀亲和提名（优先级：显式 session 绑定 > 亲和 > 加权随机）===
+    if (affinityRoutingEnabled && !session.provider) {
+      await ProxyProviderResolver.tryPrefixAffinityNomination(session);
     }
 
     // === 首次选择或重试 ===
@@ -186,24 +282,32 @@ export class ProxyProviderResolver {
       session.setLastSelectionContext(context); // 保存用于后续记录
     }
 
-    // === Resolve group cost multiplier ===
-    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
-    // request handling proceeds without billing disruption.
-    const effectiveGroup = getEffectiveProviderGroup(session);
-    if (effectiveGroup) {
-      try {
-        const multiplier = await getGroupCostMultiplier(effectiveGroup);
-        session.setGroupCostMultiplier(multiplier);
-      } catch (error) {
-        logger.warn(
-          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
-          {
-            effectiveGroup,
-            error: error instanceof Error ? error.message : String(error),
-          }
-        );
-        session.setGroupCostMultiplier(1.0);
-      }
+    const affinityIdentityEnabled =
+      skipSessionBinding && session.affinity !== null && session.sessionId !== null;
+    if (affinityIdentityEnabled && session.affinity) {
+      const fingerprints = fingerprintsDeepestFirst(session.affinity.chain);
+      const fingerprint =
+        session.affinity.identityFp ??
+        session.affinity.matchedFp ??
+        fingerprintTip(session.affinity.chain).fp;
+      session.setSessionIdentityMetadata({
+        identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
+        kind: "prefix_affinity",
+        scopeTag: session.affinity.scopeTag,
+        fingerprint,
+        fingerprints: [...new Set([fingerprint, ...fingerprints])],
+      });
+    } else if (session.sessionId) {
+      session.setSessionIdentityMetadata({
+        identity: buildPublicSessionIdentity(
+          session.sessionId,
+          session.authState?.key?.id ?? "unbound"
+        ),
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      });
     }
 
     // === 故障转移循环 ===
@@ -296,7 +400,9 @@ export class ProxyProviderResolver {
 
         // === 成功 ===
         if (checkResult.referenced) {
-          session.recordProviderSessionRef(session.provider.id);
+          session.recordProviderSessionRef(session.provider.id, {
+            retainOnSuccess: checkResult.tracked,
+          });
         }
 
         logger.debug("ProviderSelector: Session tracked atomically", {
@@ -306,8 +412,14 @@ export class ProxyProviderResolver {
           attempt: attemptCount,
         });
 
-        // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
-        if (attemptCount === 1) {
+        // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）。
+        // 供应商由会话复用/亲和提名预先确定时，对应链条目已写入且携带真实 selectionMethod，
+        // 不得再补一条 initial_selection（否则决策链看起来全部是加权随机初选）。
+        const lastChainItem = session.getProviderChain().at(-1);
+        const stickySelectionRecorded =
+          lastChainItem?.id === session.provider.id &&
+          (lastChainItem.reason === "session_reuse" || lastChainItem.reason === "affinity_hit");
+        if (attemptCount === 1 && !stickySelectionRecorded) {
           const successContext = session.getLastSelectionContext();
           session.addProviderToChain(session.provider, {
             reason: "initial_selection",
@@ -341,11 +453,13 @@ export class ProxyProviderResolver {
         // 修复：延迟到 forwarder 请求成功后统一更新（见 forwarder.ts:75-80）
         // void SessionManager.updateSessionProvider(...); // ❌ 已移除
 
+        await resolveGroupCostMultiplierForProvider(session);
         return null; // 成功
       }
 
       // sessionId 为空的情况（理论上不应该发生）
       logger.warn("ProviderSelector: sessionId is null, skipping concurrent check");
+      await resolveGroupCostMultiplierForProvider(session);
       return null;
     }
 
@@ -458,6 +572,264 @@ export class ProxyProviderResolver {
   }
 
   /**
+   * F3a 指纹状态：计算链式指纹与 scopeTag 挂到 session.affinity（幂等，已有则跳过）。
+   *
+   * 仅 default endpoint policy 建状态——raw 端点（如 count_tokens）绝不建，
+   * 各终态写回随之全部 no-op；亲和路由与缓存效果指标（F3b）任一开启即计算，
+   * 仅指标模式下也要指纹供终态落值。返回 session.affinity 是否可用（可指纹化）。
+   */
+  private static ensureAffinityState(
+    session: ProxySession,
+    affinityRoutingEnabled: boolean
+  ): boolean {
+    if (session.affinity) return true;
+    if (session.getEndpointPolicy().kind !== "default") return false;
+    const keyId = session.authState?.key?.id;
+    if (!keyId) return false;
+
+    const env = getEnvConfig();
+    if (!affinityRoutingEnabled && !isCacheEffectivenessEnabled()) return false;
+
+    const chain = computeFingerprintChain(
+      session.request.message,
+      session.originalFormat,
+      env.PREFIX_AFFINITY_WINDOW
+    );
+    if (!chain) return false;
+
+    session.affinity = {
+      scopeTag: buildScopeTag(keyId, session.originalFormat, session.getOriginalModel()),
+      chain,
+      nominatedProviderId: null,
+      matchedFp: null,
+      identityFp: null,
+      generation: null,
+      lookup: null,
+    };
+    return true;
+  }
+
+  /**
+   * F3a 最长前缀亲和提名（软提名）。
+   *
+   * 基于 ensureAffinityState 挂好的指纹链，在 Redis 中做最深->最浅的最长前缀
+   * 查找；命中后候选供应商仍须通过与会话复用完全相同的硬校验（见
+   * validateAffinityCandidate），任一不过即静默回落加权随机——亲和永远只是
+   * 提名，不绕过任何硬性约束。
+   */
+  private static async tryPrefixAffinityNomination(session: ProxySession): Promise<void> {
+    try {
+      const affinity = session.affinity;
+      if (!affinity) return;
+
+      const lookup = await ProxyProviderResolver.lookupAffinityState(session);
+      if (!lookup) return;
+
+      const hint = lookup.hint;
+      if (!hint) return;
+
+      affinity.matchedFp = hint.matchedFp;
+
+      const provider = await ProxyProviderResolver.validateAffinityCandidate(
+        session,
+        hint.providerId
+      );
+      if (!provider) {
+        // 候选不过硬校验：软回落，不写墓碑（可能只是临时熔断/调度窗口外）
+        logger.debug("ProviderSelector: Affinity candidate rejected by hard validation", {
+          providerId: hint.providerId,
+          matchedIndex: hint.matchedIndex,
+        });
+        return;
+      }
+
+      // 命中边界详情：随决策链落库，供请求详情展示「具体匹配到哪个前缀」
+      const matchedBoundary =
+        affinity.chain.tail.find((boundary) => boundary.fp === hint.matchedFp) ?? null;
+
+      affinity.nominatedProviderId = provider.id;
+      session.setProvider(provider);
+      session.addProviderToChain(provider, {
+        reason: "affinity_hit",
+        selectionMethod: "prefix_affinity",
+        circuitState: getCircuitState(provider.id),
+        affinity: {
+          matchedDepth: matchedBoundary?.depth ?? null,
+          matchedPrefixBytes: matchedBoundary?.prefixBytes ?? null,
+          matchedFp: hint.matchedFp,
+        },
+        decisionContext: {
+          totalProviders: 0,
+          enabledProviders: 0,
+          targetType: provider.providerType as NonNullable<
+            ProviderChainItem["decisionContext"]
+          >["targetType"],
+          requestedModel: session.getOriginalModel() || "",
+          groupFilterApplied: false,
+          beforeHealthCheck: 0,
+          afterHealthCheck: 0,
+          priorityLevels: [provider.priority || 0],
+          selectedPriority: provider.priority || 0,
+          candidatesAtPriority: [
+            {
+              id: provider.id,
+              name: provider.name,
+              weight: provider.weight,
+              costMultiplier: provider.costMultiplier,
+            },
+          ],
+          sessionId: session.sessionId || undefined,
+        },
+      });
+      logger.info("ProviderSelector: Prefix affinity nomination accepted", {
+        providerId: provider.id,
+        providerName: provider.name,
+        matchedIndex: hint.matchedIndex,
+        matchedDepth: matchedBoundary?.depth ?? null,
+      });
+    } catch (error) {
+      // 亲和路径任何异常都不影响主选路
+      logger.warn("ProviderSelector: Prefix affinity nomination failed, falling back", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private static async lookupAffinityState(
+    session: ProxySession
+  ): Promise<AffinityLookupResult | null> {
+    const affinity = session.affinity;
+    if (!affinity) return null;
+
+    if (affinity.lookup) {
+      affinity.identityFp = affinity.lookup.identityFp;
+      affinity.generation = affinity.lookup.generation;
+      return affinity.lookup;
+    }
+
+    const lookup = await getAffinityStore().lookup(
+      affinity.scopeTag,
+      fingerprintsDeepestFirst(affinity.chain),
+      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+    );
+    if (!lookup) return null;
+
+    affinity.identityFp = lookup.identityFp;
+    affinity.generation = lookup.generation;
+    affinity.lookup = lookup;
+    return lookup;
+  }
+
+  /**
+   * 亲和候选硬校验：与 findReusable 同一套检查——enabled/粘性 opt-out/调度窗口/
+   * 熔断/格式/模型/客户端限制/分组/金额限额（不含 session 绑定的清理副作用）。
+   * 任一不过返回 null。
+   */
+  private static async validateAffinityCandidate(
+    session: ProxySession,
+    providerId: number
+  ): Promise<Provider | null> {
+    const provider = await findProviderById(providerId);
+    if (!provider?.isEnabled) return null;
+    // 尊重供应商的会话粘性 opt-out：亲和与会话复用同属粘性机制
+    if (provider.disableSessionReuse) return null;
+
+    const systemTimezone = await resolveSystemTimezone();
+    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
+      return null;
+    }
+    if (
+      provider.providerVendorId &&
+      provider.providerVendorId > 0 &&
+      (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
+    ) {
+      return null;
+    }
+    if (await isCircuitOpen(provider.id)) return null;
+    if (
+      session.originalFormat &&
+      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
+    ) {
+      return null;
+    }
+    const requestedModel = session.getOriginalModel();
+    if (requestedModel && !providerSupportsModel(provider, requestedModel)) return null;
+
+    const clientResult = isClientAllowedDetailed(
+      session,
+      provider.allowedClients ?? [],
+      provider.blockedClients ?? []
+    );
+    if (!clientResult.allowed) return null;
+
+    const effectiveGroup = getEffectiveProviderGroup(session);
+    if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
+      return null;
+    }
+
+    // 亲和提名同样不得绕过金额限额（5h/日/周/月 + 总额），与 findReusable 一致
+    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
+      limit_5h_usd: provider.limit5hUsd,
+      limit_5h_reset_mode: provider.limit5hResetMode,
+      limit_daily_usd: provider.limitDailyUsd,
+      daily_reset_mode: provider.dailyResetMode,
+      daily_reset_time: provider.dailyResetTime,
+      limit_weekly_usd: provider.limitWeeklyUsd,
+      limit_monthly_usd: provider.limitMonthlyUsd,
+    });
+    if (!costCheck.allowed) return null;
+
+    const totalCheck = await RateLimitService.checkTotalCostLimit(
+      provider.id,
+      "provider",
+      provider.limitTotalUsd,
+      {
+        resetAt: provider.totalCostResetAt,
+      }
+    );
+    if (!totalCheck.allowed) return null;
+
+    return provider;
+  }
+
+  /**
+   * Select a bounded Discovery batch using the exact same filters, priority
+   * and weighted selection as the normal selector. The method is intentionally
+   * additive: legacy initial selection/fallback keeps its existing behavior.
+   */
+  static async pickDiscoveryProviders(
+    session: ProxySession,
+    count: number,
+    excludeIds: number[] = []
+  ): Promise<Provider[]> {
+    const selected: Provider[] = [];
+    const excluded = new Set(excludeIds);
+    const limit = Math.max(0, Math.floor(count));
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    while (selected.length < limit) {
+      const provider = await ProxyProviderResolver.pickRandomProviderWithExclusion(
+        session,
+        Array.from(excluded)
+      );
+      if (!provider || excluded.has(provider.id)) break;
+      if (session.sessionId && keyId != null) {
+        const cooldown = await SessionManager.isSessionProviderCoolingDown(
+          session.sessionId,
+          keyId,
+          provider.id
+        );
+        if (cooldown.status === "ok" && cooldown.coolingDown) {
+          excluded.add(provider.id);
+          continue;
+        }
+      }
+      selected.push(provider);
+      excluded.add(provider.id);
+    }
+    return selected;
+  }
+
+  /**
    * 查找可复用的供应商（基于 session）
    */
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
@@ -465,11 +837,29 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(
-      session.sessionId,
-      session.authState?.key?.id ?? null
-    );
+    // Read the binding once and retain its generation for Discovery timeout
+    // cleanup/finalization. Re-reading here would allow an older request to
+    // clear a newer binding (ABA).
+    const sessionId = session.sessionId;
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    const clearRejectedProviderBinding = async (providerId: number): Promise<void> => {
+      await SessionManager.clearSessionProvider(sessionId, providerId, keyId);
+      // A clear attempt can advance or race the canonical generation. Force
+      // Discovery to read authoritative state instead of this old snapshot.
+      if (keyId != null) session.setSessionBindingSnapshot(null);
+    };
+    let providerId: number | null = null;
+    if (keyId != null) {
+      const binding = await SessionManager.getSessionBindingSnapshot(session.sessionId, keyId);
+      if (binding.status === "ok") {
+        session.setSessionBindingSnapshot(binding.snapshot);
+        providerId = binding.snapshot.providerId;
+      } else if (binding.legacyFallbackAllowed) {
+        providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+      }
+    } else {
+      providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+    }
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,
@@ -484,7 +874,7 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -494,7 +884,7 @@ export class ProxyProviderResolver {
         providerId: provider.id,
         providerName: provider.name,
       });
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -508,7 +898,7 @@ export class ProxyProviderResolver {
         activeTimeEnd: provider.activeTimeEnd,
         timezone: systemTimezone,
       });
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -549,7 +939,7 @@ export class ProxyProviderResolver {
         providerType: provider.providerType,
         originalFormat: session.originalFormat,
       });
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -568,7 +958,7 @@ export class ProxyProviderResolver {
       // 清除过时绑定，避免 SET NX 死锁
       // 当 session 内请求模型发生变化时，旧绑定已无意义，
       // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
         sessionId: session.sessionId,
         staleProviderId: provider.id,
@@ -624,7 +1014,7 @@ export class ProxyProviderResolver {
           ],
         },
       });
-      await SessionManager.clearSessionProvider(session.sessionId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -1129,6 +1519,13 @@ export class ProxyProviderResolver {
       }
     }
     return provider.priority ?? 0;
+  }
+
+  static resolveEffectivePriorityForSession(provider: Provider, session: ProxySession): number {
+    return ProxyProviderResolver.resolveEffectivePriority(
+      provider,
+      getEffectiveProviderGroup(session)
+    );
   }
 
   /**

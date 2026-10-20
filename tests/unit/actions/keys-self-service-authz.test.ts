@@ -193,6 +193,20 @@ describe("toggleKeyEnabled self-service authorization", () => {
     expect(result.ok).toBe(true);
     expect(updateKeyMock).toHaveBeenCalledWith(42, { is_enabled: false });
   });
+
+  it("returns the dedicated business code when disabling the last enabled key", async () => {
+    getSessionMock.mockResolvedValue(webSession);
+    countActiveKeysByUserMock.mockResolvedValue(1);
+
+    const { toggleKeyEnabled } = await import("@/actions/keys");
+    const result = await toggleKeyEnabled(42, false);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errorCode).toBe("CANNOT_DISABLE_LAST_KEY");
+    }
+    expect(updateKeyMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("renewKeyExpiresAt self-service authorization", () => {

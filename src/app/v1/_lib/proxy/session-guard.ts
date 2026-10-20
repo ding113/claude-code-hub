@@ -1,10 +1,18 @@
 import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
 import { getCachedSystemSettings } from "@/lib/config";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
+import { buildPublicSessionIdentity, buildScopeTag } from "@/lib/request-identity";
 import { headersToSanitizedObject, SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { completeCodexSessionIdentifiers } from "../codex/session-completer";
+import { getAffinityStore } from "./affinity/affinity-store";
+import {
+  computeFingerprintChain,
+  fingerprintsDeepestFirst,
+  fingerprintTip,
+} from "./affinity/fingerprint";
 import type { ProxySession } from "./session";
 
 const CLIENT_HEADER_SNAPSHOT_BLOCKLIST = [
@@ -81,8 +89,15 @@ export class ProxySessionGuard {
       session.setRawCrossProviderFallbackEnabled(rawFallbackEnabled);
       const allowRawSessionContext = session.isRawCrossProviderFallbackEnabled();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      const persistSessionRequestArtifacts =
+        session.shouldPersistSessionDebugArtifacts() &&
+        session.shouldPersistSessionRequestArtifacts();
       let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
-      if (session.request.message && typeof session.request.message === "object") {
+      if (
+        persistSessionRequestArtifacts &&
+        session.request.message &&
+        typeof session.request.message === "object"
+      ) {
         try {
           requestMessageBeforeProxyMutations = structuredClone(
             session.request.message as Record<string, unknown>
@@ -91,7 +106,7 @@ export class ProxySessionGuard {
           requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
         }
       }
-      const originalMessages = session.getMessages();
+      const originalMessages = persistSessionRequestArtifacts ? session.getMessages() : undefined;
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
       const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
@@ -142,7 +157,58 @@ export class ProxySessionGuard {
       const sessionId = await SessionManager.getOrCreateSessionId(keyId, messages, clientSessionId);
 
       // 4. 设置到 session 对象
-      session.setSessionId(sessionId);
+      session.setSessionId(sessionId, {
+        allowSingleTurnProviderReuse: clientSessionId !== null,
+      });
+      session.setSessionIdentityMetadata({
+        identity: buildPublicSessionIdentity(sessionId, keyId),
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      });
+
+      if (
+        systemSettings.affinityIgnoreClientSessionId &&
+        session.getEndpointPolicy().kind === "default"
+      ) {
+        const chain = computeFingerprintChain(
+          session.request.message as Record<string, unknown>,
+          session.originalFormat,
+          getEnvConfig().PREFIX_AFFINITY_WINDOW
+        );
+        if (chain) {
+          session.affinity = {
+            scopeTag: buildScopeTag(
+              keyId,
+              session.originalFormat,
+              session.getOriginalModel() ?? session.request.model
+            ),
+            chain,
+            nominatedProviderId: null,
+            matchedFp: null,
+            identityFp: null,
+            generation: null,
+            lookup: null,
+          };
+          const lookup = await getAffinityStore().lookup(
+            session.affinity.scopeTag,
+            fingerprintsDeepestFirst(chain),
+            getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+          );
+          session.affinity.lookup = lookup;
+          const fingerprint = lookup?.identityFp ?? fingerprintTip(chain).fp;
+          session.affinity.identityFp = lookup?.identityFp ?? null;
+          session.affinity.generation = lookup?.generation ?? null;
+          session.setSessionIdentityMetadata({
+            identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
+            kind: "prefix_affinity",
+            scopeTag: session.affinity.scopeTag,
+            fingerprint,
+            fingerprints: chain.tail.map((boundary) => boundary.fp).reverse(),
+          });
+        }
+      }
 
       if (
         !allowRawSessionContext &&
@@ -166,30 +232,36 @@ export class ProxySessionGuard {
       }
 
       // 4.1 获取并设置请求序号（Session 内唯一标识每个请求）
-      const requestSequence = await SessionManager.getNextRequestSequence(sessionId);
+      const requestSequence = await SessionManager.getNextRequestSequence(sessionId, keyId);
       session.setRequestSequence(requestSequence);
 
       // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）
       // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
       if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         const requestBeforeSnapshot = {
-          body: requestMessageBeforeProxyMutations,
           headers: filterClientRequestSnapshotHeaders(session.headers),
           meta: {
             clientUrl: session.requestUrl.toString(),
             upstreamUrl: null,
             method: session.method,
           },
-          ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
+          ...(persistSessionRequestArtifacts
+            ? {
+                body: requestMessageBeforeProxyMutations,
+                ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
+              }
+            : {}),
         };
 
-        void SessionManager.storeSessionRequestBody(
-          session.sessionId,
-          session.request.message,
-          requestSequence
-        ).catch((err) => {
-          logger.error("[ProxySessionGuard] Failed to store session request body:", err);
-        });
+        if (persistSessionRequestArtifacts) {
+          void SessionManager.storeSessionRequestBody(
+            session.sessionId,
+            session.request.message,
+            requestSequence
+          ).catch((err) => {
+            logger.error("[ProxySessionGuard] Failed to store session request body:", err);
+          });
+        }
 
         void SessionManager.storeSessionClientRequestMeta(
           session.sessionId,
@@ -211,7 +283,7 @@ export class ProxySessionGuard {
         });
 
         // 可选：存储 messages（受环境变量控制，按请求序号独立存储）
-        if (messages !== undefined) {
+        if (persistSessionRequestArtifacts && messages !== undefined) {
           void SessionManager.storeSessionMessages(
             session.sessionId,
             messages,

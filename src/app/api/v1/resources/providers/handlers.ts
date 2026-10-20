@@ -1,5 +1,4 @@
 import type { Context } from "hono";
-import type { ZodError } from "zod";
 import { z } from "zod";
 import type { ActionResult } from "@/actions/types";
 import { hasLegacyRedactedWritePlaceholders } from "@/lib/api/legacy-action-sanitizers";
@@ -22,9 +21,11 @@ import {
   jsonResponse,
   noContentResponse,
 } from "@/lib/api/v1/_shared/response-helpers";
+import { ProviderCacheEffectivenessListQuerySchema } from "@/lib/api/v1/schemas/provider-cache-effectiveness";
 import {
   HIDDEN_PROVIDER_TYPES,
   ProviderApiTestSchema,
+  ProviderBalanceBatchBodySchema,
   ProviderBatchPatchApplySchema,
   ProviderBatchPatchPreviewSchema,
   ProviderBatchUpdateSchema,
@@ -109,7 +110,10 @@ export async function getProvider(c: Context): Promise<Response> {
 export async function createProvider(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, ProviderCreateSchema);
   if (!body.ok) return body.response;
-  if (hasLegacyRedactedWritePlaceholders(body.data)) {
+  if (
+    hasLegacyRedactedWritePlaceholders(body.data) ||
+    isRedactedAccessTokenEcho(body.data.new_api_access_token)
+  ) {
     return createProblemResponse({
       status: 422,
       instance: new URL(c.req.url).pathname,
@@ -158,6 +162,15 @@ export async function updateProvider(c: Context): Promise<Response> {
       instance: new URL(c.req.url).pathname,
       errorCode: "provider.redacted_placeholder_rejected",
       detail: "Redacted placeholders cannot be used for the key field when updating providers.",
+    });
+  }
+  if (isRedactedAccessTokenEcho(body.data.new_api_access_token)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail:
+        "Redacted or masked values cannot be used for the new_api_access_token field. Omit the field to keep the current token.",
     });
   }
   if (hasUnresolvedRedactedHeaderEcho(body.data.custom_headers, existing.customHeaders)) {
@@ -316,6 +329,44 @@ export async function getProviderLimitBatch(c: Context): Promise<Response> {
   });
 }
 
+export async function getProviderBalancesBatch(c: Context): Promise<Response> {
+  const body = await parseJson(c, ProviderBalanceBatchBodySchema);
+  if (body instanceof Response) return body;
+  const visibleProviders = await loadVisibleProviders(c);
+  if (visibleProviders instanceof Response) return visibleProviders;
+  const visibleIds = new Set(visibleProviders.map((provider) => provider.id));
+  const providerIds = body.providerIds.filter((id) => visibleIds.has(id));
+  if (providerIds.length === 0) return jsonResponse({ items: [] });
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.getProviderBalances,
+    [providerIds, { refresh: body.refresh }] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: Object.values(result.data) }, { headers: withNoStoreHeaders() });
+}
+
+export async function refreshProviderBalance(c: Context): Promise<Response> {
+  const id = parseProviderIdWithSuffix(c, "balance:refresh");
+  if (id instanceof Response) return id;
+  const existing = await findVisibleProvider(c, id);
+  if (existing instanceof Response) return existing;
+  if (!existing) return providerNotFound(c);
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.refreshProviderBalance,
+    [id] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data, { headers: withNoStoreHeaders() });
+}
+
 export async function listProviderGroups(c: Context): Promise<Response> {
   const query = ProviderGroupsQuerySchema.safeParse({
     include: c.req.query("include"),
@@ -337,6 +388,24 @@ export async function listProviderGroups(c: Context): Promise<Response> {
     c.get("auth")
   );
   return result.ok ? jsonResponse({ items: result.data }) : actionError(c, result);
+}
+
+export async function listProviderCacheEffectiveness(c: Context): Promise<Response> {
+  const query = ProviderCacheEffectivenessListQuerySchema.safeParse({
+    providerId: c.req.query("providerId"),
+    limit: c.req.query("limit"),
+  });
+  if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
+
+  const actions = await import("@/actions/provider-cache-effectiveness");
+  const result = await callAction(
+    c,
+    actions.getProviderCacheEffectivenessWindows,
+    [query.data] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: result.data });
 }
 
 export async function autoSortProviders(c: Context): Promise<Response> {
@@ -610,6 +679,8 @@ function sanitizeProvider(
     name: provider.name,
     url: redactUrlCredentials(provider.url) ?? provider.url,
     maskedKey: provider.maskedKey,
+    maskedNewApiAccessToken: provider.maskedNewApiAccessToken,
+    newApiUserId: provider.newApiUserId,
     isEnabled: provider.isEnabled,
     weight: provider.weight,
     priority: provider.priority,
@@ -671,6 +742,19 @@ function sanitizeProvider(
     updatedAt: provider.updatedAt,
     ...(statistics ? { statistics } : {}),
   };
+}
+
+/**
+ * 判定提交的系统访问令牌是否只是回传的脱敏值。
+ *
+ * 列表接口以 maskKey 的「前 4 位 + •••••• + 后 4 位」形式返回令牌，
+ * 这类值与旧式 [REDACTED] 占位符都不能当作真实令牌保存。
+ */
+function isRedactedAccessTokenEcho(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    (hasLegacyRedactedWritePlaceholders(value) || value.includes("••••••"))
+  );
 }
 
 function preserveRedactedProviderUpdateFields<T extends ProviderUpdatePayload>(
@@ -754,11 +838,10 @@ function providerNotFound(c: Context): Response {
   });
 }
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: ZodError };
-};
-
-async function parseJson<T>(c: Context, schema: JsonBodySchema<T>): Promise<T | Response> {
+async function parseJson<S extends z.ZodType>(
+  c: Context,
+  schema: S
+): Promise<z.output<S> | Response> {
   const body = await parseHonoJsonBody(c, schema);
   if (!body.ok) return body.response;
   return body.data;
@@ -830,7 +913,9 @@ function statusFromActionError(result: Extract<ActionResult<unknown>, { ok: fals
     case "auth.forbidden":
       return 403;
     case "CONFLICT":
+    case "IDEMPOTENCY_CONFLICT":
     case "UNDO_CONFLICT":
+    case "UNDO_STALE":
     case "PREVIEW_STALE":
     case "resource.conflict":
       return 409;

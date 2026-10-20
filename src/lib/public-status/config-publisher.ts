@@ -14,6 +14,7 @@ import {
   publishCurrentPublicStatusConfigPointers,
   publishInternalPublicStatusConfigSnapshot,
   publishPublicStatusConfigSnapshot,
+  readCurrentPublicStatusConfigSnapshot,
   resolvePublicStatusSiteDescription,
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
@@ -175,4 +176,18 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     written: result.written && internalResult.written && pointersWritten,
     groupCount: enabledGroups.length,
   };
+}
+
+export async function reconcilePublicStatusSiteTitleProjection(): Promise<boolean> {
+  const settings = await getSystemSettings();
+  const currentSnapshot = await readCurrentPublicStatusConfigSnapshot();
+  if (currentSnapshot?.siteTitle?.trim() === settings.siteTitle.trim()) {
+    return true;
+  }
+  const result = await publishCurrentPublicStatusConfigProjection({
+    reason: "startup-site-title-reconciliation",
+    ...(currentSnapshot ? { configVersion: currentSnapshot.configVersion } : {}),
+  });
+
+  return result.written;
 }

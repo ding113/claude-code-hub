@@ -1,0 +1,26 @@
+import { createTestRunnerConfig } from "../vitest.base.mts";
+
+export default createTestRunnerConfig({
+  environment: "node",
+  testTimeout: 20000,
+  hookTimeout: 20000,
+  fileParallelism: false,
+  testFiles: [
+    "tests/integration/usage-ledger.test.ts",
+    "tests/integration/session-identity-postgres.test.ts",
+    "tests/integration/my-usage-imported-ledger.test.ts",
+    "tests/integration/rolling-cost-redis.test.ts",
+    "tests/integration/lease-settlement-redis.test.ts",
+    "tests/integration/session-binding-versioning-redis.test.ts",
+    "tests/integration/session-response-body-dedup-redis.test.ts",
+    "tests/integration/db-pool-isolation-postgres.test.ts",
+    "tests/integration/db-pool-slow-close-postgres.test.ts",
+    "tests/integration/message-write-buffer-recovery-postgres.test.ts",
+    "tests/integration/proxy-hedge-lifecycle.test.ts",
+  ],
+  api: {
+    host: process.env.VITEST_API_HOST || "127.0.0.1",
+    port: Number(process.env.VITEST_API_PORT || 51204),
+    strictPort: false,
+  },
+});

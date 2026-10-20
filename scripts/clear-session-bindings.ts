@@ -852,7 +852,7 @@ async function runCleanup(
 
 async function main(): Promise<void> {
   console.log("=".repeat(60));
-  console.log("  Claude Code Hub - Session 绑定清理工具");
+  console.log("  CC Hub - Session 绑定清理工具");
   console.log("=".repeat(60));
 
   const options = parseCliArgs(process.argv.slice(2));

@@ -3,8 +3,8 @@ import { createProblemResponse, normalizeZodPath } from "./error-envelope";
 
 export type ParsedBodyResult<T> = { ok: true; data: T } | { ok: false; response: Response };
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError };
+type ParseJsonBodyOptions = {
+  validationErrorCode?: (error: z.ZodError) => string | undefined;
 };
 
 type HonoJsonRequest = {
@@ -16,10 +16,10 @@ type HonoJsonRequest = {
   };
 };
 
-export async function parseJsonBody<T>(
+export async function parseJsonBody<S extends z.ZodType>(
   request: Request,
-  schema: JsonBodySchema<T>
-): Promise<ParsedBodyResult<T>> {
+  schema: S
+): Promise<ParsedBodyResult<z.output<S>>> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
     return {
@@ -69,10 +69,11 @@ export async function parseJsonBody<T>(
   return { ok: true, data: parsed.data };
 }
 
-export async function parseHonoJsonBody<T>(
+export async function parseHonoJsonBody<S extends z.ZodType>(
   c: HonoJsonRequest,
-  schema: JsonBodySchema<T>
-): Promise<ParsedBodyResult<T>> {
+  schema: S,
+  options?: ParseJsonBodyOptions
+): Promise<ParsedBodyResult<z.output<S>>> {
   const contentType =
     c.req.header("content-type") ??
     c.req.header("Content-Type") ??
@@ -113,7 +114,7 @@ export async function parseHonoJsonBody<T>(
         instance: new URL(c.req.url).pathname,
         title: "Validation failed",
         detail: "One or more fields are invalid.",
-        errorCode: "request.validation_failed",
+        errorCode: options?.validationErrorCode?.(parsed.error) ?? "request.validation_failed",
         invalidParams: parsed.error.issues.map((issue) => ({
           path: normalizeZodPath(issue.path),
           code: issue.code,

@@ -11,6 +11,11 @@ import {
   LEDGER_SUCCESS_RATE_COUNTABLE_CONDITION,
   LEDGER_SUCCESS_RATE_SUCCESS_CONDITION,
 } from "./_shared/ledger-conditions";
+import {
+  getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients,
+  resolveLeaderboardWindow,
+} from "./provider-cache-effectiveness";
 import { getSystemSettings } from "./system-config";
 
 const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
@@ -64,10 +69,12 @@ export interface ProviderLeaderboardEntry {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
-  avgTtfbMs: number; // 毫秒
+  avgTtftMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
+  /** F3b 缓存系数（万分比定点值，effectivenessBp 汇总口径）；周期内无聚合数据时为 null */
+  cacheCoefficientBp: number | null;
   /**
    * 可选：按模型拆分
    * - undefined: 未请求 includeModelStats
@@ -85,15 +92,17 @@ export interface ModelProviderStat {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1
-  avgTtfbMs: number; // 毫秒
+  avgTtftMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s
   avgCostPerRequest: number | null;
   avgCostPerMillionTokens: number | null;
+  /** 重定向模型口径的缓存系数；original 口径无法可靠映射时为 null */
+  cacheCoefficientBp: number | null;
   rowIdentityBasis?: BillingModelSource;
-  successRateBasis?: "original" | "unavailable";
+  successRateBasis?: BillingModelSource;
   costTokensBasis?: BillingModelSource;
   basisDisclosureRequired?: boolean;
-  successRateUnavailableReason?: "redirected_billing_model";
+  successRateUnavailableReason?: "no_countable_outcomes";
 }
 
 /**
@@ -105,6 +114,8 @@ export interface ModelCacheHitStat {
   cacheReadTokens: number;
   totalInputTokens: number;
   cacheHitRate: number; // 0-1
+  /** 重定向模型口径的缓存系数；original 口径无法可靠映射时为 null */
+  cacheCoefficientBp: number | null;
 }
 
 /**
@@ -122,6 +133,8 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   /** @deprecated Use totalInputTokens instead */
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+  /** F3b 缓存系数（万分比定点值，effectivenessBp 汇总口径）；周期内无聚合数据时为 null */
+  cacheCoefficientBp: number | null;
   modelStats: ModelCacheHitStat[];
 }
 
@@ -162,10 +175,10 @@ export interface ModelLeaderboardEntry {
   totalTokens: number;
   successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
   rowIdentityBasis?: BillingModelSource;
-  successRateBasis?: "original" | "unavailable";
+  successRateBasis?: BillingModelSource;
   costTokensBasis?: BillingModelSource;
   basisDisclosureRequired?: boolean;
-  successRateUnavailableReason?: "redirected_billing_model";
+  successRateUnavailableReason?: "no_countable_outcomes";
 }
 
 /**
@@ -655,17 +668,19 @@ async function findProviderLeaderboardWithTimezone(
     0::double precision
   )`;
   const successRateExpr = LEDGER_SUCCESS_RATE_EXPR;
-  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttfbMs})::double precision, 0::double precision)`;
+  // 展示用的均值走 ttfb_ms 列，该列存的是 TTFT（见 schema.ts）
+  const avgTtftMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttftMs})::double precision, 0::double precision)`;
+  // TPS 必须以真 TTFB 为基准；first_byte_ms 为 NULL 的历史行由 IS NOT NULL 排除
   const avgTokensPerSecondExpr = sql<number>`COALESCE(
     avg(
       CASE
         WHEN ${usageLedger.outputTokens} > 0
           AND ${usageLedger.durationMs} IS NOT NULL
-          AND ${usageLedger.ttfbMs} IS NOT NULL
-          AND ${usageLedger.ttfbMs} < ${usageLedger.durationMs}
-          AND (${usageLedger.durationMs} - ${usageLedger.ttfbMs}) >= 100
+          AND ${usageLedger.firstByteMs} IS NOT NULL
+          AND ${usageLedger.firstByteMs} < ${usageLedger.durationMs}
+          AND (${usageLedger.durationMs} - ${usageLedger.firstByteMs}) >= 100
         THEN (${usageLedger.outputTokens}::double precision)
-          / ((${usageLedger.durationMs} - ${usageLedger.ttfbMs}) / 1000.0)
+          / ((${usageLedger.durationMs} - ${usageLedger.firstByteMs}) / 1000.0)
       END
     )::double precision,
     0::double precision
@@ -684,7 +699,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost: totalCostExpr,
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
-      avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -698,6 +713,11 @@ async function findProviderLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
+  // F3b 缓存系数合并（只加列不改序：用量榜保持 cost DESC）
+  const cacheCoefficients = await getProviderCacheCoefficients(
+    resolveLeaderboardWindow(period, timezone, dateRange)
+  );
+
   const baseEntries: ProviderLeaderboardEntry[] = rankings.map((entry) => {
     const totalCost = parseFloat(entry.totalCost);
     const totalRequests = entry.totalRequests;
@@ -710,8 +730,9 @@ async function findProviderLeaderboardWithTimezone(
       totalCost,
       totalTokens,
       successRate: clampRatio01Nullable(entry.successRate),
-      avgTtfbMs: entry.avgTtfbMs ?? 0,
+      avgTtftMs: entry.avgTtftMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
+      cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
       ...avgCosts,
     };
   });
@@ -721,6 +742,10 @@ async function findProviderLeaderboardWithTimezone(
   // Model breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
+  const modelCacheCoefficientsPromise =
+    billingModelSource === "redirected"
+      ? getProviderModelCacheCoefficients(resolveLeaderboardWindow(period, timezone, dateRange))
+      : Promise.resolve(new Map());
   const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
@@ -735,7 +760,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost: totalCostExpr,
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
-      avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -748,6 +773,7 @@ async function findProviderLeaderboardWithTimezone(
     )
     .groupBy(usageLedger.finalProviderId, modelField)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`), desc(sql`count(*)`));
+  const modelCacheCoefficients = (await modelCacheCoefficientsPromise) ?? new Map();
 
   const modelStatsByProvider = new Map<number, ModelProviderStat[]>();
   for (const row of modelRows) {
@@ -758,21 +784,27 @@ async function findProviderLeaderboardWithTimezone(
     const avgCosts = computeAvgCosts(totalCost, totalRequests, totalTokens);
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
     const basisDisclosureRequired = billingModelSource !== "original";
+    const successRate = clampRatio01Nullable(row.successRate);
+    const modelCacheKey = row.model.trim();
     stats.push({
       model: row.model,
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: basisDisclosureRequired ? null : clampRatio01Nullable(row.successRate),
-      avgTtfbMs: row.avgTtfbMs ?? 0,
+      successRate,
+      avgTtftMs: row.avgTtftMs ?? 0,
       avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
       rowIdentityBasis: billingModelSource,
-      successRateBasis: basisDisclosureRequired ? "unavailable" : "original",
+      successRateBasis: billingModelSource,
       costTokensBasis: billingModelSource,
       basisDisclosureRequired,
-      successRateUnavailableReason: basisDisclosureRequired
-        ? "redirected_billing_model"
-        : undefined,
+      ...(successRate === null
+        ? ({ successRateUnavailableReason: "no_countable_outcomes" } as const)
+        : {}),
+      cacheCoefficientBp:
+        billingModelSource === "redirected"
+          ? (modelCacheCoefficients.get(row.providerId)?.get(modelCacheKey)?.coefficientBp ?? null)
+          : null,
       ...avgCosts,
     });
     modelStatsByProvider.set(row.providerId, stats);
@@ -846,9 +878,18 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
 
+  // F3b 缓存系数合并（合并后做最终排序）
+  const cacheCoefficients = await getProviderCacheCoefficients(
+    resolveLeaderboardWindow(period, timezone, dateRange)
+  );
+
   // Model-level cache hit breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
+  const modelCacheCoefficientsPromise =
+    billingModelSource === "redirected"
+      ? getProviderModelCacheCoefficients(resolveLeaderboardWindow(period, timezone, dateRange))
+      : Promise.resolve(new Map());
   const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
@@ -881,23 +922,29 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     )
     .groupBy(usageLedger.finalProviderId, modelField)
     .orderBy(desc(modelCacheHitRate), desc(sql`count(*)`));
+  const modelCacheCoefficients = (await modelCacheCoefficientsPromise) ?? new Map();
 
   // Group model stats by providerId
   const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
   for (const row of modelRows) {
     if (!row.model) continue;
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
+    const modelCacheKey = row.model.trim();
     stats.push({
       model: row.model,
       totalRequests: row.totalRequests,
       cacheReadTokens: row.cacheReadTokens,
       totalInputTokens: row.totalInputTokens,
       cacheHitRate: clampRatio01(row.cacheHitRate),
+      cacheCoefficientBp:
+        billingModelSource === "redirected"
+          ? (modelCacheCoefficients.get(row.providerId)?.get(modelCacheKey)?.coefficientBp ?? null)
+          : null,
     });
     modelStatsByProvider.set(row.providerId, stats);
   }
 
-  return rankings.map((entry) => ({
+  const entries: ProviderCacheHitRateLeaderboardEntry[] = rankings.map((entry) => ({
     providerId: entry.providerId,
     providerName: entry.providerName,
     totalRequests: entry.totalRequests,
@@ -907,8 +954,20 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalInputTokens: entry.totalInputTokens,
     totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: clampRatio01(entry.cacheHitRate),
+    cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
     modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
   }));
+
+  // 默认排序：缓存系数 DESC（无数据排最后），并列再按缓存命中率 DESC
+  entries.sort((a, b) => {
+    if (a.cacheCoefficientBp !== b.cacheCoefficientBp) {
+      if (a.cacheCoefficientBp == null) return 1;
+      if (b.cacheCoefficientBp == null) return -1;
+      return b.cacheCoefficientBp - a.cacheCoefficientBp;
+    }
+    return b.cacheHitRate - a.cacheHitRate;
+  });
+  return entries;
 }
 
 /**
@@ -1157,20 +1216,23 @@ async function findModelLeaderboardWithTimezone(
 
   return rankings
     .filter((entry) => entry.model !== null && entry.model !== "")
-    .map((entry) => ({
-      model: entry.model as string, // 已过滤 null/空字符串，可安全断言
-      totalRequests: entry.totalRequests,
-      totalCost: parseFloat(entry.totalCost),
-      totalTokens: entry.totalTokens,
-      successRate:
-        billingModelSource === "original" ? clampRatio01Nullable(entry.successRate) : null,
-      rowIdentityBasis: billingModelSource,
-      successRateBasis: billingModelSource === "original" ? "original" : "unavailable",
-      costTokensBasis: billingModelSource,
-      basisDisclosureRequired: billingModelSource !== "original",
-      successRateUnavailableReason:
-        billingModelSource !== "original" ? "redirected_billing_model" : undefined,
-    }));
+    .map((entry) => {
+      const successRate = clampRatio01Nullable(entry.successRate);
+      return {
+        model: entry.model as string, // 已过滤 null/空字符串，可安全断言
+        totalRequests: entry.totalRequests,
+        totalCost: parseFloat(entry.totalCost),
+        totalTokens: entry.totalTokens,
+        successRate,
+        rowIdentityBasis: billingModelSource,
+        successRateBasis: billingModelSource,
+        costTokensBasis: billingModelSource,
+        basisDisclosureRequired: billingModelSource !== "original",
+        ...(successRate === null
+          ? ({ successRateUnavailableReason: "no_countable_outcomes" } as const)
+          : {}),
+      };
+    });
 }
 
 /**

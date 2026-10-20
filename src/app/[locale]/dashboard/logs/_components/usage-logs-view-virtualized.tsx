@@ -169,6 +169,7 @@ function UsageLogsViewContent({
       actualResponseModelMismatch: _params.get("actualResponseModelMismatch") ?? undefined,
       endpoint: _params.get("endpoint") ?? undefined,
       minRetry: _params.get("minRetry") ?? undefined,
+      replayFilter: _params.get("replayFilter") ?? undefined,
       page: _params.get("page") ?? undefined,
     });
 
@@ -255,7 +256,10 @@ function UsageLogsViewContent({
 
   const statsFilters = filters;
 
-  const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
+  const hasStatsFilters = Object.entries(statsFilters).some(
+    ([key, value]) =>
+      value !== undefined && value !== false && !(key === "replayFilter" && value === "all")
+  );
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -269,6 +273,7 @@ function UsageLogsViewContent({
     if (statsFilters.actualResponseModelMismatch) count++;
     if (statsFilters.endpoint) count++;
     if (statsFilters.minRetryCount !== undefined && statsFilters.minRetryCount > 0) count++;
+    if (statsFilters.replayFilter && statsFilters.replayFilter !== "all") count++;
     return count;
   }, [statsFilters]);
   const [isFilterOpen, setIsFilterOpen] = useState(activeFilterCount > 0);

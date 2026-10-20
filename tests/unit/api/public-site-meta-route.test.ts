@@ -33,7 +33,7 @@ describe("GET /api/public-site-meta", () => {
       }: {
         siteTitle?: string | null;
         siteDescription?: string | null;
-      }) => siteDescription?.trim() || `${siteTitle ?? "Claude Code Hub"} public status`
+      }) => siteDescription?.trim() || `${siteTitle ?? "CC Hub"} public status`
     );
 
     const mod = await import("@/app/api/public-site-meta/route");

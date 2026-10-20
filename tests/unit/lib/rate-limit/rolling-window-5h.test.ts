@@ -20,6 +20,10 @@ vi.mock("@/lib/utils/timezone", () => ({
 const pipelineCommands: Array<unknown[]> = [];
 
 const pipeline = {
+  eval: vi.fn((...args: unknown[]) => {
+    pipelineCommands.push(["eval", ...args]);
+    return pipeline;
+  }),
   zadd: vi.fn((...args: unknown[]) => {
     pipelineCommands.push(["zadd", ...args]);
     return pipeline;
@@ -88,10 +92,6 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("T0: consume $10, window should be $10", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // trackCost calls eval twice (key + provider)
-      redisClient.eval.mockResolvedValueOnce("10"); // TRACK key
-      redisClient.eval.mockResolvedValueOnce("10"); // TRACK provider
-
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 1, createdAtMs: baseTime });
 
       // getCurrentCost calls eval once, then exists
@@ -105,18 +105,12 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("T1 (3h later): consume $20, window should be $30", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: Track $10 (2 evals: key + provider)
-      redisClient.eval.mockResolvedValueOnce("10");
-      redisClient.eval.mockResolvedValueOnce("10");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 1, createdAtMs: baseTime });
 
       // T1: Move to 3h later
       const t1 = baseTime + 3 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t1));
 
-      // Track $20 (2 evals: key + provider)
-      redisClient.eval.mockResolvedValueOnce("20");
-      redisClient.eval.mockResolvedValueOnce("20");
       await RateLimitService.trackCost(1, 2, "sess", 20, { requestId: 2, createdAtMs: t1 });
 
       // getCurrentCost: eval returns sum
@@ -130,16 +124,11 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("T2 (6h later): query cost, should only include T1 ($20) as T0 expired", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: Track $10 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("10");
-      redisClient.eval.mockResolvedValueOnce("10");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 1, createdAtMs: baseTime });
 
-      // T1: 3h later, track $20 (2 evals)
+      // T1: 3h later, track $20
       const t1 = baseTime + 3 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t1));
-      redisClient.eval.mockResolvedValueOnce("30");
-      redisClient.eval.mockResolvedValueOnce("30");
       await RateLimitService.trackCost(1, 2, "sess", 20, { requestId: 2, createdAtMs: t1 });
 
       // T2: 6h after T0 (3h after T1)
@@ -164,16 +153,11 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("T0: consume $5, T1 (4h59m later): consume $10, window = $15", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: Track $5 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("5");
-      redisClient.eval.mockResolvedValueOnce("5");
       await RateLimitService.trackCost(1, 2, "sess", 5, { requestId: 1, createdAtMs: baseTime });
 
       // T1: 4h59m later (still within 5h)
       const t1 = baseTime + (4 * 60 + 59) * 60 * 1000;
       vi.setSystemTime(new Date(t1));
-      redisClient.eval.mockResolvedValueOnce("15");
-      redisClient.eval.mockResolvedValueOnce("15");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 2, createdAtMs: t1 });
 
       // Both entries should be in window
@@ -187,16 +171,11 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("T2 (5h01m after T0): query, window = $10 (T0 expired)", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: Track $5 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("5");
-      redisClient.eval.mockResolvedValueOnce("5");
       await RateLimitService.trackCost(1, 2, "sess", 5, { requestId: 1, createdAtMs: baseTime });
 
-      // T1: 4h59m later (2 evals)
+      // T1: 4h59m later
       const t1 = baseTime + (4 * 60 + 59) * 60 * 1000;
       vi.setSystemTime(new Date(t1));
-      redisClient.eval.mockResolvedValueOnce("15");
-      redisClient.eval.mockResolvedValueOnce("15");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 2, createdAtMs: t1 });
 
       // T2: 5h01m after T0
@@ -216,30 +195,21 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("should correctly calculate window with multiple entries at different times", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: $10 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("10");
-      redisClient.eval.mockResolvedValueOnce("10");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 1, createdAtMs: baseTime });
 
-      // T1: 1h later, $20 (2 evals)
+      // T1: 1h later, $20
       const t1 = baseTime + 1 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t1));
-      redisClient.eval.mockResolvedValueOnce("30");
-      redisClient.eval.mockResolvedValueOnce("30");
       await RateLimitService.trackCost(1, 2, "sess", 20, { requestId: 2, createdAtMs: t1 });
 
-      // T2: 2h later, $15 (2 evals)
+      // T2: 2h later, $15
       const t2 = baseTime + 2 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t2));
-      redisClient.eval.mockResolvedValueOnce("45");
-      redisClient.eval.mockResolvedValueOnce("45");
       await RateLimitService.trackCost(1, 2, "sess", 15, { requestId: 3, createdAtMs: t2 });
 
-      // T3: 3h after T0, $25 (2 evals)
+      // T3: 3h after T0, $25
       const t3 = baseTime + 3 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t3));
-      redisClient.eval.mockResolvedValueOnce("70");
-      redisClient.eval.mockResolvedValueOnce("70");
       await RateLimitService.trackCost(1, 2, "sess", 25, { requestId: 4, createdAtMs: t3 });
 
       // At T3: all 4 entries within window = $70
@@ -264,9 +234,6 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("should reject request when rolling window exceeds limit", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: consume $40 (2 evals for trackCost)
-      redisClient.eval.mockResolvedValueOnce("40");
-      redisClient.eval.mockResolvedValueOnce("40");
       await RateLimitService.trackCost(1, 2, "sess", 40, { requestId: 1, createdAtMs: baseTime });
 
       // Check limit (5h = $50) - checkCostLimits calls eval
@@ -298,9 +265,7 @@ describe("RateLimitService - 5h rolling window behavior", () => {
       // Current is $40, limit is $50, should still be allowed
       expect(checkT1.allowed).toBe(true);
 
-      // After adding $20, would be $60 - trackCost (2 evals)
-      redisClient.eval.mockResolvedValueOnce("60");
-      redisClient.eval.mockResolvedValueOnce("60");
+      // After adding $20, would be $60.
       await RateLimitService.trackCost(1, 2, "sess", 20, { requestId: 2, createdAtMs: t1 });
 
       // Verify window now shows $60
@@ -333,18 +298,12 @@ describe("RateLimitService - 5h rolling window behavior", () => {
       const day1_22h = new Date("2024-01-15T22:00:00.000Z").getTime();
       vi.setSystemTime(new Date(day1_22h));
 
-      // Track $10 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("10");
-      redisClient.eval.mockResolvedValueOnce("10");
       await RateLimitService.trackCost(1, 2, "sess", 10, { requestId: 1, createdAtMs: day1_22h });
 
       // Day2 01:00 UTC (3h later, crossed midnight)
       const day2_01h = new Date("2024-01-16T01:00:00.000Z").getTime();
       vi.setSystemTime(new Date(day2_01h));
 
-      // Track $20 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("30");
-      redisClient.eval.mockResolvedValueOnce("30");
       await RateLimitService.trackCost(1, 2, "sess", 20, { requestId: 2, createdAtMs: day2_01h });
 
       // Both entries in window = $30
@@ -401,16 +360,11 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("should work identically for provider entities", async () => {
       const { RateLimitService } = await import("@/lib/rate-limit");
 
-      // T0: provider consumes $15 (2 evals)
-      redisClient.eval.mockResolvedValueOnce("15");
-      redisClient.eval.mockResolvedValueOnce("15");
       await RateLimitService.trackCost(1, 2, "sess", 15, { requestId: 1, createdAtMs: baseTime });
 
-      // T1: 4h later, consume $25 (2 evals)
+      // T1: 4h later, consume $25
       const t1 = baseTime + 4 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t1));
-      redisClient.eval.mockResolvedValueOnce("40");
-      redisClient.eval.mockResolvedValueOnce("40");
       await RateLimitService.trackCost(1, 2, "sess", 25, { requestId: 2, createdAtMs: t1 });
 
       // Window = $40

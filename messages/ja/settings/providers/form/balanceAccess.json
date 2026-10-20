@@ -1,0 +1,18 @@
+{
+  "title": "残高照会",
+  "desc": "任意。New API サイトのシステムアクセストークンを設定すると、キーの割り当てではなくアカウント残高を表示します。",
+  "accessToken": {
+    "label": "システムアクセストークン",
+    "placeholder": "New API の個人設定で生成",
+    "leaveEmptyDesc": "空欄のままならトークンを変更しません",
+    "current": "現在のトークン：{token}",
+    "clear": "設定済みのトークンを削除",
+    "show": "トークンを表示",
+    "hide": "トークンを隠す"
+  },
+  "userId": {
+    "label": "ユーザー ID",
+    "placeholder": "例：1",
+    "desc": "旧バージョンの New API ではユーザー ID も必要です。個人設定ページで確認できます。"
+  }
+}

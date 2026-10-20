@@ -81,7 +81,11 @@ type AnyEntry =
   | ModelEntry;
 
 function renderSuccessRateCell(
-  row: { successRate: number | null; basisDisclosureRequired?: boolean },
+  row: {
+    successRate: number | null;
+    basisDisclosureRequired?: boolean;
+    successRateUnavailableReason?: "no_countable_outcomes";
+  },
   t: ReturnType<typeof useTranslations>
 ) {
   const display = getSuccessRateCellDisplay(row, t);
@@ -96,6 +100,21 @@ function renderSuccessRateCell(
 }
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
+
+// 缓存系数分层配色（与缓存命中率同档）：>=0.9 优秀（绿），>=0.8 良好（黄），其余橙色
+function renderCacheCoefficientCell(bp: number | null) {
+  if (bp == null) {
+    return <span className="text-muted-foreground">–</span>;
+  }
+  const value = bp / 10000;
+  const colorClass =
+    value >= 0.9
+      ? "text-green-600 dark:text-green-400"
+      : value >= 0.8
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-orange-600 dark:text-orange-400";
+  return <span className={colorClass}>{value.toFixed(2)}</span>;
+}
 
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
@@ -239,9 +258,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       : scope === "userCacheHitRate"
         ? 6
         : scope === "provider"
-          ? 10
+          ? 11
           : scope === "providerCacheHitRate"
-            ? 8
+            ? 7
             : scope === "model"
               ? 6
               : 5;
@@ -340,14 +359,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       getValue: (row) => row.successRate,
     },
     {
-      header: t("columns.avgTtfbMs"),
+      header: t("columns.avgTtftMs"),
       className: "text-right",
       cell: (row) => {
-        const val = row.avgTtfbMs;
+        const val = row.avgTtftMs;
         return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
       },
-      sortKey: "avgTtfbMs",
-      getValue: (row) => row.avgTtfbMs ?? 0,
+      sortKey: "avgTtftMs",
+      getValue: (row) => row.avgTtftMs ?? 0,
     },
     {
       header: t("columns.avgTokensPerSecond"),
@@ -378,6 +397,15 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       },
       sortKey: "avgCostPerMillionTokens",
       getValue: (row) => row.avgCostPerMillionTokens ?? 0,
+    },
+    {
+      header: t("columns.cacheCoefficient"),
+      headerTooltip: t("columns.cacheCoefficientTooltip"),
+      className: "text-right",
+      cell: (row) =>
+        renderCacheCoefficientCell("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
+      sortKey: "cacheCoefficientBp",
+      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
     },
   ];
 
@@ -413,6 +441,15 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       },
       sortKey: "cacheHitRate",
       getValue: (row) => row.cacheHitRate,
+    },
+    {
+      header: t("columns.cacheCoefficient"),
+      headerTooltip: t("columns.cacheCoefficientTooltip"),
+      className: "text-right",
+      cell: (row) =>
+        renderCacheCoefficientCell("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
+      sortKey: "cacheCoefficientBp",
+      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
     },
     {
       header: t("columns.cacheReadTokens"),

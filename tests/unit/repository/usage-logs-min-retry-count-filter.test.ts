@@ -58,6 +58,7 @@ describe("Usage logs minRetryCount filter", () => {
     expect(whereSql).toContain("request_success");
     expect(whereSql).toContain("retry_success");
     expect(whereSql).toContain("retry_failed");
+    expect(whereSql).toContain("client_abort_no_first_byte");
     expect(whereSql).toContain("statuscode");
     expect(whereSql).toContain("hedge_triggered");
     expect(whereSql).not.toContain("jsonb_array_length");

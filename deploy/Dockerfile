@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# 构建阶段：使用 Bun（快速包管理和构建）
-FROM --platform=$BUILDPLATFORM oven/bun:debian AS build-base
+# 构建阶段：使用真实 Node.js 执行 Next.js，Bun 仅负责包管理和 script 调度
+FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-debian AS bun-runtime
+
+FROM --platform=$BUILDPLATFORM node:trixie-slim AS build-base
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 
 FROM build-base AS deps
@@ -28,11 +31,12 @@ ENV CI=true
 RUN bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
-# 要求 Node >= 22.15（入站请求体 zstd 解压依赖 node:zlib 原生 zstd，见
-# src/app/v1/_lib/proxy/request-body-codec.ts 与 package.json engines）。
+# 要求 Node >= 22.19（undici 8 和入站请求体 zstd 解压依赖，见 package.json engines）。
 # node:trixie-slim 基于 Debian Trixie，提供 Node 24+，满足该要求。
 FROM node:trixie-slim AS runner
+ARG APP_VERSION=dev
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV HOSTNAME=0.0.0.0
@@ -53,12 +57,15 @@ RUN apt-get update && \
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/messages ./messages
+COPY --from=build --chown=node:node /app/VERSION ./VERSION
 COPY --from=build --chown=node:node /app/.next/standalone ./
 # Server Actions live inside .next/server; copy it or Next.js cannot resolve action IDs.
 COPY --from=build --chown=node:node /app/.next/server ./.next/server
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
+RUN mkdir -p /app/reports && chown node:node /app/reports
+
 USER node
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "cluster.js"]

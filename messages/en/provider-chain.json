@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "Success",
     "retry_success": "Retry Success",
+    "response_incomplete": "Response Incomplete",
     "retry_failed": "Retry Failed",
     "system_error": "System Error",
     "resource_not_found": "Resource Not Found (404)",
@@ -60,6 +61,7 @@
     "concurrent_limit_failed": "Concurrent Limit",
     "http2_fallback": "HTTP/2 Fallback",
     "session_reuse": "Session Reuse",
+    "affinity_hit": "Cache Reuse (Prefix Affinity)",
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
     "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
@@ -69,7 +71,8 @@
     "hedge_winner": "Hedge Winner",
     "hedge_loser_cancelled": "Hedge Loser (Cancelled)",
     "hedge_loser_billed": "Hedge Loser (Billed)",
-    "client_abort": "Client Aborted"
+    "client_abort": "Client Aborted",
+    "client_abort_no_first_byte": "Client Aborted Before First Byte"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",
@@ -249,6 +252,27 @@
     "session_reuse": "Session Reuse",
     "weighted_random": "Weighted Random",
     "group_filtered": "Group Filtered",
-    "fail_open_fallback": "Fail-Open Fallback"
+    "fail_open_fallback": "Fail-Open Fallback",
+    "prefix_affinity": "Longest-Prefix Affinity"
+  },
+  "affinity": {
+    "matchedDepth": "Matched depth",
+    "matchedPrefixBytes": "Matched prefix bytes",
+    "matchedFp": "Matched fingerprint"
+  },
+  "streamGate": {
+    "title": "Stream Gate Commit",
+    "frameIndex": "Trigger frame",
+    "chunkIndex": "Trigger chunk",
+    "eventName": "Trigger event",
+    "bufferedBytes": "Buffered bytes",
+    "echoExcludedBytes": "Echo-excluded bytes",
+    "gateWaitMs": "Gate wait"
+  },
+  "replayServe": {
+    "sources": {
+      "completed": "Completed replay",
+      "attached_live": "Attached to live stream"
+    }
   }
 }

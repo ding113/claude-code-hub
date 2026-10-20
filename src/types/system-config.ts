@@ -5,6 +5,9 @@ import type { IpExtractionConfig } from "@/types/ip-extraction";
 export type BillingModelSource = "original" | "redirected";
 export type CodexPriorityBillingSource = "requested" | "actual";
 
+// F1 流式内容门控模式: 'off' (关闭) | 'shadow' (仅旁路统计) | 'enforce' (启用)
+export type StreamGateSettingMode = "off" | "shadow" | "enforce";
+
 export interface ResponseFixerConfig {
   fixTruncatedJson: boolean;
   fixSseFormat: boolean;
@@ -47,6 +50,9 @@ export interface SystemSettings {
   // 开启后：竞速落败的供应商不再被直接掐断，而是后台拿回其上游响应并按 token 用量计费，
   //         其费用异步累加进该请求的总花费（与上游对多个供应商分别计费保持一致）。
   billHedgeLosers: boolean;
+
+  // Legacy streaming hedge concurrency cap (includes the primary attempt).
+  legacyHedgeMaxInFlight: number;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -146,6 +152,38 @@ export interface SystemSettings {
   publicStatusWindowHours: number;
   publicStatusAggregationIntervalMinutes: number;
 
+  // F1 流式内容门控模式（默认 enforce）
+  // enforce：首个有效内容帧前缓冲，错误/空流时自动切换供应商；shadow：仅旁路统计分歧
+  streamGateMode: StreamGateSettingMode;
+
+  // 忽略客户端 Session ID（默认开启）
+  // 开启后：可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定），
+  // 不可指纹化的请求仍走会话复用
+  affinityIgnoreClientSessionId: boolean;
+
+  // F2 Replay（响应缓存与上游连接复用）开关覆写
+  // null = 跟随环境变量 ENABLE_REQUEST_REPLAY（默认 true）
+  replayEnabled: boolean | null;
+  // F2 Replay 完成 payload 的可重放窗口(分钟)
+  replayCacheTtlMinutes: number;
+
+  // F3b 最长前缀匹配缓存模拟（理论 vs 实际缓存命中率，仅观测不影响路由）开关覆写
+  // null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS（默认 true）
+  cacheEffectivenessEnabled: boolean | null;
+
+  // 内存准入（默认关闭）
+  // 开启后：请求正文与流式门控前缀按可用内存预算准入，超出时落盘或返回本地 429
+  enableMemoryAdmission: boolean;
+
+  /** Bounded streaming Discovery settings. */
+  discoveryEnabled: boolean;
+  discoveryConcurrency: number;
+  maxDiscoveryRounds: number;
+  discoverySlaMs: number;
+  stickySlaMs: number;
+  racingTotalTimeoutMs: number;
+  stickyTimeoutCooldownMs: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,6 +207,17 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商竞速输家计费（可选）
   billHedgeLosers?: boolean;
+
+  // Legacy streaming hedge concurrency cap (includes the primary attempt).
+  legacyHedgeMaxInFlight?: number;
+
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;
@@ -249,4 +298,21 @@ export interface UpdateSystemSettingsInput {
   // Public Status 全局配置（可选）
   publicStatusWindowHours?: number;
   publicStatusAggregationIntervalMinutes?: number;
+
+  // F1 流式内容门控模式（可选）
+  streamGateMode?: StreamGateSettingMode;
+
+  // 忽略客户端 Session ID（可选）
+  affinityIgnoreClientSessionId?: boolean;
+
+  // F2 Replay 开关（可选；null = 清除覆写跟随环境变量）
+  replayEnabled?: boolean | null;
+  // F2 Replay 完成 payload 的可重放窗口(分钟)
+  replayCacheTtlMinutes?: number;
+
+  // F3b 缓存模拟开关（可选；null = 清除覆写跟随环境变量）
+  cacheEffectivenessEnabled?: boolean | null;
+
+  // 内存准入开关（可选）
+  enableMemoryAdmission?: boolean;
 }

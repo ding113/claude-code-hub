@@ -66,6 +66,7 @@ function setupCircuitBreakerMocks(options?: {
       options?.config?.loadProviderCircuitConfig ?? vi.fn(async () => defaultConfig),
   }));
   vi.doMock("@/lib/redis/pubsub", () => ({
+    CACHE_INVALIDATION_RESYNC_MESSAGE: "cch:cache:resync",
     publishCacheInvalidation: options?.pubsub?.publishCacheInvalidation ?? vi.fn(async () => {}),
     subscribeCacheInvalidation:
       options?.pubsub?.subscribeCacheInvalidation ?? vi.fn(async () => null),
@@ -398,6 +399,50 @@ describe("circuit-breaker", () => {
 
       await recordFailure(1, new Error("boom"));
       expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(2);
+    } finally {
+      if (originalCi === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = originalCi;
+      }
+    }
+  });
+
+  test("pub/sub 重连 resync 应清除全部已加载的配置缓存", async () => {
+    setupFakeTime();
+
+    const originalCi = process.env.CI;
+    process.env.CI = "false";
+
+    try {
+      vi.resetModules();
+      let onInvalidation: ((message: string) => void) | null = null;
+      const loadProviderCircuitConfigMock = vi.fn(async () => ({
+        failureThreshold: 10,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      }));
+
+      setupCircuitBreakerMocks({
+        config: { loadProviderCircuitConfig: loadProviderCircuitConfigMock },
+        pubsub: {
+          subscribeCacheInvalidation: vi.fn(async (_channel, callback) => {
+            onInvalidation = callback;
+            return () => {};
+          }),
+        },
+      });
+
+      const { recordFailure } = await import("@/lib/circuit-breaker");
+      await recordFailure(1, new Error("boom"));
+      await recordFailure(2, new Error("boom"));
+      expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(2);
+
+      onInvalidation!("cch:cache:resync");
+
+      await recordFailure(1, new Error("boom"));
+      await recordFailure(2, new Error("boom"));
+      expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(4);
     } finally {
       if (originalCi === undefined) {
         delete process.env.CI;

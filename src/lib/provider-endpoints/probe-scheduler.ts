@@ -14,11 +14,73 @@ import {
 
 const LOCK_KEY = "locks:endpoint-probe-scheduler";
 
+function warnInvalidEnvironmentVariable(
+  name: string,
+  value: string,
+  defaultValue: boolean | number
+): void {
+  logger.warn("[EndpointProbeScheduler] Invalid environment variable, using default", {
+    name,
+    value,
+    defaultValue,
+  });
+}
+
+function parseBooleanWithDefault(
+  value: string | undefined,
+  fallback: boolean,
+  name: string
+): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  switch (value) {
+    case "true":
+    case "1":
+      return true;
+    case "false":
+    case "0":
+      return false;
+    default:
+      warnInvalidEnvironmentVariable(name, value, fallback);
+      return fallback;
+  }
+}
+
+function parsePositiveIntWithDefault(
+  value: string | undefined,
+  fallback: number,
+  name: string
+): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!/^\d+$/.test(value)) {
+    warnInvalidEnvironmentVariable(name, value, fallback);
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    warnInvalidEnvironmentVariable(name, value, fallback);
+    return fallback;
+  }
+
+  return parsed;
+}
+
 function parseIntWithDefault(value: string | undefined, fallback: number): number {
   const n = value ? Number.parseInt(value, 10) : Number.NaN;
   return Number.isFinite(n) ? n : fallback;
 }
 
+const SCHEDULER_ENABLED = parseBooleanWithDefault(
+  process.env.ENDPOINT_PROBE_SCHEDULER_ENABLED,
+  true,
+  "ENDPOINT_PROBE_SCHEDULER_ENABLED"
+);
 // Base interval (default 60s)
 const BASE_INTERVAL_MS = Math.max(
   1,
@@ -26,8 +88,12 @@ const BASE_INTERVAL_MS = Math.max(
 );
 // Single-vendor interval (10 minutes)
 const SINGLE_VENDOR_INTERVAL_MS = 600_000;
-// Timeout override interval (10 seconds)
-const TIMEOUT_OVERRIDE_INTERVAL_MS = 10_000;
+// Timeout override interval (default 10 seconds)
+const TIMEOUT_OVERRIDE_INTERVAL_MS = parsePositiveIntWithDefault(
+  process.env.ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS,
+  10_000,
+  "ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS"
+);
 // Scheduler tick interval - use shortest possible interval to support timeout override
 const TICK_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, TIMEOUT_OVERRIDE_INTERVAL_MS);
 // Max idle DB polling interval (bounded by base interval)
@@ -51,6 +117,7 @@ const schedulerState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__?: boolean;
   __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__?: number;
   __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__?: number;
+  __CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__?: Promise<void>;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -324,7 +391,24 @@ async function runProbeCycle(): Promise<void> {
   }
 }
 
+function launchProbeCycle(): void {
+  if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__) return;
+  const current = runProbeCycle().finally(() => {
+    if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ === current) {
+      schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ = undefined;
+    }
+  });
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ = current;
+}
+
 export function startEndpointProbeScheduler(): void {
+  if (!SCHEDULER_ENABLED) {
+    logger.info("[EndpointProbeScheduler] Disabled by configuration", {
+      name: "ENDPOINT_PROBE_SCHEDULER_ENABLED",
+    });
+    return;
+  }
+
   if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__) {
     return;
   }
@@ -333,10 +417,10 @@ export function startEndpointProbeScheduler(): void {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ = true;
   clearNextWorkHints();
 
-  void runProbeCycle();
+  launchProbeCycle();
 
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__ = setInterval(() => {
-    void runProbeCycle();
+    launchProbeCycle();
   }, TICK_INTERVAL_MS);
 
   logger.info("[EndpointProbeScheduler] Started", {
@@ -352,7 +436,7 @@ export function startEndpointProbeScheduler(): void {
   });
 }
 
-export function stopEndpointProbeScheduler(): void {
+export async function stopEndpointProbeScheduler(): Promise<void> {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__ = true;
   clearNextWorkHints();
 
@@ -364,14 +448,17 @@ export function stopEndpointProbeScheduler(): void {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__ = undefined;
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ = false;
 
+  await schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__;
+
   const lock = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__;
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
   if (lock) {
-    void releaseLeaderLock(lock);
+    await releaseLeaderLock(lock);
   }
 }
 
 export function getEndpointProbeSchedulerStatus(): {
+  enabled: boolean;
   started: boolean;
   running: boolean;
   baseIntervalMs: number;
@@ -385,6 +472,7 @@ export function getEndpointProbeSchedulerStatus(): {
   lockTtlMs: number;
 } {
   return {
+    enabled: SCHEDULER_ENABLED,
     started: schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ === true,
     running: schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_RUNNING__ === true,
     baseIntervalMs: BASE_INTERVAL_MS,

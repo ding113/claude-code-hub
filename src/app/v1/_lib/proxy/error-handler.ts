@@ -1,3 +1,4 @@
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import {
   isClaudeErrorFormat,
@@ -7,9 +8,12 @@ import {
 } from "@/lib/error-override-validator";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
-import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import { updateMessageRequestDetailsDurably } from "@/repository/message";
 import type { SystemSettings } from "@/types/system-config";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { attachSessionIdToErrorResponse } from "./error-session-id";
@@ -21,6 +25,7 @@ import {
   ProxyError,
   type RateLimitError,
 } from "./errors";
+import { recordLocalCapacityRejection } from "./local-capacity-log";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -168,6 +173,40 @@ function getRateLimitStatusCode(limitType: string): number {
 
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
+    if (isLocalCapacityError(error)) {
+      const response = await buildLocalCapacityResponse();
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: error.message,
+        statusCode: 429,
+      });
+      if (session.messageContext) {
+        await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+          () => undefined
+        );
+      } else {
+        // message_request 行在守卫链末尾才创建；此前的容量拒绝按被拦截请求补一行，仪表盘才可见。
+        const { user, apiKey } = session.authState ?? {};
+        if (user && apiKey) {
+          void recordLocalCapacityRejection({
+            userId: user.id,
+            apiKey,
+            stage: "pipeline",
+            errorMessage: error.message,
+            durationMs: Date.now() - session.startTime,
+            model: session.request.model,
+            sessionId: session.sessionId,
+            endpoint: session.getEndpoint(),
+            userAgent: session.userAgent,
+            clientIp: session.clientIp,
+          });
+        }
+        await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+          () => undefined
+        );
+      }
+      return await attachSessionIdToErrorResponse(session.sessionId, response);
+    }
     // 分离两种消息：
     // - clientErrorMessage: 返回给客户端的安全消息（不含供应商名称）
     // - logErrorMessage: 记录到数据库的详细消息（包含供应商名称，便于排查）
@@ -177,6 +216,7 @@ export class ProxyErrorHandler {
     let rateLimitMetadata: Record<string, unknown> | null = null;
     let settingsResolved = false;
     let cachedSettings: SystemSettings | null = null;
+    const databaseError = findSafeDatabaseError(error);
 
     const getSettings = async (): Promise<SystemSettings | null> => {
       if (settingsResolved) return cachedSettings;
@@ -186,15 +226,21 @@ export class ProxyErrorHandler {
         return cachedSettings;
       } catch (settingsError) {
         settingsResolved = true;
+        const settingsDatabaseError = findSafeDatabaseError(settingsError);
         logger.warn("ProxyErrorHandler: failed to load system settings, using defaults", {
-          error: settingsError instanceof Error ? settingsError.message : String(settingsError),
+          error:
+            settingsDatabaseError?.message ??
+            (settingsError instanceof Error ? settingsError.message : String(settingsError)),
+          databaseCode: settingsDatabaseError?.code,
+          admissionPool: settingsDatabaseError?.pool,
+          admissionMaxOutstanding: settingsDatabaseError?.maxOutstanding,
         });
         return null;
       }
     };
 
     // 优先处理 RateLimitError（新增）
-    if (isRateLimitError(error)) {
+    if (!databaseError && isRateLimitError(error)) {
       clientErrorMessage = error.message;
       logErrorMessage = error.message;
       // 使用 helper 函数计算状态码
@@ -241,8 +287,24 @@ export class ProxyErrorHandler {
       logErrorMessage = "代理请求发生未知错误";
     }
 
+    if (databaseError) {
+      // Drizzle wraps the admission cause with SQL text and bound parameters.
+      // Never let that wrapper cross the public, log, or observability boundary.
+      try {
+        const { getLocale } = await import("next-intl/server");
+        clientErrorMessage = await getErrorMessageServer(
+          await getLocale(),
+          ERROR_CODES.DATABASE_ERROR
+        );
+      } catch {
+        clientErrorMessage = "An error occurred";
+      }
+      logErrorMessage = databaseError.message;
+      statusCode = databaseError.kind === "admission" ? 503 : 500;
+    }
+
     // 后备方案：如果状态码仍是 500，尝试从 provider chain 中提取最后一次实际请求的状态码
-    if (statusCode === 500) {
+    if (!databaseError && statusCode === 500) {
       const lastRequestStatusCode = ProxyErrorHandler.getLastRequestStatusCode(session);
       if (lastRequestStatusCode && lastRequestStatusCode !== 200) {
         statusCode = lastRequestStatusCode;
@@ -270,18 +332,22 @@ export class ProxyErrorHandler {
         responseText,
       });
       // 先发出 trace，再写数据库，避免 DB 持久化失败吞掉本次错误诊断。
-      await ProxyErrorHandler.logErrorToDatabase(
-        session,
-        logErrorMessage,
-        finalResponse.status,
-        null
-      );
+      if (databaseError) {
+        ProxyErrorHandler.endRequestTracking(session);
+      } else {
+        await ProxyErrorHandler.logErrorToDatabase(
+          session,
+          logErrorMessage,
+          finalResponse.status,
+          null
+        );
+      }
       return finalResponse;
     };
 
     // 检测是否有覆写配置（响应体或状态码）
     // 使用异步版本确保错误规则已加载
-    if (error instanceof Error) {
+    if (error instanceof Error && !databaseError) {
       const override = await getErrorOverrideAsync(error);
       if (override) {
         // 运行时校验覆写状态码范围（400-599），防止数据库脏数据导致 Response 抛 RangeError
@@ -512,7 +578,7 @@ export class ProxyErrorHandler {
       typeof upstreamRequestId === "string" && upstreamRequestId.trim()
         ? upstreamRequestId.trim()
         : undefined;
-    const settings = await getSettings();
+    const settings = databaseError ? null : await getSettings();
     const finalClientErrorMessage = resolveFinalClientErrorMessage({
       error,
       currentFallbackMessage: clientErrorMessage,
@@ -623,7 +689,6 @@ export class ProxyErrorHandler {
     }
 
     const duration = Date.now() - session.startTime;
-    await updateMessageRequestDuration(session.messageContext.id, duration);
 
     // 如果是限流错误，将元数据附加到错误消息中
     let finalErrorMessage = errorMessage;
@@ -631,18 +696,31 @@ export class ProxyErrorHandler {
       finalErrorMessage = `${errorMessage} | rate_limit_metadata: ${JSON.stringify(rateLimitMetadata)}`;
     }
 
-    // 保存错误信息和决策链
-    await updateMessageRequestDetails(session.messageContext.id, {
-      errorMessage: finalErrorMessage,
-      providerChain: session.getProviderChain(),
-      statusCode: statusCode,
-      model: session.getCurrentModel() ?? undefined,
-      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
-      context1mApplied: session.getContext1mApplied(),
-      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
-    });
+    // 持久化失败也必须结束追踪，避免本地过载响应留下活跃请求。
+    try {
+      await updateMessageRequestDetailsDurably(session.messageContext.id, {
+        durationMs: duration,
+        errorMessage: finalErrorMessage,
+        providerChain: session.getProviderChain(),
+        routingTrace: session.finalizeRoutingTrace(statusCode),
+        statusCode: statusCode,
+        model: session.getCurrentModel() ?? undefined,
+        providerId: session.provider?.id, // 更新重试切换后的最终供应商 ID
+        context1mApplied: session.getContext1mApplied(),
+        swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
+      });
+    } finally {
+      ProxyErrorHandler.endRequestTracking(session);
+      void session.closeLiveObservability().catch((error) => {
+        logger.warn("ProxyErrorHandler: Failed to close live observability", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+  }
 
-    // 记录请求结束
+  private static endRequestTracking(session: ProxySession): void {
+    if (!session.messageContext) return;
     const tracker = ProxyStatusTracker.getInstance();
     tracker.endRequest(session.messageContext.user.id, session.messageContext.id);
   }

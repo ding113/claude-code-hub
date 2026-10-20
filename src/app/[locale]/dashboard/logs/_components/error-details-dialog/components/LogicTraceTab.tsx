@@ -8,6 +8,7 @@ import {
   Clock,
   Copy,
   Database,
+  DatabaseZap,
   Filter,
   GitBranch,
   Globe,
@@ -15,6 +16,7 @@ import {
   Link2,
   RefreshCw,
   Server,
+  ShieldCheck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -22,18 +24,27 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Link } from "@/i18n/routing";
 import { getSessionOriginChain } from "@/lib/api-client/v1/actions/session-origin-chain";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { findHedgeLoserCost, summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace } from "@/types/routing-trace";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
+import { CachePerformance } from "./CachePerformance";
+import { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
+import { buildLogsFilterHref } from "./logs-filter-href";
 import { StepCard, type StepStatus } from "./StepCard";
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
   // Check for session reuse first
   if (item.reason === "session_reuse" || item.selectionMethod === "session_reuse") {
+    return "session_reuse";
+  }
+  // Affinity hit is a reuse-style nomination step: same visual family as session reuse
+  if (item.reason === "affinity_hit" || item.selectionMethod === "prefix_affinity") {
     return "session_reuse";
   }
   if (
@@ -45,6 +56,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   }
   if (
     item.reason === "retry_failed" ||
+    item.reason === "response_incomplete" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
@@ -52,7 +64,8 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
     item.reason === "concurrent_limit_failed" ||
     item.reason === "hedge_loser_cancelled" ||
     item.reason === "hedge_loser_billed" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return "failure";
   }
@@ -63,9 +76,14 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
+  routingTrace,
   sessionId,
+  sourceSessionId,
+  sessionIdentityKind,
   blockedBy,
   blockedReason,
+  isReplay,
+  replaySourceRequestId,
   requestSequence,
   hedgeLosers,
   costUsd,
@@ -73,6 +91,12 @@ export function LogicTraceTab({
   outputTokens,
   cacheCreationInputTokens,
   cacheReadInputTokens,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  theoreticalCacheTokens,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   initialExpandedChainIndex,
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
@@ -158,7 +182,7 @@ export function LogicTraceTab({
   };
 
   const isWarmupSkipped = blockedBy === "warmup";
-  const isBlocked = !!blockedBy && !isWarmupSkipped;
+  const isBlocked = !!blockedBy && !isWarmupSkipped && !isReplay;
   const parsedBlockedReason = parseBlockedReason(blockedReason);
 
   // Check if this is a session reuse flow (provider reused from session cache)
@@ -170,8 +194,15 @@ export function LogicTraceTab({
   const sessionReuseContext = isSessionReuseFlow ? providerChain?.[0]?.decisionContext : undefined;
   const sessionReuseProvider = isSessionReuseFlow ? providerChain?.[0] : undefined;
 
-  // Extract decision context from first chain item (not used for session reuse)
-  const decisionContext = isSessionReuseFlow ? undefined : providerChain?.[0]?.decisionContext;
+  // F3a: prefix affinity hit flow (cache-reuse nomination replaces initial selection)
+  const isAffinityHitFlow =
+    providerChain?.[0]?.reason === "affinity_hit" ||
+    providerChain?.[0]?.selectionMethod === "prefix_affinity";
+
+  // Extract decision context from first chain item (not used for reuse-style flows,
+  // whose first item carries an empty placeholder context)
+  const decisionContext =
+    isSessionReuseFlow || isAffinityHitFlow ? undefined : providerChain?.[0]?.decisionContext;
 
   // Extract filtered providers from all chain items (not applicable for session reuse)
   const filteredProviders = isSessionReuseFlow
@@ -184,9 +215,39 @@ export function LogicTraceTab({
   // Count providers at each stage
   const totalProviders = decisionContext?.totalProviders || 0;
   const afterHealthCheck = decisionContext?.afterHealthCheck || 0;
+  const normalizedRoutingTrace = normalizeRoutingTrace(routingTrace);
+  const isLeaseConflictProtection =
+    normalizedRoutingTrace?.mode === "single_upstream" &&
+    normalizedRoutingTrace.bypassReason === "lease_conflict";
 
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
+
+  const hasHedgeAttemptEvidence =
+    normalizedRoutingTrace?.events.some((event) => event.attemptId != null) ||
+    providerChain?.some((item) => item.attemptNumber != null);
+  if (
+    normalizedRoutingTrace?.mode === "discovery" ||
+    (normalizedRoutingTrace?.mode === "legacy_hedge" && hasHedgeAttemptEvidence)
+  ) {
+    return (
+      <div className="space-y-5">
+        <RoutingModeBanner trace={normalizedRoutingTrace} />
+        <DiscoveryTraceView
+          trace={normalizedRoutingTrace}
+          providerChain={providerChain ?? []}
+          hedgeLosers={hedgeLosers}
+          costUsd={costUsd}
+          winnerUsage={{
+            inputTokens,
+            outputTokens,
+            cacheCreationInputTokens,
+            cacheReadInputTokens,
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -206,6 +267,44 @@ export function LogicTraceTab({
         </div>
       )}
 
+      {/* Replay audit info (served without a new upstream charge) */}
+      {isReplay && (
+        <div className="rounded-lg border bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <DatabaseZap className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-medium text-teal-900 dark:text-teal-100">
+              {t("replayServe.title")}
+            </span>
+            {parsedBlockedReason?.source && (
+              <Badge variant="outline" className="border-teal-600 text-teal-700 dark:text-teal-300">
+                {tChain.has(`replayServe.sources.${parsedBlockedReason.source}`)
+                  ? tChain(`replayServe.sources.${parsedBlockedReason.source}`)
+                  : parsedBlockedReason.source}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-teal-800 dark:text-teal-200">{t("replayServe.desc")}</p>
+          {parsedBlockedReason?.replayId && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-teal-900 dark:text-teal-100">{t("replayServe.replayId")}:</span>
+              <code className="bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded font-mono">
+                {parsedBlockedReason.replayId}
+              </code>
+            </div>
+          )}
+          {replaySourceRequestId != null && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-teal-900 dark:text-teal-100">
+                {t("replayServe.sourceRequestId")}:
+              </span>
+              <code className="bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded font-mono">
+                {replaySourceRequestId}
+              </code>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Block Info */}
       {isBlocked && blockedBy && (
         <div className="rounded-lg border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 p-4 space-y-2">
@@ -215,7 +314,11 @@ export function LogicTraceTab({
               {t("blocked.title")}
             </span>
             <Badge variant="outline" className="border-orange-600 text-orange-600">
-              {blockedBy === "sensitive_word" ? t("blocked.sensitiveWord") : blockedBy}
+              {blockedBy === "sensitive_word"
+                ? t("blocked.sensitiveWord")
+                : blockedBy === "local_capacity"
+                  ? t("blocked.localCapacity")
+                  : blockedBy}
             </Badge>
           </div>
           {parsedBlockedReason && (
@@ -243,17 +346,25 @@ export function LogicTraceTab({
         </div>
       )}
 
+      {normalizedRoutingTrace && <RoutingModeBanner trace={normalizedRoutingTrace} />}
+
       {/* Decision Chain Header */}
       {providerChain && providerChain.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold flex items-center gap-2">
-              {isSessionReuseFlow ? (
+              {isLeaseConflictProtection ? (
+                <ShieldCheck className="h-4 w-4 text-amber-600" />
+              ) : isSessionReuseFlow ? (
                 <Link2 className="h-4 w-4 text-violet-600" />
+              ) : isAffinityHitFlow ? (
+                <DatabaseZap className="h-4 w-4 text-teal-600" />
               ) : (
                 <GitBranch className="h-4 w-4 text-blue-600" />
               )}
-              {t("logicTrace.title")}
+              {isLeaseConflictProtection
+                ? t("logicTrace.singleRouteSelectionTitle")
+                : t("logicTrace.title")}
             </h4>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isSessionReuseFlow ? (
@@ -262,6 +373,13 @@ export function LogicTraceTab({
                   className="text-[10px] bg-violet-50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300"
                 >
                   {t("logicTrace.sessionReuse")}
+                </Badge>
+              ) : isAffinityHitFlow ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300"
+                >
+                  {tChain("reasons.affinity_hit")}
                 </Badge>
               ) : (
                 <>
@@ -306,11 +424,28 @@ export function LogicTraceTab({
                       {sessionReuseContext?.sessionId && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
-                            {t("logicTrace.sessionIdLabel")}:
+                            {sessionIdentityKind === "prefix_affinity"
+                              ? t("metadata.prefixId")
+                              : t("logicTrace.sessionIdLabel")}
+                            :
                           </span>
-                          <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono truncate max-w-[120px]">
-                            {sessionReuseContext.sessionId.slice(0, 8)}...
-                          </code>
+                          <Link
+                            href={buildLogsFilterHref(sessionReuseContext.sessionId)}
+                            className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                          >
+                            {sessionReuseContext.sessionId}
+                          </Link>
+                        </div>
+                      )}
+                      {sourceSessionId && sourceSessionId !== sessionReuseContext?.sessionId && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">{t("metadata.sessionId")}:</span>
+                          <Link
+                            href={buildLogsFilterHref(sourceSessionId)}
+                            className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                          >
+                            {sourceSessionId}
+                          </Link>
                         </div>
                       )}
                       {requestSequence !== undefined && requestSequence !== null && (
@@ -366,12 +501,17 @@ export function LogicTraceTab({
                     </div>
                   </div>
 
-                  {/* Cache Optimization Hint */}
                   <div className="pt-2 border-t border-muted/50">
-                    <div className="flex items-start gap-2 text-muted-foreground">
-                      <Zap className="h-3 w-3 mt-0.5 shrink-0 text-violet-500" />
-                      <span className="text-[10px]">{t("logicTrace.cacheOptimizationHint")}</span>
-                    </div>
+                    <CachePerformance
+                      actualCacheRate={actualCacheRate ?? null}
+                      theoreticalCacheRate={theoreticalCacheRate ?? null}
+                      requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+                      requestCacheMetricAvailability={requestCacheMetricAvailability}
+                      cacheInputTotal={cacheInputTotal ?? null}
+                      cacheReadInputTokens={cacheReadInputTokens ?? null}
+                      theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+                      compact
+                    />
                   </div>
                 </div>
               }
@@ -385,7 +525,11 @@ export function LogicTraceTab({
                 setOriginOpen(open);
                 if (open && originChain === undefined && !originLoading) {
                   setOriginLoading(true);
-                  getSessionOriginChain(sessionId)
+                  getSessionOriginChain(
+                    sessionId,
+                    requestSequence ?? undefined,
+                    sourceSessionId ?? undefined
+                  )
                     .then((result) => {
                       setOriginChain(result.ok ? result.data : null);
                     })
@@ -786,13 +930,16 @@ export function LogicTraceTab({
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
             const isSessionReuse =
               item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+            const isAffinityHit =
+              item.reason === "affinity_hit" || item.selectionMethod === "prefix_affinity";
 
             // Determine icon based on type
             const isHedgeTriggered = item.reason === "hedge_triggered";
             const isHedgeWinner = item.reason === "hedge_winner";
             const isHedgeLoser = item.reason === "hedge_loser_cancelled";
             const isHedgeLoserBilled = item.reason === "hedge_loser_billed";
-            const isClientAbort = item.reason === "client_abort";
+            const isClientAbort =
+              item.reason === "client_abort" || item.reason === "client_abort_no_first_byte";
             // Resolved hedge losers (cancelled or billed) carry billing detail when
             // their reclaimed upstream response was charged to the request total.
             const hedgeLoserBilling =
@@ -801,35 +948,41 @@ export function LogicTraceTab({
                 : null;
             const stepIcon = isSessionReuse
               ? Link2
-              : isHedgeTriggered
-                ? GitBranch
-                : isHedgeLoser || isHedgeLoserBilled || isClientAbort
-                  ? XCircle
-                  : isRetry
-                    ? RefreshCw
-                    : status === "success"
-                      ? CheckCircle
-                      : status === "failure"
-                        ? XCircle
-                        : Server;
+              : isAffinityHit
+                ? DatabaseZap
+                : isHedgeTriggered
+                  ? GitBranch
+                  : isHedgeLoser || isHedgeLoserBilled || isClientAbort
+                    ? XCircle
+                    : isRetry
+                      ? RefreshCw
+                      : status === "success"
+                        ? CheckCircle
+                        : status === "failure"
+                          ? XCircle
+                          : Server;
 
             // Determine title based on type
             // For session reuse flow, show simplified "Execute Request" title for the first item
             const stepTitle = isSessionReuse
               ? t("logicTrace.executeRequest")
-              : isHedgeTriggered
-                ? tChain("timeline.hedgeTriggered")
-                : isHedgeLoser
-                  ? tChain("timeline.hedgeLoserCancelled")
-                  : isHedgeLoserBilled
-                    ? tChain("timeline.hedgeLoserBilled")
-                    : isClientAbort
-                      ? tChain("timeline.clientAbort")
-                      : isRetry
-                        ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
-                        : item.reason === "hedge_winner"
-                          ? tChain("timeline.hedgeWinner")
-                          : t("logicTrace.attemptProvider", { provider: item.name });
+              : isAffinityHit
+                ? tChain("reasons.affinity_hit")
+                : isHedgeTriggered
+                  ? tChain("timeline.hedgeTriggered")
+                  : isHedgeLoser
+                    ? tChain("timeline.hedgeLoserCancelled")
+                    : isHedgeLoserBilled
+                      ? tChain("timeline.hedgeLoserBilled")
+                      : isClientAbort
+                        ? item.reason === "client_abort_no_first_byte"
+                          ? tChain("reasons.client_abort_no_first_byte")
+                          : tChain("timeline.clientAbort")
+                        : isRetry
+                          ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
+                          : item.reason === "hedge_winner"
+                            ? tChain("timeline.hedgeWinner")
+                            : t("logicTrace.attemptProvider", { provider: item.name });
 
             return (
               <StepCard
@@ -838,7 +991,7 @@ export function LogicTraceTab({
                 icon={stepIcon}
                 title={stepTitle}
                 subtitle={
-                  isSessionReuse
+                  isSessionReuse || isAffinityHit
                     ? item.statusCode
                       ? t("logicTrace.httpStatus", {
                           code: item.statusCode,
@@ -909,6 +1062,143 @@ export function LogicTraceTab({
                           )}
                           <div className="text-muted-foreground text-[10px] mt-1">
                             {tChain("timeline.basedOnCache")}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* F3a Affinity Hit Info */}
+                    {isAffinityHit && (
+                      <div className="pb-2 border-b border-muted/50">
+                        <div className="flex items-center gap-1 text-teal-600 dark:text-teal-400 mb-2">
+                          <DatabaseZap className="h-3 w-3" />
+                          <span className="font-medium">{tChain("reasons.affinity_hit")}</span>
+                        </div>
+                        {(sessionId || sourceSessionId) && (
+                          <div className="mb-2 grid grid-cols-1 gap-1.5 min-w-0">
+                            {sessionId && (
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="text-muted-foreground shrink-0">
+                                  {sessionIdentityKind === "prefix_affinity"
+                                    ? t("metadata.prefixId")
+                                    : t("metadata.sessionId")}
+                                  :
+                                </span>
+                                <Link
+                                  href={buildLogsFilterHref(sessionId)}
+                                  className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                                >
+                                  {sessionId}
+                                </Link>
+                              </div>
+                            )}
+                            {sourceSessionId && sourceSessionId !== sessionId && (
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="text-muted-foreground shrink-0">
+                                  {t("metadata.sessionId")}:
+                                </span>
+                                <Link
+                                  href={buildLogsFilterHref(sourceSessionId)}
+                                  className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                                >
+                                  {sourceSessionId}
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0 text-[11px]">
+                          {item.affinity?.matchedDepth != null && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedDepth")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.affinity.matchedDepth}</span>
+                            </div>
+                          )}
+                          {item.affinity?.matchedPrefixBytes != null && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedPrefixBytes")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.affinity.matchedPrefixBytes}</span>
+                            </div>
+                          )}
+                          {item.affinity?.matchedFp && (
+                            <div className="col-span-2 min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedFp")}:
+                              </span>{" "}
+                              <code className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all">
+                                {item.affinity.matchedFp}
+                              </code>
+                            </div>
+                          )}
+                        </div>
+                        <div className="pt-2 mt-2 border-t border-muted/50">
+                          <CachePerformance
+                            actualCacheRate={actualCacheRate ?? null}
+                            theoreticalCacheRate={theoreticalCacheRate ?? null}
+                            requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+                            requestCacheMetricAvailability={requestCacheMetricAvailability}
+                            cacheInputTotal={cacheInputTotal ?? null}
+                            cacheReadInputTokens={cacheReadInputTokens ?? null}
+                            theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+                            compact
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* F1 Stream Gate Commit Marker */}
+                    {item.streamGate && (
+                      <div className="pb-2 border-b border-muted/50">
+                        <div className="flex items-center gap-1 text-rose-600 dark:text-rose-400 mb-2">
+                          <Filter className="h-3 w-3" />
+                          <span className="font-medium">{tChain("streamGate.title")}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0 text-[11px]">
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.frameIndex")}:
+                            </span>{" "}
+                            <span className="font-mono">#{item.streamGate.frameIndex}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.chunkIndex")}:
+                            </span>{" "}
+                            <span className="font-mono">#{item.streamGate.chunkIndex}</span>
+                          </div>
+                          {item.streamGate.eventName && (
+                            <div className="col-span-2 min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("streamGate.eventName")}:
+                              </span>{" "}
+                              <code className="text-[10px] px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 rounded font-mono break-all">
+                                {item.streamGate.eventName}
+                              </code>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.bufferedBytes")}:
+                            </span>{" "}
+                            <span className="font-mono">{item.streamGate.bufferedBytes}</span>
+                          </div>
+                          {item.streamGate.echoExcludedBytes > 0 && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("streamGate.echoExcludedBytes")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.streamGate.echoExcludedBytes}</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.gateWaitMs")}:
+                            </span>{" "}
+                            <span className="font-mono">{item.streamGate.gateWaitMs}ms</span>
                           </div>
                         </div>
                       </div>

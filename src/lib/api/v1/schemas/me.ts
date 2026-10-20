@@ -3,7 +3,7 @@ import { z } from "@hono/zod-openapi";
 const NumberQuerySchema = z.coerce.number().optional();
 const BooleanQuerySchema = z
   .union([z.literal("true"), z.literal("false"), z.boolean()])
-  .transform((value) => value === true || value === "true")
+  .transform((value: "true" | "false" | boolean) => value === true || value === "true")
   .optional();
 
 export const MeUsageLogsQuerySchema = z.object({
@@ -16,7 +16,7 @@ export const MeUsageLogsQuerySchema = z.object({
   endDate: z.string().optional().describe("End date in YYYY-MM-DD."),
   startTime: NumberQuerySchema.describe("Start timestamp in milliseconds."),
   endTime: NumberQuerySchema.describe("End timestamp in milliseconds."),
-  sessionId: z.string().optional().describe("Session id filter."),
+  sessionId: z.string().optional().describe("Exact Session ID or Prefix ID filter."),
   model: z.string().optional().describe("Model filter."),
   actualResponseModelMismatch: BooleanQuerySchema.describe(
     "Only include records whose requested model differs from the actual response model."

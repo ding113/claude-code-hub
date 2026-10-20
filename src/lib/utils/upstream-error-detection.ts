@@ -74,12 +74,15 @@ const FAKE_200_CODES = {
   JSON_ERROR_NON_EMPTY: "FAKE_200_JSON_ERROR_NON_EMPTY",
   JSON_ERROR_MESSAGE_NON_EMPTY: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
   JSON_MESSAGE_KEYWORD_MATCH: "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH",
+  OPENAI_RESPONSE_FAILED: "FAKE_200_OPENAI_RESPONSE_FAILED",
 } as const;
 
 // SSE 快速过滤：仅当文本里“看起来存在 JSON key”时才进入 parseSSEData（避免无谓解析）。
 // 注意：这里必须是 `"key"\s*:` 形式，避免误命中 JSON 字符串内容里的 `\"key\"`。
 const MAY_HAVE_JSON_ERROR_KEY = /"error"\s*:/;
 const MAY_HAVE_JSON_MESSAGE_KEY = /"message"\s*:/;
+const MAY_HAVE_OPENAI_RESPONSES_FAILED_SIGNAL =
+  /(?:event:\s*response\.failed|"type"\s*:\s*"response\.failed"|"status"\s*:\s*"failed")/;
 
 const HTML_DOC_SNIFF_MAX_CHARS = 1024;
 const HTML_DOCTYPE_RE = /^<!doctype\s+html[\s>]/i;
@@ -165,9 +168,85 @@ const ERROR_STATUS_MATCHERS: Array<{ statusCode: number; matcherId: string; re: 
   {
     statusCode: 400,
     matcherId: "bad_request",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400(?![\p{L}\p{N}_]|\.\d)|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400(?![\p{L}\p{N}_]|\.\d)|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bcyber_policy\b|\bflagged\s+for\s+possible\s+cybersecurity\s+risk\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
   },
 ];
+
+function toHttpErrorStatus(value: unknown): number | null {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d{3}$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN;
+  return Number.isInteger(numeric) && numeric >= 400 && numeric <= 599 ? numeric : null;
+}
+
+const STRUCTURED_BAD_REQUEST_TYPES = new Set([
+  "bad_request_error",
+  "invalid_request",
+  "invalid_request_error",
+]);
+
+const STRUCTURED_BAD_REQUEST_CODES = new Set([
+  "context_length_exceeded",
+  "cyber_policy",
+  "invalid_prompt",
+  "invalid_value",
+  "message_too_big",
+  "string_above_max_length",
+  "unsupported_value",
+]);
+
+function normalizeStructuredErrorMarker(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;
+}
+
+/** 优先读取错误 JSON 中明确携带的 HTTP 状态，避免再靠错误文案猜测。 */
+function inferStructuredErrorStatusCode(text: string): UpstreamErrorStatusInferenceResult | null {
+  if (!text.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!isPlainRecord(parsed)) return null;
+
+    const response = isPlainRecord(parsed.response) ? parsed.response : null;
+    const containers = [
+      parsed,
+      isPlainRecord(parsed.error) ? parsed.error : null,
+      response,
+      response && isPlainRecord(response.error) ? response.error : null,
+    ];
+
+    for (const container of containers) {
+      if (!container) continue;
+      for (const field of ["status", "status_code", "statusCode", "code"] as const) {
+        const statusCode = toHttpErrorStatus(container[field]);
+        if (statusCode !== null) {
+          return { statusCode, matcherId: "structured_status" };
+        }
+      }
+    }
+
+    for (const container of containers) {
+      if (!container) continue;
+      const type = normalizeStructuredErrorMarker(container.type);
+      const code = normalizeStructuredErrorMarker(container.code);
+      const status = normalizeStructuredErrorMarker(container.status);
+      if (
+        (type !== null && STRUCTURED_BAD_REQUEST_TYPES.has(type)) ||
+        (code !== null && STRUCTURED_BAD_REQUEST_CODES.has(code)) ||
+        status === "invalid_argument"
+      ) {
+        return { statusCode: 400, matcherId: "structured_bad_request" };
+      }
+    }
+  } catch {
+    // 非 JSON 错误继续走现有文本规则。
+  }
+
+  return null;
+}
 
 /**
  * 从上游响应体文本中推断一个“更贴近错误语义”的 HTTP 状态码（用于假200修正）。
@@ -191,6 +270,9 @@ export function inferUpstreamErrorStatusCodeFromText(
     trimmed.length > STATUS_INFERENCE_MAX_CHARS
       ? trimmed.slice(0, STATUS_INFERENCE_MAX_CHARS)
       : trimmed;
+
+  const structured = inferStructuredErrorStatusCode(limited);
+  if (structured) return structured;
 
   for (const matcher of ERROR_STATUS_MATCHERS) {
     if (matcher.re.test(limited)) {
@@ -234,6 +316,58 @@ function hasNonEmptyValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
   return true;
+}
+
+type OpenAIResponsesFailedDetection = {
+  detail?: string;
+};
+
+function detectOpenAIResponsesFailed(
+  obj: Record<string, unknown>
+): OpenAIResponsesFailedDetection | null {
+  const eventType = typeof obj.type === "string" ? obj.type.trim() : "";
+  const sseEventType = typeof obj.__sseEvent === "string" ? obj.__sseEvent.trim() : "";
+  const response = isPlainRecord(obj.response) ? obj.response : obj;
+  const responseStatus = typeof response.status === "string" ? response.status.trim() : "";
+  const responseObject = typeof response.object === "string" ? response.object.trim() : "";
+  const responseId = typeof response.id === "string" ? response.id.trim() : "";
+
+  const looksLikeOpenAIResponse =
+    sseEventType.startsWith("response.") ||
+    eventType.startsWith("response.") ||
+    responseObject === "response" ||
+    responseId.startsWith("resp_");
+  const isFailedResponse =
+    sseEventType === "response.failed" ||
+    eventType === "response.failed" ||
+    responseStatus === "failed";
+  if (!looksLikeOpenAIResponse || !isFailedResponse) {
+    return null;
+  }
+
+  const responseError = response.error;
+  if (typeof responseError === "string" && responseError.trim()) {
+    return { detail: truncateForDetail(responseError) };
+  }
+
+  if (isPlainRecord(responseError)) {
+    const message = typeof responseError.message === "string" ? responseError.message : "";
+    if (message.trim()) {
+      return { detail: truncateForDetail(message) };
+    }
+
+    const code = typeof responseError.code === "string" ? responseError.code : "";
+    if (code.trim()) {
+      return { detail: truncateForDetail(code) };
+    }
+  }
+
+  const topLevelMessage = typeof obj.message === "string" ? obj.message : "";
+  if (topLevelMessage.trim()) {
+    return { detail: truncateForDetail(topLevelMessage) };
+  }
+
+  return {};
 }
 
 export function sanitizeErrorTextForDetail(text: string): string {
@@ -280,6 +414,15 @@ function detectFromJsonObject(
   rawJsonChars: number,
   options: Required<Pick<DetectionOptions, "maxJsonCharsForMessageCheck" | "messageKeyword">>
 ): UpstreamErrorDetectionResult {
+  const openAIResponsesFailed = detectOpenAIResponsesFailed(obj);
+  if (openAIResponsesFailed !== null) {
+    return {
+      isError: true,
+      code: FAKE_200_CODES.OPENAI_RESPONSE_FAILED,
+      ...(openAIResponsesFailed.detail ? { detail: openAIResponsesFailed.detail } : {}),
+    };
+  }
+
   // 判定优先级：
   // 1) `error` 非空：直接判定为错误（强信号）
   // 2) 小体积 JSON 下，`message` 命中关键字：判定为错误（弱信号，但能覆盖部分“错误只写在 message”场景）
@@ -387,9 +530,13 @@ export function detectUpstreamErrorFromSseOrJsonText(
     return { isError: false };
   }
 
-  // 情况 2：SSE 文本。快速过滤：既无 "error"/"message" key 时跳过解析
+  // 情况 2：SSE 文本。快速过滤：既无 "error"/"message" key，也无 Responses failed 信号时跳过解析
   // 注意：这里要求 key 命中 `"key"\s*:`，尽量避免误命中 JSON 字符串内容里的 `\"error\"`。
-  if (!MAY_HAVE_JSON_ERROR_KEY.test(text) && !MAY_HAVE_JSON_MESSAGE_KEY.test(text)) {
+  if (
+    !MAY_HAVE_JSON_ERROR_KEY.test(text) &&
+    !MAY_HAVE_JSON_MESSAGE_KEY.test(text) &&
+    !MAY_HAVE_OPENAI_RESPONSES_FAILED_SIGNAL.test(text)
+  ) {
     return { isError: false };
   }
 
@@ -397,17 +544,21 @@ export function detectUpstreamErrorFromSseOrJsonText(
   const events = parseSSEData(text);
   for (const evt of events) {
     if (!isPlainRecord(evt.data)) continue;
+    const eventData =
+      typeof evt.event === "string" && evt.event.trim().length > 0
+        ? { ...evt.data, __sseEvent: evt.event.trim() }
+        : evt.data;
     // 性能优化：只有在 message 是字符串、且“看起来足够小”时才需要精确计算 JSON 字符数。
     // 对大多数 SSE 事件（message 为对象、或没有 message），无需 JSON.stringify。
     let chars = 0;
-    const errorValue = evt.data.error;
-    const messageValue = evt.data.message;
+    const errorValue = eventData.error;
+    const messageValue = eventData.message;
     if (!hasNonEmptyValue(errorValue) && typeof messageValue === "string") {
       if (messageValue.length >= merged.maxJsonCharsForMessageCheck) {
         chars = merged.maxJsonCharsForMessageCheck; // >= 阈值即可跳过 message 关键字判定
       } else {
         try {
-          chars = JSON.stringify(evt.data).length;
+          chars = JSON.stringify(eventData).length;
         } catch {
           // stringify 失败时回退为近似值（仍保持“仅小体积 JSON 才做 message 检测”的意图）
           chars = messageValue.length;
@@ -415,7 +566,7 @@ export function detectUpstreamErrorFromSseOrJsonText(
       }
     }
 
-    const res = detectFromJsonObject(evt.data, chars, merged);
+    const res = detectFromJsonObject(eventData, chars, merged);
     if (res.isError) return res;
   }
 

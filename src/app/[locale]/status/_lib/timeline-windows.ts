@@ -24,12 +24,12 @@ export function computeUptimePct(timeline: PublicStatusTimelineBucket[]): number
   return Number((weightedSum / sampleTotal).toFixed(2));
 }
 
-export function computeAvgTtfb(timeline: PublicStatusTimelineBucket[]): number | null {
+export function computeAvgTtft(timeline: PublicStatusTimelineBucket[]): number | null {
   let weightedSum = 0;
   let sampleTotal = 0;
   for (const bucket of timeline) {
-    if (bucket.sampleCount > 0 && bucket.ttfbMs !== null) {
-      weightedSum += bucket.ttfbMs * bucket.sampleCount;
+    if (bucket.sampleCount > 0 && bucket.ttftMs !== null) {
+      weightedSum += bucket.ttftMs * bucket.sampleCount;
       sampleTotal += bucket.sampleCount;
     }
   }

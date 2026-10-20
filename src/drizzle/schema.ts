@@ -11,6 +11,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -21,6 +22,8 @@ import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } f
 import type { FilterOperation } from "@/lib/request-filter-types";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type { AuditCategory } from "@/types/audit-log";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -185,6 +188,9 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
+  // New API 系统访问令牌与用户 ID（可选）：配置后余额查询读取该账户余额，不再读取密钥额度
+  newApiAccessToken: varchar('new_api_access_token'),
+  newApiUserId: integer('new_api_user_id'),
   providerVendorId: integer('provider_vendor_id')
     .notNull()
     .references(() => providerVendors.id, {
@@ -382,6 +388,76 @@ export const providers = pgTable('providers', {
   ),
 }));
 
+// Provider batch apply durable ledger
+//
+// 该表用于把批量 provider 写入的幂等 claim 与最终结果绑定到同一个
+// PostgreSQL 事务中。result 保留完整的 preview 前像和有效补丁，便于
+// 在进程提交后未能返回响应时可靠重放原结果或重建撤销快照。
+export type ProviderBatchApplyOperationStatus = 'applying' | 'applied';
+
+export interface ProviderBatchApplyStoredPreimage {
+  providerId: number;
+  providerType: ProviderType;
+  isEnabled: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface ProviderBatchApplyPostCommitEffects {
+  clearLimit5hCostCache: boolean;
+  circuitBreakerChanged: boolean;
+  nextCircuitBreakerFailureThreshold: number | null;
+}
+
+export interface ProviderBatchApplyLedgerResult {
+  applyResult: {
+    operationId: string;
+    appliedAt: string;
+    updatedCount: number;
+    undoToken: string;
+    undoExpiresAt: string;
+  };
+  // 仅保存 effective provider 的精确 undo 前像；完整 preview 集合记录在 previewProviderIds。
+  previewProviderIds: number[];
+  effectiveProviderIds: number[];
+  preimages: ProviderBatchApplyStoredPreimage[];
+  undoRestorable: boolean;
+  postCommitEffects: ProviderBatchApplyPostCommitEffects;
+}
+
+export const providerBatchApplyOperations = pgTable(
+  'provider_batch_apply_operations',
+  {
+    claimKey: varchar('claim_key', { length: 256 }).primaryKey(),
+    previewToken: varchar('preview_token', { length: 256 }).notNull(),
+    payloadFingerprint: varchar('payload_fingerprint', { length: 128 }).notNull(),
+    operationId: varchar('operation_id', { length: 256 }).notNull(),
+    undoToken: varchar('undo_token', { length: 256 }).notNull(),
+    undoExpiresAt: timestamp('undo_expires_at', { withTimezone: true }),
+    undoConsumedAt: timestamp('undo_consumed_at', { withTimezone: true }),
+    status: varchar('status', { length: 32 })
+      .notNull()
+      .$type<ProviderBatchApplyOperationStatus>(),
+    result: jsonb('result').$type<ProviderBatchApplyLedgerResult | null>(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    providerBatchApplyOperationsPreviewTokenUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_preview_token'
+    ).on(table.previewToken),
+    providerBatchApplyOperationsOperationIdUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_operation_id'
+    ).on(table.operationId),
+    providerBatchApplyOperationsUndoTokenUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_undo_token'
+    ).on(table.undoToken),
+    providerBatchApplyOperationsExpiresAtIdx: index(
+      'idx_provider_batch_apply_operations_expires_at'
+    ).on(table.expiresAt),
+  })
+);
+
 // Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池
 export const providerEndpoints = pgTable('provider_endpoints', {
   id: serial('id').primaryKey(),
@@ -481,11 +557,25 @@ export const messageRequest = pgTable('message_request', {
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
 
+  // 活跃 Session 聚合 identity；session_id 仍保留物理请求/快照归属
+  sessionIdentity: varchar('session_identity', { length: 64 }),
+  sessionIdentityKind: varchar('session_identity_kind', { length: 20 }).$type<'session_id' | 'prefix_affinity'>(),
+  affinityScopeTag: varchar('affinity_scope_tag', { length: 16 }),
+  affinityFingerprint: varchar('affinity_fingerprint', { length: 64 }),
+  affinityFingerprintChain: jsonb('affinity_fingerprint_chain').$type<string[]>(),
+
+  // Replay 审计标记与原始请求 provenance；Replay 永远保持零成本
+  isReplay: boolean('is_replay').notNull().default(false),
+  replaySourceRequestId: integer('replay_source_request_id'),
+
   // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
   requestSequence: integer('request_sequence').default(1),
 
   // 上游决策链（记录尝试的供应商列表）
   providerChain: jsonb('provider_chain').$type<Array<{ id: number; name: string }>>(),
+
+  // 请求路由轨迹（Discovery/legacy 模式、轮次、并发尝试与终态摘要）
+  routingTrace: jsonb('routing_trace').$type<RoutingTraceV1>(),
 
   // HTTP 状态码
   statusCode: integer('status_code'),
@@ -505,7 +595,11 @@ export const messageRequest = pgTable('message_request', {
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
-  ttfbMs: integer('ttfb_ms'),
+  // 首 Token 时间（TTFT）。列名 ttfb_ms 是历史遗留：流式输出门禁上线后，
+  // 这个时间戳打在首个内容帧上，语义已是 TTFT 而非 TTFB。真 TTFB 见 firstByteMs。
+  ttftMs: integer('ttfb_ms'),
+  // 首字节时间（TTFB）：上游响应体第一个字节到达。门禁旁路时等于 ttftMs。
+  firstByteMs: integer('first_byte_ms'),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
   cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
   cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
@@ -542,6 +636,16 @@ export const messageRequest = pgTable('message_request', {
   // Messages 数量（用于短请求检测和分析）
   messagesCount: integer('messages_count'),
 
+  // ===== F3b 缓存效果计费模拟（可空，backfill 安全；observed 值复用 cacheReadInputTokens）=====
+  // 缓存兼容键：scopeTag:fp（优先级 Matched > Tip > Sys），聚合任务按此维度回测供应商缓存效力
+  cacheCompatibilityKey: varchar('cache_compatibility_key', { length: 64 }),
+  // 是否纳入缓存效力窗口聚合（失败/竞速败者/replay serve/不可观测/截断样本排除）
+  cacheScoreEligible: boolean('cache_score_eligible'),
+  cacheScoreExcludedReason: varchar('cache_score_excluded_reason', { length: 32 }),
+  // 理论可命中缓存 token（按匹配边界的规范化前缀字节估算）
+  theoreticalCacheTokens: bigint('theoretical_cache_tokens', { mode: 'number' }),
+  cacheTtlBucket: varchar('cache_ttl_bucket', { length: 10 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -562,12 +666,46 @@ export const messageRequest = pgTable('message_request', {
   )
     .on(table.providerId, table.createdAt.desc())
     .where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
+  messageRequestProxyStatusActiveIdx: index('idx_message_request_proxy_status_active')
+    .on(sql`${table.createdAt} DESC NULLS LAST`, table.userId)
+    .where(
+      sql`${table.deletedAt} IS NULL AND ${table.isReplay} = false AND ${table.statusCode} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
+  messageRequestProxyStatusLatestIdx: index('idx_message_request_proxy_status_latest')
+    .on(table.userId, sql`${table.updatedAt} DESC NULLS LAST`, table.id.desc())
+    .where(
+      sql`${table.deletedAt} IS NULL AND ${table.isReplay} = false AND ${table.statusCode} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）
   messageRequestSessionIdPrefixIdx: index('idx_message_request_session_id_prefix').on(sql`${table.sessionId} varchar_pattern_ops`).where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // Session + Sequence 复合索引（用于 Session 内请求列表查询）
   messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestSessionIdentityCreatedAtIdx: index(
+    'idx_message_request_session_identity_created_at'
+  )
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`,
+      sql`${table.createdAt} DESC NULLS LAST`,
+      table.id.desc()
+    )
+    .where(sql`${table.deletedAt} IS NULL`),
+  // Supports complete historical prefix matching without scanning the table.
+  messageRequestSessionIdentityPrefixIdx: index('idx_message_request_session_identity_prefix')
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId}) varchar_pattern_ops`,
+      table.createdAt.desc(),
+      table.id.desc()
+    )
+    .where(
+      sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
+  messageRequestSessionIdPrefixCoverIdx: index('idx_message_request_session_id_prefix_cover')
+    .on(sql`${table.sessionId} varchar_pattern_ops`, table.createdAt.desc(), table.id.desc())
+    .where(
+      sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // blocked_by 过滤查询索引（用于排除 warmup/sensitive 等拦截请求）
@@ -755,7 +893,7 @@ export const sensitiveWords = pgTable('sensitive_words', {
 // System Settings table
 export const systemSettings = pgTable('system_settings', {
   id: serial('id').primaryKey(),
-  siteTitle: varchar('site_title', { length: 128 }).notNull().default('Claude Code Hub'),
+  siteTitle: varchar('site_title', { length: 128 }).notNull().default('CC Hub'),
   allowGlobalUsageView: boolean('allow_global_usage_view').notNull().default(false),
 
   // 货币显示配置
@@ -779,6 +917,18 @@ export const systemSettings = pgTable('system_settings', {
   //       异步累加进该请求的 cost_usd 总额（与上游对多个供应商分别计费保持一致）
   // 关闭：竞速输家直接取消连接，不计费（旧行为）
   billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
+
+  // Maximum number of simultaneously active attempts in the legacy streaming hedge.
+  legacyHedgeMaxInFlight: integer('legacy_hedge_max_in_flight').notNull().default(2),
+
+  // Bounded streaming Discovery (disabled by default until explicitly enabled).
+  discoveryEnabled: boolean('discovery_enabled').notNull().default(false),
+  discoveryConcurrency: integer('discovery_concurrency').notNull().default(2),
+  maxDiscoveryRounds: integer('max_discovery_rounds').notNull().default(2),
+  discoverySlaMs: integer('discovery_sla_ms').notNull().default(10000),
+  stickySlaMs: integer('sticky_sla_ms').notNull().default(20000),
+  racingTotalTimeoutMs: integer('racing_total_timeout_ms').notNull().default(60000),
+  stickyTimeoutCooldownMs: integer('sticky_timeout_cooldown_ms').notNull().default(300000),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -916,9 +1066,39 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(5),
 
+  // F1 流式内容门控模式: 'off' | 'shadow' | 'enforce'（默认 enforce）
+  // enforce：首个有效内容帧前缓冲，错误/空流时自动切换供应商；shadow：仅旁路统计分歧
+  streamGateMode: varchar('stream_gate_mode', { length: 10 }).notNull().default('enforce'),
+
+  // 忽略客户端 Session ID（默认开启）
+  // 开启后：可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定），
+  // 不可指纹化的请求仍走会话复用
+  affinityIgnoreClientSessionId: boolean('affinity_ignore_client_session_id')
+    .notNull()
+    .default(true),
+
+  // F2 Replay 开关覆写（null = 跟随环境变量 ENABLE_REQUEST_REPLAY）
+  replayEnabled: boolean('replay_enabled'),
+  // F2 Replay 完成 payload 的可重放窗口(分钟,默认 30)
+  replayCacheTtlMinutes: integer('replay_cache_ttl_minutes')
+    .notNull()
+    .default(REPLAY_CACHE_TTL_MINUTES_DEFAULT),
+
+  // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
+  cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),
+
+  // 内存准入（默认关闭）
+  // 开启后：请求正文与流式门控前缀按可用内存预算准入，超出时落盘或返回本地 429
+  enableMemoryAdmission: boolean('enable_memory_admission').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  legacyHedgeMaxInFlightRange: check(
+    'system_settings_legacy_hedge_max_in_flight_range',
+    sql`${table.legacyHedgeMaxInFlight} >= 1 AND ${table.legacyHedgeMaxInFlight} <= 4`
+  ),
+}));
 
 // Notification Settings table - Webhook 通知配置
 export const notificationSettings = pgTable('notification_settings', {
@@ -1045,6 +1225,13 @@ export const usageLedger = pgTable('usage_ledger', {
   endpoint: varchar('endpoint', { length: 256 }),
   apiType: varchar('api_type', { length: 20 }),
   sessionId: varchar('session_id', { length: 64 }),
+  sessionIdentity: varchar('session_identity', { length: 64 }),
+  sessionIdentityKind: varchar('session_identity_kind', { length: 20 }).$type<'session_id' | 'prefix_affinity'>(),
+  affinityScopeTag: varchar('affinity_scope_tag', { length: 16 }),
+  affinityFingerprint: varchar('affinity_fingerprint', { length: 64 }),
+  affinityFingerprintChain: jsonb('affinity_fingerprint_chain').$type<string[]>(),
+  isReplay: boolean('is_replay').notNull().default(false),
+  replaySourceRequestId: integer('replay_source_request_id'),
   statusCode: integer('status_code'),
   isSuccess: boolean('is_success').notNull().default(false),
   successRateOutcome: varchar('success_rate_outcome', { length: 16 }),
@@ -1062,7 +1249,9 @@ export const usageLedger = pgTable('usage_ledger', {
   context1mApplied: boolean('context_1m_applied').default(false),
   swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
   durationMs: integer('duration_ms'),
-  ttfbMs: integer('ttfb_ms'),
+  // 列名 ttfb_ms 存的是 TTFT，见 messageRequest.ttftMs 的说明
+  ttftMs: integer('ttfb_ms'),
+  firstByteMs: integer('first_byte_ms'),
   // 客户端 IP（从 message_request 拷贝；永久保留，避免被清理任务删除）
   clientIp: varchar('client_ip', { length: 45 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
@@ -1071,13 +1260,14 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerRequestIdIdx: uniqueIndex('idx_usage_ledger_request_id').on(table.requestId),
   usageLedgerUserCreatedAtIdx: index('idx_usage_ledger_user_created_at')
     .on(table.userId, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
+  usageLedgerUserIdResetIdx: index('idx_usage_ledger_user_id_reset').on(table.userId),
   usageLedgerKeyCreatedAtIdx: index('idx_usage_ledger_key_created_at')
     .on(table.key, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerProviderCreatedAtIdx: index('idx_usage_ledger_provider_created_at')
     .on(table.finalProviderId, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // Expression index on minute truncation - AT TIME ZONE 'UTC' makes date_trunc IMMUTABLE on timestamptz
   usageLedgerCreatedAtMinuteIdx: index('idx_usage_ledger_created_at_minute')
     .on(sql`date_trunc('minute', ${table.createdAt} AT TIME ZONE 'UTC')`),
@@ -1086,6 +1276,27 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerSessionIdIdx: index('idx_usage_ledger_session_id')
     .on(table.sessionId)
     .where(sql`${table.sessionId} IS NOT NULL`),
+  usageLedgerSessionIdentityCreatedAtIdx: index(
+    'idx_usage_ledger_session_identity_created_at'
+  )
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`,
+      table.userId,
+      sql`${table.createdAt} DESC NULLS LAST`
+    )
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
+  usageLedgerSessionIdentityIdx: index('idx_usage_ledger_session_identity')
+    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`),
+  usageLedgerSessionIdentityPrefixIdx: index('idx_usage_ledger_session_identity_prefix')
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId}) varchar_pattern_ops`,
+      table.createdAt.desc(),
+      table.id.desc()
+    )
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerSessionIdPrefixIdx: index('idx_usage_ledger_session_id_prefix')
+    .on(sql`${table.sessionId} varchar_pattern_ops`, table.createdAt.desc(), table.id.desc())
+    .where(sql`${table.blockedBy} IS NULL`),
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),
@@ -1093,23 +1304,23 @@ export const usageLedger = pgTable('usage_ledger', {
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
     .on(table.key, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
   // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
     .on(table.userId, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
     .on(table.finalProviderId, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for LATERAL last-usage per key (getUsers)
   // finalProviderId as trailing key column for index-only scan (Drizzle lacks INCLUDE support)
   usageLedgerKeyCreatedAtDescCoverIdx: index('idx_usage_ledger_key_created_at_desc_cover')
     .on(table.key, sql`${table.createdAt} DESC NULLS LAST`, table.finalProviderId)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
 }));
 
 // Audit Log table - 面板登录和后台操作审计日志
@@ -1152,6 +1363,55 @@ export const auditLog = pgTable('audit_log', {
   // keyset 分页热路径
   auditLogCreatedAtIdIdx: index('idx_audit_log_created_at_id')
     .on(table.createdAt.desc(), table.id.desc()),
+}));
+
+// F2 Replay 完成持久层：已完成流式响应的客户端可见字节（跨副本/跨小时重放）。
+// Redis 热层（cch:replay:*）承担活跃期与实时跟尾；本表只存已通过计费终态屏障的完整响应。
+export const replayPayloads = pgTable('replay_payloads', {
+  // 确定性 Replay ID（身份哈希截 32 hex，含 scopeTag 租户隔离）
+  replayId: varchar('replay_id', { length: 64 }).primaryKey(),
+  // 身份复核值（不同盐的内容维度哈希，attach 时严格比对防哈希碰撞）
+  verifier: varchar('verifier', { length: 64 }).notNull(),
+  scopeTag: varchar('scope_tag', { length: 16 }).notNull(),
+  keyId: integer('key_id').notNull(),
+  userId: integer('user_id').notNull(),
+  format: varchar('format', { length: 16 }).notNull(),
+  model: varchar('model', { length: 128 }),
+  statusCode: integer('status_code').notNull(),
+  headersJson: jsonb('headers_json').$type<Record<string, string>>(),
+  // 客户端可见字节（SSE UTF-8 文本；上限由 REPLAY_MAX_PAYLOAD_BYTES 控制）
+  payload: text('payload').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  sourceMessageRequestId: integer('source_message_request_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+  replayPayloadsKeyIdIdx: index('idx_replay_payloads_key_id').on(table.keyId),
+  replayPayloadsExpiresAtIdx: index('idx_replay_payloads_expires_at').on(table.expiresAt),
+}));
+
+// F3b 缓存效果窗口聚合历史：按 provider + model + TTL 桶统计理论 vs 实际缓存命中。
+// 定点整数（万分比 bp），禁浮点；仅指标展示，不参与路由。
+export const providerCacheEffectiveness = pgTable('provider_cache_effectiveness', {
+  id: serial('id').primaryKey(),
+  providerId: integer('provider_id').notNull(),
+  model: varchar('model', { length: 128 }).notNull(),
+  cacheTtlBucket: varchar('cache_ttl_bucket', { length: 10 }).notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+  // 窗口内总样本与合格样本数
+  sampleCount: integer('sample_count').notNull().default(0),
+  eligibleCount: integer('eligible_count').notNull().default(0),
+  theoreticalCacheTokens: bigint('theoretical_cache_tokens', { mode: 'number' }).notNull().default(0),
+  observedCacheReadTokens: bigint('observed_cache_read_tokens', { mode: 'number' }).notNull().default(0),
+  // 万分比定点值：raw = clamp(observed/theoretical)；confidence = 可观测率 x 样本量分档
+  rawEffectivenessBp: integer('raw_effectiveness_bp').notNull().default(0),
+  confidenceBp: integer('confidence_bp').notNull().default(0),
+  effectivenessBp: integer('effectiveness_bp').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  providerCacheEffectivenessWindowIdx: index('idx_provider_cache_effectiveness_window')
+    .on(table.providerId, table.model, table.windowStart.desc()),
 }));
 
 // Relations
@@ -1206,3 +1466,13 @@ export const messageRequestRelations = relations(messageRequest, ({ one }) => ({
     references: [providers.id],
   }),
 }));
+
+// Availability projection tables (outbox + 1m buckets). Source of truth for drizzle-kit.
+export {
+  availBucket1m,
+  availCurrent,
+  outboxEvents,
+  outboxProcessed,
+  projAppliedRequests,
+  projectionMeta,
+} from "@/lib/availability/projection-tables";

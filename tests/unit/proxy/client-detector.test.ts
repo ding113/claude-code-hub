@@ -24,6 +24,7 @@ type SessionOptions = {
   dangerousBrowserAccess?: string | null;
   anthropicBeta?: string | null;
   metadataUserId?: string | null;
+  pathname?: string;
 };
 
 function createMockSession(options: SessionOptions = {}): ProxySession {
@@ -43,12 +44,19 @@ function createMockSession(options: SessionOptions = {}): ProxySession {
     message.metadata = { user_id: options.metadataUserId };
   }
 
+  const pathname = options.pathname ?? "/v1/messages";
+  const requestUrl = new URL(`https://cch.example.com${pathname}`);
+  const isCountTokensRequest = pathname === "/v1/messages/count_tokens";
+
   return {
     userAgent: options.userAgent ?? null,
     headers,
+    requestUrl,
     request: {
       message,
     },
+    getEndpoint: () => pathname,
+    isCountTokensRequest: () => isCountTokensRequest,
   } as unknown as ProxySession;
 }
 
@@ -85,13 +93,12 @@ describe("client-detector", () => {
       expect(isBuiltinKeyword(pattern)).toBe(true);
     });
 
-    test.each([
-      "gemini-cli",
-      "codex-cli",
-      "custom-pattern",
-    ])("should return false for non-builtin keyword: %s", (pattern) => {
-      expect(isBuiltinKeyword(pattern)).toBe(false);
-    });
+    test.each(["gemini-cli", "codex-cli", "custom-pattern"])(
+      "should return false for non-builtin keyword: %s",
+      (pattern) => {
+        expect(isBuiltinKeyword(pattern)).toBe(false);
+      }
+    );
   });
 
   describe("confirmClaudeCodeSignals via detectClientFull", () => {
@@ -189,6 +196,35 @@ describe("client-detector", () => {
       const result = detectClientFull(session, "claude-code");
       expect(result.hubConfirmed).toBe(false);
       expect(result.signals.length).toBe(3);
+    });
+
+    test("should confirm count_tokens with 3 header signals without metadata.user_id", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.220 (external, cli)",
+        xApp: "cli",
+        anthropicBeta:
+          "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+        pathname: "/v1/messages/count_tokens",
+      });
+
+      const result = detectClientFull(session, "claude-code");
+      expect(result.hubConfirmed).toBe(true);
+      expect(result.matched).toBe(true);
+      expect(result.subClient).toBe("claude-code-cli");
+      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-present"]);
+    });
+
+    test("should still require header signals on count_tokens when metadata.user_id is absent", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.220 (external, cli)",
+        xApp: "cli",
+        pathname: "/v1/messages/count_tokens",
+      });
+
+      const result = detectClientFull(session, "claude-code");
+      expect(result.hubConfirmed).toBe(false);
+      expect(result.matched).toBe(false);
+      expect(result.signals).toEqual(["x-app-cli", "ua-prefix"]);
     });
 
     test("should not confirm with 0 strong signals", () => {
@@ -293,6 +329,18 @@ describe("client-detector", () => {
         anthropicBeta: "non-claude-code",
       });
       expect(matchClientPattern(session, "claude-code")).toBe(false);
+    });
+
+    test("should match claude-code on count_tokens without metadata.user_id", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.220 (external, cli)",
+        xApp: "cli",
+        anthropicBeta:
+          "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+        pathname: "/v1/messages/count_tokens",
+      });
+      expect(matchClientPattern(session, "claude-code")).toBe(true);
+      expect(matchClientPattern(session, "claude-code-cli")).toBe(true);
     });
   });
 
@@ -567,6 +615,35 @@ describe("client-detector", () => {
         "betas-present",
         "metadata-user-id",
       ]);
+      expect(result.hubConfirmed).toBe(true);
+    });
+
+    test("should allow count_tokens Claude Code CLI when allowlist is claude-code", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.220 (external, cli)",
+        xApp: "cli",
+        anthropicBeta: "claude-code-20250219,token-counting-2024-11-01",
+        pathname: "/v1/messages/count_tokens",
+      });
+      const result = isClientAllowedDetailed(session, ["claude-code", "claude-code-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.matchedPattern).toBe("claude-code");
+      expect(result.detectedClient).toBe("claude-code-cli");
+      expect(result.hubConfirmed).toBe(true);
+      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-present"]);
+    });
+
+    test("should reject count_tokens when allowlisted sub-client does not match", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.220 (external, cli)",
+        xApp: "cli",
+        anthropicBeta: "claude-code-20250219,token-counting-2024-11-01",
+        pathname: "/v1/messages/count_tokens",
+      });
+      const result = isClientAllowedDetailed(session, ["claude-code-vscode"], []);
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("allowlist_miss");
       expect(result.hubConfirmed).toBe(true);
     });
 

@@ -7,6 +7,7 @@ import {
   Award,
   ChevronDown,
   ChevronRight,
+  CircleHelp,
   Medal,
   Trophy,
 } from "lucide-react";
@@ -22,11 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LeaderboardPeriod } from "@/repository/leaderboard";
 
 // 支持动态列定义
 export interface ColumnDef<T> {
   header: string;
+  /** 表头帮助图标悬停时展示的说明文案 */
+  headerTooltip?: string;
   className?: string;
   /**
    * index 语义：
@@ -245,6 +249,23 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                         className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""} ${shouldBold ? "font-bold" : ""}`}
                       >
                         {col.header}
+                        {col.headerTooltip && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label={col.headerTooltip}
+                                className="ml-1 inline-flex cursor-help items-center text-muted-foreground/70 hover:text-muted-foreground"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <CircleHelp className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-64">
+                              {col.headerTooltip}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         {col.sortKey && getSortIcon(col.sortKey)}
                       </div>
                     </TableHead>

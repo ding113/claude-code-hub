@@ -1,16 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockFetch } = vi.hoisted(() => ({
+  mockFetch: vi.fn(),
+}));
+
+vi.mock("@/lib/proxy-agent", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    fetchWithDispatcher: (...args: Parameters<typeof fetch>) => mockFetch(...args),
+  };
+});
+
 import { WebhookNotifier } from "@/lib/webhook/notifier";
 import type { StructuredMessage } from "@/lib/webhook/types";
 
 describe("WebhookNotifier", () => {
-  const mockFetch = vi.fn();
-
   beforeEach(() => {
-    vi.stubGlobal("fetch", mockFetch);
+    mockFetch.mockReset();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

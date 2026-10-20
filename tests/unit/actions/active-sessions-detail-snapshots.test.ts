@@ -7,6 +7,7 @@ const getSessionDetailsCacheMock = vi.fn();
 const setSessionDetailsCacheMock = vi.fn();
 
 const getSessionRequestCountMock = vi.fn();
+const hasAnySessionMessagesMock = vi.fn();
 const getSessionRequestBodyMock = vi.fn();
 const getSessionMessagesMock = vi.fn();
 const getSessionResponseMock = vi.fn();
@@ -18,10 +19,15 @@ const getSessionUpstreamResponseMetaMock = vi.fn();
 const getSessionSpecialSettingsMock = vi.fn();
 const getSessionRequestPhaseSnapshotMock = vi.fn();
 const getSessionResponsePhaseSnapshotMock = vi.fn();
+const isSessionRequestOwnedByKeyMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
-const findAdjacentRequestSequencesMock = vi.fn();
-const findMessageRequestAuditBySessionIdAndSequenceMock = vi.fn();
+const aggregateMultipleSessionStatsMock = vi.fn();
+const resolveSessionIdentityMock = vi.fn();
+const isSessionSourceForIdentityMock = vi.fn();
+const findSessionRequestLocatorMock = vi.fn();
+const findAdjacentSessionRequestsMock = vi.fn();
+const findMessageRequestAuditByIdMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -50,6 +56,7 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     getSessionRequestCount: getSessionRequestCountMock,
+    hasAnySessionMessages: hasAnySessionMessagesMock,
     getSessionRequestBody: getSessionRequestBodyMock,
     getSessionMessages: getSessionMessagesMock,
     getSessionResponse: getSessionResponseMock,
@@ -61,13 +68,18 @@ vi.mock("@/lib/session-manager", () => ({
     getSessionSpecialSettings: getSessionSpecialSettingsMock,
     getSessionRequestPhaseSnapshot: getSessionRequestPhaseSnapshotMock,
     getSessionResponsePhaseSnapshot: getSessionResponsePhaseSnapshotMock,
+    isSessionRequestOwnedByKey: isSessionRequestOwnedByKeyMock,
   },
 }));
 
 vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
-  findAdjacentRequestSequences: findAdjacentRequestSequencesMock,
-  findMessageRequestAuditBySessionIdAndSequence: findMessageRequestAuditBySessionIdAndSequenceMock,
+  aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
+  resolveSessionIdentity: resolveSessionIdentityMock,
+  isSessionSourceForIdentity: isSessionSourceForIdentityMock,
+  findSessionRequestLocator: findSessionRequestLocatorMock,
+  findAdjacentSessionRequests: findAdjacentSessionRequestsMock,
+  findMessageRequestAuditById: findMessageRequestAuditByIdMock,
 }));
 
 describe("getSessionDetails - additive detail snapshots contract", () => {
@@ -76,6 +88,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     getSessionDetailsCacheMock.mockReturnValue(null);
+    findSessionRequestLocatorMock.mockReset();
 
     aggregateSessionStatsMock.mockResolvedValue({
       sessionId: "sess_x",
@@ -98,11 +111,35 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       apiType: "chat",
       cacheTtlApplied: null,
     });
+    aggregateMultipleSessionStatsMock.mockImplementation(async (sessionIds: string[]) => {
+      const stats = await aggregateSessionStatsMock(sessionIds[0]);
+      return stats ? [{ ...stats, sessionId: stats.sessionId ?? sessionIds[0] }] : [];
+    });
+    resolveSessionIdentityMock.mockResolvedValue(null);
+    isSessionSourceForIdentityMock.mockResolvedValue(true);
+    findSessionRequestLocatorMock.mockImplementation(
+      async (
+        identity: string,
+        selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {}
+      ) => ({
+        requestId: selector.requestId ?? 101,
+        canonicalSessionId: identity,
+        sourceSessionId: selector.sourceSessionId ?? identity,
+        requestSequence: selector.requestSequence ?? 1,
+        keyId: 1,
+        userId: 1,
+        identityKind: identity.startsWith("pfx:") ? "prefix_affinity" : "session_id",
+        scopeTag: identity.startsWith("pfx:") ? "scope" : null,
+        fingerprint: identity.startsWith("pfx:") ? "fingerprint" : null,
+      })
+    );
 
-    findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: null, nextSequence: null });
-    findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue(null);
+    findAdjacentSessionRequestsMock.mockResolvedValue({ prevRequest: null, nextRequest: null });
+    findMessageRequestAuditByIdMock.mockResolvedValue(null);
+    isSessionRequestOwnedByKeyMock.mockResolvedValue(true);
 
     getSessionRequestCountMock.mockResolvedValue(1);
+    hasAnySessionMessagesMock.mockResolvedValue(true);
     getSessionRequestBodyMock.mockResolvedValue({ model: "gpt-5.5", input: "hi" });
     getSessionMessagesMock.mockResolvedValue([{ role: "user", content: "hi" }]);
     getSessionResponseMock.mockResolvedValue('{"ok":true}');
@@ -176,6 +213,144 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     });
   });
 
+  test("uses an authorized physical source when a prefix identity spans multiple Sessions", async () => {
+    aggregateSessionStatsMock.mockResolvedValue({
+      sessionId: "pfx:scope:fingerprint",
+      requestCount: 2,
+      totalCostUsd: "0",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      totalDurationMs: 0,
+      firstRequestAt: new Date(),
+      lastRequestAt: new Date(),
+      providers: [],
+      models: [],
+      userName: "u",
+      userId: 1,
+      keyName: "k",
+      keyId: 1,
+      userAgent: null,
+      apiType: "chat",
+      cacheTtlApplied: null,
+    });
+    resolveSessionIdentityMock.mockResolvedValue({
+      sourceSessionId: "physical-latest",
+      scopeTag: "scope",
+      fingerprints: ["fingerprint"],
+    });
+
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+    const result = await getSessionDetails("pfx:scope:fingerprint", 1, "physical-selected", 101);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.currentSourceSessionId).toBe("physical-selected");
+    expect(result.data.currentSequence).toBe(1);
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith(
+      "pfx:scope:fingerprint",
+      {
+        requestId: 101,
+        requestSequence: 1,
+        sourceSessionId: "physical-selected",
+      },
+      undefined
+    );
+    expect(getSessionRequestBodyMock).toHaveBeenCalledWith("physical-selected", 1);
+    expect(findAdjacentSessionRequestsMock).toHaveBeenCalledWith("pfx:scope:fingerprint", 101, 1);
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(101, 1);
+    expect(isSessionRequestOwnedByKeyMock).toHaveBeenCalledWith("physical-selected", 1, 1);
+  });
+
+  test("anchors an admin request-id lookup to the selected row owner", async () => {
+    findSessionRequestLocatorMock.mockResolvedValueOnce({
+      requestId: 202,
+      canonicalSessionId: "sid:owner-two",
+      sourceSessionId: "shared-client-session",
+      requestSequence: 4,
+      keyId: 22,
+      userId: 2,
+      identityKind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+    });
+    aggregateMultipleSessionStatsMock.mockResolvedValueOnce([
+      {
+        sessionId: "sid:owner-two",
+        userId: 2,
+        requestCount: 1,
+        providers: [],
+        models: [],
+      },
+    ]);
+
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+    const result = await getSessionDetails(
+      "shared-client-session",
+      4,
+      "shared-client-session",
+      202
+    );
+
+    expect(result.ok).toBe(true);
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith(
+      "shared-client-session",
+      {
+        requestId: 202,
+        requestSequence: 4,
+        sourceSessionId: "shared-client-session",
+      },
+      undefined
+    );
+    expect(aggregateMultipleSessionStatsMock).toHaveBeenCalledWith(["sid:owner-two"], 2);
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(202, 2);
+  });
+
+  test("rejects a physical source and sequence that do not belong to the prefix identity", async () => {
+    aggregateSessionStatsMock.mockResolvedValue({
+      sessionId: "pfx:scope:fingerprint",
+      userId: 1,
+    });
+    findSessionRequestLocatorMock
+      .mockResolvedValueOnce({
+        sourceSessionId: "physical-latest",
+        requestSequence: 10,
+        identityKind: "prefix_affinity",
+        scopeTag: "scope",
+        fingerprint: "fingerprint",
+      })
+      .mockResolvedValueOnce(null);
+
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+    const result = await getSessionDetails("pfx:scope:fingerprint", 9, "physical-selected");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "SESSION_REQUEST_SOURCE_MISMATCH",
+      errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
+    });
+    expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
+  });
+
+  test("requires source Session together with sequence for a prefix identity", async () => {
+    aggregateSessionStatsMock.mockResolvedValue({
+      sessionId: "pfx:scope:fingerprint",
+      userId: 1,
+    });
+
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+    const result = await getSessionDetails("pfx:scope:fingerprint", 1);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "SESSION_REQUEST_SELECTOR_INCOMPLETE",
+      errorCode: "SESSION_REQUEST_SELECTOR_INCOMPLETE",
+    });
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledTimes(1);
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("pfx:scope:fingerprint", {}, 1);
+  });
+
   test("builds before-after snapshots from new snapshot getters", async () => {
     getSessionRequestPhaseSnapshotMock
       .mockResolvedValueOnce({
@@ -224,6 +399,16 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+
+    expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
+    expect(getSessionResponseMock).not.toHaveBeenCalled();
+    expect(result.data.requestBody).toEqual({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "after body messages" }],
+    });
+    expect(result.data.messages).toEqual([{ role: "user", content: "before messages" }]);
+    expect(result.data.response).toBe('{"after":true}');
 
     expect(result.data.snapshots).toEqual({
       defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
@@ -312,7 +497,19 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
   test("falls back to the latest request sequence when requestSequence is omitted", async () => {
     getSessionRequestCountMock.mockResolvedValue(3);
-    findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: 2, nextSequence: null });
+    findSessionRequestLocatorMock.mockResolvedValueOnce({
+      requestId: 103,
+      sourceSessionId: "sess_x",
+      requestSequence: 3,
+      keyId: 1,
+      identityKind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+    });
+    findAdjacentSessionRequestsMock.mockResolvedValue({
+      prevRequest: { requestId: 102, sourceSessionId: "sess_x", requestSequence: 2 },
+      nextRequest: null,
+    });
     getSessionRequestPhaseSnapshotMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
       body: JSON.stringify({ model: "gpt-5.5", messages: [] }),
       messages: null,
@@ -334,6 +531,11 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     expect(getSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith("sess_x", "before", 3);
     expect(getSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith("sess_x", "after", 3);
     expect(result.data.currentSequence).toBe(3);
+    expect(result.data.prevRequest).toEqual({
+      requestId: 102,
+      sourceSessionId: "sess_x",
+      requestSequence: 2,
+    });
     expect(result.data.prevSequence).toBe(2);
     expect(result.data.snapshots.request.after?.messages).toEqual([]);
   });
@@ -372,5 +574,74 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
         statusCode: 200,
       },
     });
+  });
+
+  test("非法请求序号归一化为空时检查 Session 是否存在任意 messages", async () => {
+    const { hasSessionMessages } = await import("@/actions/active-sessions");
+
+    const result = await hasSessionMessages("sess_x", 0);
+
+    expect(result).toEqual({ ok: true, data: true });
+    expect(hasAnySessionMessagesMock).toHaveBeenCalledWith("sess_x");
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
+  });
+
+  test("uses request id to check the exact request when sequence is absent", async () => {
+    const { hasSessionMessages } = await import("@/actions/active-sessions");
+
+    const result = await hasSessionMessages("pfx:scope:root", undefined, "physical-a", 203);
+
+    expect(result).toEqual({ ok: true, data: true });
+    expect(findSessionRequestLocatorMock).toHaveBeenLastCalledWith(
+      "pfx:scope:root",
+      {
+        requestId: 203,
+        requestSequence: undefined,
+        sourceSessionId: "physical-a",
+      },
+      undefined
+    );
+    expect(getSessionMessagesMock).toHaveBeenCalledWith("physical-a", 1);
+    expect(hasAnySessionMessagesMock).not.toHaveBeenCalled();
+  });
+
+  test("keeps database-backed details when the Redis owner marker is missing", async () => {
+    isSessionRequestOwnedByKeyMock.mockResolvedValueOnce(false);
+    findMessageRequestAuditByIdMock.mockResolvedValueOnce({
+      statusCode: 429,
+      blockedBy: "rate_limit",
+      blockedReason: "quota exceeded",
+      cacheTtlApplied: null,
+      context1mApplied: null,
+      swapCacheTtlApplied: null,
+      specialSettings: null,
+    });
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+
+    const result = await getSessionDetails("sess_x", 1);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.requestBody).toBeNull();
+    expect(result.data.messages).toBeNull();
+    expect(result.data.response).toBeNull();
+    expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(101, 1);
+    expect(result.data.specialSettings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "guard_intercept", guard: "rate_limit" }),
+      ])
+    );
+  });
+
+  test("hides the details link when the request owner marker is missing", async () => {
+    isSessionRequestOwnedByKeyMock.mockResolvedValueOnce(false);
+    const { hasSessionMessages } = await import("@/actions/active-sessions");
+
+    await expect(hasSessionMessages("sess_x", 1)).resolves.toEqual({ ok: true, data: false });
+
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
+    expect(hasAnySessionMessagesMock).not.toHaveBeenCalled();
   });
 });

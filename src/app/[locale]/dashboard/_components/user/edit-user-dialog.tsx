@@ -1,10 +1,10 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, RotateCcw, Trash2, UserCog } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
@@ -29,12 +29,14 @@ import {
 } from "@/components/ui/dialog";
 import {
   editUser,
+  getUserStatisticsReset,
   removeUser,
   resetUserAllStatistics,
   resetUserLimitsOnly,
   toggleUserEnabled,
 } from "@/lib/api-client/v1/actions/users";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import type { UserStatisticsResetRecord } from "@/lib/user-statistics-reset/types";
 import { cn } from "@/lib/utils";
 import { UpdateUserSchema } from "@/lib/validation/schemas";
 import type { UserDisplay } from "@/types/user";
@@ -63,6 +65,11 @@ const EditUserSchema = UpdateUserSchema.extend({
 });
 
 type EditUserValues = z.infer<typeof EditUserSchema>;
+
+const STATISTICS_RESET_POLL_INTERVAL_MS = 1_000;
+const STATISTICS_RESET_REQUEST_TIMEOUT_MS = 15_000;
+const STATISTICS_RESET_MAX_RETRIES = 5;
+const STATISTICS_RESET_RETRY_MAX_DELAY_MS = 16_000;
 
 function buildDefaultValues(user: UserDisplay): EditUserValues {
   return {
@@ -96,6 +103,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [isPending, startTransition] = useTransition();
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
+  const [statisticsReset, setStatisticsReset] = useState<UserStatisticsResetRecord | null>(null);
+  const [statisticsResetPollFailed, setStatisticsResetPollFailed] = useState(false);
   const [isResetting5h, setIsResetting5h] = useState(false);
   const [reset5hDialogOpen, setReset5hDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
@@ -236,26 +245,103 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     router.refresh();
   };
 
+  const applyStatisticsResetStatus = useCallback(
+    (reset: UserStatisticsResetRecord): boolean => {
+      setStatisticsReset(reset);
+      if (reset.status === "completed") {
+        setIsResettingAll(false);
+        toast.success(t("editDialog.resetData.success"));
+        onSuccess?.();
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+        router.refresh();
+        return true;
+      }
+      if (reset.status === "failed") {
+        setIsResettingAll(false);
+        toast.error(t("editDialog.resetData.failed"));
+        return true;
+      }
+      return false;
+    },
+    [onSuccess, queryClient, router, t]
+  );
+
   const handleResetAllStatistics = async () => {
     setIsResettingAll(true);
+    setStatisticsResetPollFailed(false);
     try {
       const res = await resetUserAllStatistics(user.id);
       if (!res.ok) {
+        setIsResettingAll(false);
         toast.error(res.error || t("editDialog.resetData.error"));
         return;
       }
-      toast.success(t("editDialog.resetData.success"));
+      applyStatisticsResetStatus(res.data as UserStatisticsResetRecord);
       setResetAllDialogOpen(false);
-
-      // Full page reload to ensure all cached data is refreshed
-      window.location.reload();
     } catch (error) {
+      setIsResettingAll(false);
       console.error("[EditUserDialog] reset all statistics failed", error);
       toast.error(t("editDialog.resetData.error"));
-    } finally {
-      setIsResettingAll(false);
     }
   };
+
+  useEffect(() => {
+    if (
+      !statisticsReset ||
+      statisticsResetPollFailed ||
+      !["queued", "running"].includes(statisticsReset.status)
+    )
+      return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let activeRequestController: AbortController | undefined;
+    let consecutiveRetryableFailures = 0;
+
+    const poll = async () => {
+      const requestController = new AbortController();
+      activeRequestController = requestController;
+      const requestTimeout = window.setTimeout(
+        () => requestController.abort(),
+        STATISTICS_RESET_REQUEST_TIMEOUT_MS
+      );
+      const result = await getUserStatisticsReset(user.id, statisticsReset.resetId, {
+        signal: requestController.signal,
+      });
+      window.clearTimeout(requestTimeout);
+      if (activeRequestController === requestController) activeRequestController = undefined;
+      if (cancelled) return;
+      if (!result.ok) {
+        const resultErrorCode = requestController.signal.aborted ? "TIMEOUT" : result.errorCode;
+        const retryable = ["CONNECTION_FAILED", "NETWORK_ERROR", "TIMEOUT"].includes(
+          resultErrorCode ?? ""
+        );
+        if (retryable && consecutiveRetryableFailures < STATISTICS_RESET_MAX_RETRIES) {
+          const delay = Math.min(
+            STATISTICS_RESET_POLL_INTERVAL_MS * 2 ** consecutiveRetryableFailures,
+            STATISTICS_RESET_RETRY_MAX_DELAY_MS
+          );
+          consecutiveRetryableFailures += 1;
+          timer = setTimeout(poll, delay);
+          return;
+        }
+        setStatisticsResetPollFailed(true);
+        return;
+      }
+
+      consecutiveRetryableFailures = 0;
+      setStatisticsResetPollFailed(false);
+      const next = result.data as UserStatisticsResetRecord;
+      if (applyStatisticsResetStatus(next)) return;
+      timer = setTimeout(poll, STATISTICS_RESET_POLL_INTERVAL_MS);
+    };
+
+    timer = setTimeout(poll, STATISTICS_RESET_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      activeRequestController?.abort();
+    };
+  }, [applyStatisticsResetStatus, statisticsReset, statisticsResetPollFailed, user.id]);
 
   const handleResetLimitsOnly = async () => {
     setIsResettingLimits(true);
@@ -489,13 +575,43 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                   <p className="text-xs text-muted-foreground">
                     {t("editDialog.resetData.description")}
                   </p>
+                  {statisticsReset ? (
+                    <p className="text-xs font-medium" data-testid="statistics-reset-status">
+                      {t(`editDialog.resetData.${statisticsReset.status}`)}
+                    </p>
+                  ) : null}
+                  {statisticsResetPollFailed ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p
+                        className="text-xs font-medium text-destructive"
+                        data-testid="statistics-reset-poll-error"
+                      >
+                        {t("editDialog.resetData.statusUnavailable")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStatisticsResetPollFailed(false)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {t("editDialog.resetData.retryStatus")}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <AlertDialog open={resetAllDialogOpen} onOpenChange={setResetAllDialogOpen}>
                   <AlertDialogTrigger asChild>
-                    <Button type="button" variant="destructive">
-                      <Trash2 className="h-4 w-4" />
-                      {t("editDialog.resetData.button")}
+                    <Button type="button" variant="destructive" disabled={isResettingAll}>
+                      {isResettingAll ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      {isResettingAll
+                        ? t("editDialog.resetData.loading")
+                        : t("editDialog.resetData.button")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>

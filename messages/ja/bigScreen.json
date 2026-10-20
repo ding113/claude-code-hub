@@ -1,7 +1,7 @@
 {
-  "pageTitle": "リアルタイム大画面 - Claude Code Hub",
-  "pageDescription": "Claude Code Hub のリアルタイム監視ダッシュボード",
-  "title": "CLAUDE CODE HUB",
+  "pageTitle": "リアルタイム大画面 - CC Hub",
+  "pageDescription": "CC Hub のリアルタイム監視ダッシュボード",
+  "title": "CC HUB",
   "subtitle": "リアルタイムデータモニター",
   "metrics": {
     "concurrent": "同時接続数",

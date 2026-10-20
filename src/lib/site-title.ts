@@ -1,4 +1,4 @@
-export const DEFAULT_SITE_TITLE = "Claude Code Hub";
+export const DEFAULT_SITE_TITLE = "CC Hub";
 
 export function normalizeSiteTitle(value: unknown): string | null {
   if (typeof value !== "string") {

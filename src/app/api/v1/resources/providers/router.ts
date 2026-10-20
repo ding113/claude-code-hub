@@ -4,8 +4,15 @@ import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { ProblemJsonSchema } from "@/lib/api/v1/schemas/_common";
 import {
+  ProviderCacheEffectivenessListQuerySchema,
+  ProviderCacheEffectivenessListResponseSchema,
+} from "@/lib/api/v1/schemas/provider-cache-effectiveness";
+import {
   ProviderApiTestSchema,
   ProviderArrayResponseSchema,
+  ProviderBalanceBatchBodySchema,
+  ProviderBalanceListResponseSchema,
+  ProviderBalanceSnapshotSchema,
   ProviderBatchPatchApplySchema,
   ProviderBatchPatchPreviewSchema,
   ProviderBatchUpdateSchema,
@@ -37,15 +44,18 @@ import {
   deleteProvider,
   fetchProviderUpstreamModels,
   getProvider,
+  getProviderBalancesBatch,
   getProviderLimit,
   getProviderLimitBatch,
   getProviderModelSuggestions,
   getProvidersHealth,
   getProviderTestPresets,
+  listProviderCacheEffectiveness,
   listProviderGroups,
   listProviders,
   previewBatchPatch,
   reclusterProviderVendors,
+  refreshProviderBalance,
   resetProviderCircuit,
   resetProviderCircuitsBatch,
   resetProviderUsage,
@@ -294,6 +304,31 @@ providersRouter.openapi(
 
 providersRouter.openapi(
   createRoute({
+    method: "get",
+    path: "/providers/cache-effectiveness",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "List provider cache effectiveness windows",
+    description:
+      "Lists aggregated prompt cache effectiveness windows per provider, model, and cache TTL bucket, ordered by window end descending. Read-only metrics; routing and billing are unaffected.",
+    "x-required-access": "admin",
+    security,
+    request: { query: ProviderCacheEffectivenessListQuerySchema },
+    responses: {
+      200: {
+        description: "Cache effectiveness windows.",
+        content: {
+          "application/json": { schema: ProviderCacheEffectivenessListResponseSchema },
+        },
+      },
+      ...problemResponses,
+    },
+  }),
+  listProviderCacheEffectiveness as never
+);
+
+providersRouter.openapi(
+  createRoute({
     method: "post",
     path: "/providers/{id}/circuit:reset",
     middleware: requireAuth("admin"),
@@ -404,6 +439,56 @@ providersRouter.openapi(
     },
   }),
   getProviderLimitBatch as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/balances:batch",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Batch get provider upstream balances",
+    description:
+      "Queries the upstream balance for multiple visible providers using each provider's own key. Serves cached snapshots unless refresh is set.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      body: {
+        required: true,
+        content: { "application/json": { schema: ProviderBalanceBatchBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: "Provider balance snapshots.",
+        content: { "application/json": { schema: ProviderBalanceListResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getProviderBalancesBatch as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/{id}/balance:refresh",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Refresh provider upstream balance",
+    description: "Queries the upstream balance for one provider, bypassing the cached snapshot.",
+    "x-required-access": "admin",
+    security,
+    request: { params: ProviderIdParamSchema },
+    responses: {
+      200: {
+        description: "Provider balance snapshot.",
+        content: { "application/json": { schema: ProviderBalanceSnapshotSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  refreshProviderBalance as never
 );
 
 providersRouter.openapi(

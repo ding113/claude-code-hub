@@ -148,7 +148,7 @@
     },
     "customHeaders": {
       "label": "自定义请求头（JSON）",
-      "desc": "静态请求头会合并到出站请求；不会覆盖鉴权头或最终 request filter。",
+      "desc": "静态值或动态模板会合并到出站请求；不会覆盖鉴权头或最终 request filter。可用 '{{header.Name}}' 复制入站请求头，'{{session.id}}' 写入 Session ID，'{{session.client_id}}' 写入客户端 Session ID。来源缺失时跳过该头。",
       "errors": {
         "invalidJson": "自定义请求头必须是合法 JSON",
         "notObject": "自定义请求头必须是 JSON 对象",
@@ -157,7 +157,8 @@
         "protectedName": "鉴权请求头不能通过自定义请求头设置",
         "invalidValue": "请求头值必须为字符串",
         "emptyName": "请求头名称不能为空",
-        "crlf": "请求头名称和值不能包含换行符"
+        "crlf": "请求头名称和值不能包含换行符",
+        "invalidTemplate": "动态模板语法无效。支持 '{{header.Name}}'、'{{session.id}}'、'{{session.client_id}}'"
       }
     },
     "codexOverrides": {
@@ -165,7 +166,7 @@
       "desc": "在供应商级别覆写 Codex (Responses API) 请求参数",
       "reasoningEffort": {
         "label": "推理等级覆写",
-        "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。注意：none 仅 GPT-5.4 mini 系列支持，模型不支持会返回错误。",
+        "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。可用档位因模型而异，模型不支持会返回错误。",
         "options": {
           "inherit": "不覆写（跟随客户端）",
           "minimal": "minimal（更省、更快）",
@@ -173,7 +174,8 @@
           "medium": "medium（默认）",
           "high": "high（更强推理）",
           "xhigh": "xhigh",
-          "none": "none（仅 GPT-5.4 mini）"
+          "max": "max（最高强度）",
+          "none": "none"
         }
       },
       "reasoningSummary": {

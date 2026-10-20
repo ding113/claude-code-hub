@@ -131,4 +131,43 @@ describe.sequential("shutdownLangfuse", () => {
     expect(elapsed).toBeGreaterThanOrEqual(40);
     expect(elapsed).toBeLessThan(500);
   });
+
+  it("passes LANGFUSE_TRACING_ENVIRONMENT and LANGFUSE_RELEASE to the span processor", async () => {
+    let received: Record<string, unknown> | undefined;
+
+    vi.doMock("@langfuse/otel", () => ({
+      LangfuseSpanProcessor: class {
+        constructor(params: Record<string, unknown>) {
+          received = params;
+          Object.assign(this, {
+            forceFlush: () => Promise.resolve(),
+          });
+        }
+      },
+    }));
+    vi.doMock("@opentelemetry/sdk-node", () => ({
+      NodeSDK: class {
+        start() {}
+        shutdown() {
+          return Promise.resolve();
+        }
+      },
+    }));
+
+    vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-test");
+    vi.stubEnv("LANGFUSE_SECRET_KEY", "sk-test");
+    vi.stubEnv("LANGFUSE_TRACING_ENVIRONMENT", "production");
+    vi.stubEnv("LANGFUSE_RELEASE", "0.9.3");
+
+    const { initLangfuse, shutdownLangfuse } = await import("@/lib/langfuse");
+    await initLangfuse();
+
+    expect(received).toEqual(
+      expect.objectContaining({
+        environment: "production",
+        release: "0.9.3",
+      })
+    );
+    await shutdownLangfuse();
+  });
 });

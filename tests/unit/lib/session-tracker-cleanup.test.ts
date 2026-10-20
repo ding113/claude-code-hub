@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getGlobalActiveSessionsKey } from "@/lib/redis/active-session-keys";
+import {
+  getGlobalActiveSessionsKey,
+  getObservedGlobalActiveSessionsKey,
+} from "@/lib/redis/active-session-keys";
 
 let redisClientRef: any;
 const pipelineCalls: Array<unknown[]> = [];
+let pipelineExecResults: Array<[Error | null, unknown]> = [];
 
 /**
  * 构造一个可记录调用的 Redis pipeline mock（用于断言 cleanup/expire 等行为）。
@@ -41,9 +45,17 @@ const makePipeline = () => {
       pipelineCalls.push(["exists", ...args]);
       return pipeline;
     }),
+    zrem: vi.fn((...args: unknown[]) => {
+      pipelineCalls.push(["zrem", ...args]);
+      return pipeline;
+    }),
+    del: vi.fn((...args: unknown[]) => {
+      pipelineCalls.push(["del", ...args]);
+      return pipeline;
+    }),
     exec: vi.fn(async () => {
       pipelineCalls.push(["exec"]);
-      return [];
+      return pipelineExecResults;
     }),
   };
   return pipeline;
@@ -72,9 +84,9 @@ describe("SessionTracker - TTL and cleanup", () => {
     vi.resetAllMocks();
     vi.resetModules();
     pipelineCalls.length = 0;
+    pipelineExecResults = [];
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
-
     redisClientRef = {
       status: "ready",
       exists: vi.fn(async () => 1),
@@ -163,29 +175,16 @@ describe("SessionTracker - TTL and cleanup", () => {
       expect(providerExpireCall![2]).toBe(7200); // should use SESSION_TTL when > 3600
     });
 
-    it("should refresh session binding TTLs using env SESSION_TTL (not hardcoded 300)", async () => {
+    it("should refresh session activity using env SESSION_TTL (not hardcoded 300)", async () => {
       process.env.SESSION_TTL = "600"; // 10 minutes
 
       const { SessionTracker } = await import("@/lib/session-tracker");
 
       await SessionTracker.refreshSession("sess-123", 1, 42);
 
-      // Check expire calls for session bindings use 600 (env value), not 300
-      const providerBindingExpire = pipelineCalls.find(
-        (call) => call[0] === "expire" && String(call[1]) === "session:sess-123:provider"
-      );
-      const keyBindingExpire = pipelineCalls.find(
-        (call) => call[0] === "expire" && String(call[1]) === "session:sess-123:key"
-      );
       const lastSeenSetex = pipelineCalls.find(
         (call) => call[0] === "setex" && String(call[1]) === "session:sess-123:last_seen"
       );
-
-      expect(providerBindingExpire).toBeDefined();
-      expect(providerBindingExpire![2]).toBe(600);
-
-      expect(keyBindingExpire).toBeDefined();
-      expect(keyBindingExpire![2]).toBe(600);
 
       expect(lastSeenSetex).toBeDefined();
       expect(lastSeenSetex![2]).toBe(600);
@@ -286,6 +285,53 @@ describe("SessionTracker - TTL and cleanup", () => {
         "-inf",
         expectedCutoff
       );
+    });
+  });
+
+  describe("getObservedActiveSessions", () => {
+    it("returns only identities with live session info, matching dashboard count eligibility", async () => {
+      redisClientRef.zrange.mockResolvedValue(["pfx:scope:live", "pfx:scope:stale"]);
+      pipelineExecResults = [
+        [null, 1],
+        [null, 0],
+      ];
+
+      const { SessionTracker } = await import("@/lib/session-tracker");
+
+      await expect(SessionTracker.getObservedActiveSessions()).resolves.toEqual(["pfx:scope:live"]);
+      expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
+        getObservedGlobalActiveSessionsKey(),
+        "-inf",
+        nowMs - 300 * 1000
+      );
+      expect(pipelineCalls).toContainEqual(["exists", "session:pfx:scope:live:info"]);
+      expect(pipelineCalls).toContainEqual(["exists", "session:pfx:scope:stale:info"]);
+    });
+  });
+
+  describe("terminateObservedSession", () => {
+    it("removes the observed identity, concurrent count, and session info", async () => {
+      pipelineExecResults = [
+        [null, 1],
+        [null, 1],
+        [null, 1],
+      ];
+
+      const { SessionTracker } = await import("@/lib/session-tracker");
+
+      await expect(SessionTracker.terminateObservedSession("pfx:scope:fingerprint")).resolves.toBe(
+        true
+      );
+      expect(pipelineCalls).toContainEqual([
+        "zrem",
+        getObservedGlobalActiveSessionsKey(),
+        "pfx:scope:fingerprint",
+      ]);
+      expect(pipelineCalls).toContainEqual([
+        "del",
+        "observed_session:pfx:scope:fingerprint:concurrent_count",
+      ]);
+      expect(pipelineCalls).toContainEqual(["del", "session:pfx:scope:fingerprint:info"]);
     });
   });
 

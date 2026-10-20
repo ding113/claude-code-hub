@@ -33,7 +33,7 @@ export async function getBindingsForTypeAction(
 ): Promise<ActionResult<NotificationBindingWithTarget[]>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问通知绑定" };
     }
 
@@ -53,7 +53,7 @@ export async function updateBindingsAction(
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 

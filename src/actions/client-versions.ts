@@ -15,7 +15,7 @@ import type { ActionResult } from "./types";
 export async function fetchClientVersionStats(): Promise<ActionResult<ClientVersionStats[]>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问客户端版本统计" };
     }
 

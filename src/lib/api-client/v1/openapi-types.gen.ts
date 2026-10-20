@@ -204,6 +204,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers/cache-effectiveness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List provider cache effectiveness windows
+         * @description Lists aggregated prompt cache effectiveness windows per provider, model, and cache TTL bucket, ordered by window end descending. Read-only metrics; routing and billing are unaffected.
+         */
+        get: operations["getProvidersCacheEffectiveness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers/{id}/circuit:reset": {
         parameters: {
             query?: never;
@@ -298,6 +318,46 @@ export interface paths {
          * @description Returns cost and concurrency buckets for multiple visible providers.
          */
         post: operations["postProvidersLimitUsageBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/balances:batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch get provider upstream balances
+         * @description Queries the upstream balance for multiple visible providers using each provider's own key. Serves cached snapshots unless refresh is set.
+         */
+        post: operations["postProvidersBalancesBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/{id}/balance:refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh provider upstream balance
+         * @description Queries the upstream balance for one provider, bypassing the cached snapshot.
+         */
+        post: operations["postProvidersByIdBalanceRefresh"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2464,6 +2524,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/statistics-resets/{resetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get user statistics reset status
+         * @description Returns the durable status of an asynchronous statistics reset.
+         */
+        get: operations["getUsersByIdStatisticsResetsByResetid"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{userId}/keys": {
         parameters: {
             query?: never;
@@ -4327,6 +4407,10 @@ export interface operations {
                             url: string;
                             /** @description Masked provider API key. */
                             maskedKey: string;
+                            /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                            maskedNewApiAccessToken: string | null;
+                            /** @description New API user id sent with the system access token. */
+                            newApiUserId: number | null;
                             /** @description Whether the provider is enabled. */
                             isEnabled: boolean;
                             /** @description Provider routing weight. */
@@ -4400,7 +4484,7 @@ export interface operations {
                             proxyUrl: string | null;
                             /** @description Whether proxy failures fall back to direct calls. */
                             proxyFallbackToDirect: boolean;
-                            /** @description Custom upstream headers with sensitive values redacted. */
+                            /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                             customHeaders: {
                                 [key: string]: string;
                             } | null;
@@ -4642,6 +4726,10 @@ export interface operations {
                     url: string;
                     /** @description Provider API key. Write-only. */
                     key: string;
+                    /** @description New API system access token. When set, balance queries read the account balance instead of the key quota. Empty string or null clears it. Write-only. */
+                    new_api_access_token?: string | null;
+                    /** @description New API user id sent with the system access token. Required by New API releases before 2026-07. */
+                    new_api_user_id?: number | null;
                     /** @description Whether the provider is enabled. */
                     is_enabled?: boolean;
                     /** @description Provider routing weight. */
@@ -4724,7 +4812,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -4792,6 +4880,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -4865,7 +4957,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5114,6 +5206,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -5187,7 +5283,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5605,6 +5701,10 @@ export interface operations {
                      * @description Provider upstream base URL.
                      */
                     url?: string;
+                    /** @description New API system access token. When set, balance queries read the account balance instead of the key quota. Empty string or null clears it. Write-only. */
+                    new_api_access_token?: string | null;
+                    /** @description New API user id sent with the system access token. Required by New API releases before 2026-07. */
+                    new_api_user_id?: number | null;
                     /** @description Whether the provider is enabled. */
                     is_enabled?: boolean;
                     /** @description Provider routing weight. */
@@ -5686,7 +5786,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -5760,6 +5860,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -5833,7 +5937,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -6248,6 +6352,220 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getProvidersCacheEffectiveness: {
+        parameters: {
+            query?: {
+                /** @description Optional provider id filter. */
+                providerId?: number;
+                /** @description Maximum number of windows to return, capped at 200. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cache effectiveness windows. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Cache effectiveness windows ordered by window end descending. */
+                        items: {
+                            /** @description Aggregation window row id. */
+                            id: number;
+                            /** @description Provider id. */
+                            providerId: number;
+                            /** @description Model name the window was aggregated for. */
+                            model: string;
+                            /** @description Cache TTL bucket, e.g. 5m or 1h. */
+                            cacheTtlBucket: string;
+                            /**
+                             * Format: date-time
+                             * @description Aggregation window start.
+                             */
+                            windowStart: string;
+                            /**
+                             * Format: date-time
+                             * @description Aggregation window end.
+                             */
+                            windowEnd: string;
+                            /** @description Total samples in the window. */
+                            sampleCount: number;
+                            /** @description Samples eligible for cache observation. */
+                            eligibleCount: number;
+                            /** @description Theoretical cacheable prompt tokens in the window. */
+                            theoreticalCacheTokens: number;
+                            /** @description Observed cache read tokens in the window. */
+                            observedCacheReadTokens: number;
+                            /** @description Raw observed/theoretical ratio in basis points (1/100 of a percent). */
+                            rawEffectivenessBp: number;
+                            /** @description Confidence of the raw ratio in basis points. */
+                            confidenceBp: number;
+                            /** @description Confidence-adjusted effectiveness score in basis points. */
+                            effectivenessBp: number;
+                            /**
+                             * Format: date-time
+                             * @description Row creation time.
+                             */
+                            createdAt: string | null;
+                        }[];
                     };
                 };
             };
@@ -7134,6 +7452,424 @@ export interface operations {
                     "application/json": {
                         /** @description Provider response items. */
                         items: unknown[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersBalancesBatch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Provider ids to query upstream balance for. */
+                    providerIds: number[];
+                    /**
+                     * @description Skip the cached snapshot and query upstream again.
+                     * @default false
+                     */
+                    refresh?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Provider balance snapshots. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider balance snapshots. */
+                        items: {
+                            /** @description Provider id. */
+                            providerId: number;
+                            /**
+                             * @description Whether the upstream reported a usable balance.
+                             * @enum {string}
+                             */
+                            status: "ok" | "unsupported" | "error";
+                            /**
+                             * @description Upstream protocol that produced the snapshot.
+                             * @enum {string|null}
+                             */
+                            source: "new-api-token-usage" | "new-api-account" | "sub2api-usage" | "openai-billing" | "deepseek-balance" | "kimi-balance" | "chatgpt-credits" | null;
+                            /** @description Remaining balance in the reported currency. */
+                            balance: number | null;
+                            /** @description Currency the balance is denominated in. */
+                            currency: string;
+                            /** @description Total granted amount. */
+                            totalGranted: number | null;
+                            /** @description Total consumed amount. */
+                            totalUsed: number | null;
+                            /** @description Upstream reports an unlimited quota. */
+                            unlimited: boolean;
+                            /** @description Key expiry time in ISO-8601. */
+                            expiresAt: string | null;
+                            /** @description Snapshot time in ISO-8601. */
+                            checkedAt: string;
+                            /** @description Failure reason code. */
+                            errorCode: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersByIdBalanceRefresh: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider balance snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider id. */
+                        providerId: number;
+                        /**
+                         * @description Whether the upstream reported a usable balance.
+                         * @enum {string}
+                         */
+                        status: "ok" | "unsupported" | "error";
+                        /**
+                         * @description Upstream protocol that produced the snapshot.
+                         * @enum {string|null}
+                         */
+                        source: "new-api-token-usage" | "new-api-account" | "sub2api-usage" | "openai-billing" | "deepseek-balance" | "kimi-balance" | "chatgpt-credits" | null;
+                        /** @description Remaining balance in the reported currency. */
+                        balance: number | null;
+                        /** @description Currency the balance is denominated in. */
+                        currency: string;
+                        /** @description Total granted amount. */
+                        totalGranted: number | null;
+                        /** @description Total consumed amount. */
+                        totalUsed: number | null;
+                        /** @description Upstream reports an unlimited quota. */
+                        unlimited: boolean;
+                        /** @description Key expiry time in ISO-8601. */
+                        expiresAt: string | null;
+                        /** @description Snapshot time in ISO-8601. */
+                        checkedAt: string;
+                        /** @description Failure reason code. */
+                        errorCode: string | null;
                     };
                 };
             };
@@ -9022,7 +9758,7 @@ export interface operations {
                     preset?: string;
                     /** @description Optional custom JSON payload. */
                     customPayload?: string;
-                    /** @description Optional custom headers. */
+                    /** @description Optional custom headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     customHeaders?: {
                         [key: string]: string;
                     };
@@ -11885,6 +12621,22 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                        legacyHedgeMaxInFlight: number;
+                        /** @description Whether bounded streaming Discovery is enabled. */
+                        discoveryEnabled: boolean;
+                        /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                        discoveryConcurrency: number;
+                        /** @description Maximum number of Discovery rounds. */
+                        maxDiscoveryRounds: number;
+                        /** @description First-byte Discovery SLA in milliseconds. */
+                        discoverySlaMs: number;
+                        /** @description Sticky probe SLA in milliseconds. */
+                        stickySlaMs: number;
+                        /** @description Total pre-winner Discovery deadline in milliseconds. */
+                        racingTotalTimeoutMs: number;
+                        /** @description Sticky timeout cooldown in milliseconds. */
+                        stickyTimeoutCooldownMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -11985,6 +12737,21 @@ export interface operations {
                         publicStatusWindowHours: number;
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
+                        /**
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
+                         * @enum {string}
+                         */
+                        streamGateMode: "off" | "shadow" | "enforce";
+                        /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                        affinityIgnoreClientSessionId: boolean;
+                        /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                        enableMemoryAdmission: boolean;
+                        /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                        replayEnabled: boolean | null;
+                        /** @description Replay completed payload reuse window in minutes. */
+                        replayCacheTtlMinutes: number;
+                        /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                        cacheEffectivenessEnabled: boolean | null;
                         /**
                          * Format: date-time
                          * @description Creation time.
@@ -12147,6 +12914,22 @@ export interface operations {
                     billNonSuccessfulRequests?: boolean;
                     /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                     billHedgeLosers?: boolean;
+                    /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                    legacyHedgeMaxInFlight?: number;
+                    /** @description Whether bounded streaming Discovery is enabled. */
+                    discoveryEnabled?: boolean;
+                    /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                    discoveryConcurrency?: number;
+                    /** @description Maximum number of Discovery rounds. */
+                    maxDiscoveryRounds?: number;
+                    /** @description First-byte Discovery SLA in milliseconds. */
+                    discoverySlaMs?: number;
+                    /** @description Sticky probe SLA in milliseconds. */
+                    stickySlaMs?: number;
+                    /** @description Total pre-winner Discovery deadline in milliseconds. */
+                    racingTotalTimeoutMs?: number;
+                    /** @description Sticky timeout cooldown in milliseconds. */
+                    stickyTimeoutCooldownMs?: number;
                     /** @description System timezone, or null to use default. */
                     timezone?: string | null;
                     /** @description Whether usage-log cleanup is enabled. */
@@ -12246,6 +13029,21 @@ export interface operations {
                     publicStatusWindowHours?: number;
                     /** @description Public status aggregation interval in minutes. */
                     publicStatusAggregationIntervalMinutes?: number;
+                    /**
+                     * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
+                     * @enum {string}
+                     */
+                    streamGateMode?: "off" | "shadow" | "enforce";
+                    /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                    affinityIgnoreClientSessionId?: boolean;
+                    /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                    enableMemoryAdmission?: boolean;
+                    /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                    replayEnabled?: boolean | null;
+                    /** @description Replay completed payload reuse window in minutes. */
+                    replayCacheTtlMinutes?: number;
+                    /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                    cacheEffectivenessEnabled?: boolean | null;
                 };
             };
         };
@@ -12282,6 +13080,22 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                        legacyHedgeMaxInFlight: number;
+                        /** @description Whether bounded streaming Discovery is enabled. */
+                        discoveryEnabled: boolean;
+                        /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                        discoveryConcurrency: number;
+                        /** @description Maximum number of Discovery rounds. */
+                        maxDiscoveryRounds: number;
+                        /** @description First-byte Discovery SLA in milliseconds. */
+                        discoverySlaMs: number;
+                        /** @description Sticky probe SLA in milliseconds. */
+                        stickySlaMs: number;
+                        /** @description Total pre-winner Discovery deadline in milliseconds. */
+                        racingTotalTimeoutMs: number;
+                        /** @description Sticky timeout cooldown in milliseconds. */
+                        stickyTimeoutCooldownMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -12382,6 +13196,21 @@ export interface operations {
                         publicStatusWindowHours: number;
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
+                        /**
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
+                         * @enum {string}
+                         */
+                        streamGateMode: "off" | "shadow" | "enforce";
+                        /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                        affinityIgnoreClientSessionId: boolean;
+                        /** @description Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429. */
+                        enableMemoryAdmission: boolean;
+                        /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                        replayEnabled: boolean | null;
+                        /** @description Replay completed payload reuse window in minutes. */
+                        replayCacheTtlMinutes: number;
+                        /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                        cacheEffectivenessEnabled: boolean | null;
                         /**
                          * Format: date-time
                          * @description Creation time.
@@ -22785,6 +23614,10 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+                /** @description Stable request id. */
+                requestId?: number;
             };
             header?: never;
             path: {
@@ -23133,6 +23966,8 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
             };
             header?: never;
             path: {
@@ -23307,6 +24142,10 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+                /** @description Stable request id. */
+                requestId?: number;
             };
             header?: never;
             path: {
@@ -23661,7 +24500,12 @@ export interface operations {
     };
     getSessionsBySessionidOriginChain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Request sequence. */
+                requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+            };
             header?: never;
             path: {
                 /** @description Session id. */
@@ -23832,7 +24676,12 @@ export interface operations {
     };
     getSessionsBySessionidResponse: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Request sequence. */
+                requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+            };
             header?: never;
             path: {
                 /** @description Session id. */
@@ -32460,12 +33309,293 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description User statistics reset. */
-            204: {
+            /** @description User statistics reset queued. */
+            202: {
+                headers: {
+                    /** @description Status resource for the queued statistics reset. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        resetId: string;
+                        userId: number;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "completed" | "failed";
+                        /** Format: date-time */
+                        requestedAt: string;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                        deletedMessageRequests: number;
+                        deletedUsageLedger: number;
+                        errorCode: string | null;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description User not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Internal server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getUsersByIdStatisticsResetsByResetid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description User id. */
+                id: number;
+                /** @description Statistics reset id. */
+                resetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User statistics reset status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        resetId: string;
+                        userId: number;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "completed" | "failed";
+                        /** Format: date-time */
+                        requestedAt: string;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                        deletedMessageRequests: number;
+                        deletedUsageLedger: number;
+                        errorCode: string | null;
+                    };
+                };
             };
             /** @description Invalid request. */
             400: {
@@ -35330,7 +36460,7 @@ export interface operations {
                 page?: number;
                 /** @description Offset page size. */
                 pageSize?: number;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description User id filter. */
                 userId?: number | null;
@@ -35350,6 +36480,8 @@ export interface operations {
                 endpoint?: string;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
+                /** @description Replay request filter. */
+                replayFilter?: "all" | "replay" | "non-replay";
                 /** @description Start timestamp in milliseconds. */
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
@@ -35535,7 +36667,7 @@ export interface operations {
                 page?: number;
                 /** @description Offset page size. */
                 pageSize?: number;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description User id filter. */
                 userId?: number | null;
@@ -35555,6 +36687,8 @@ export interface operations {
                 endpoint?: string;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
+                /** @description Replay request filter. */
+                replayFilter?: "all" | "replay" | "non-replay";
                 /** @description Start timestamp in milliseconds. */
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
@@ -36605,7 +37739,7 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    /** @description Session id filter. */
+                    /** @description Exact Session ID or Prefix ID filter. */
                     sessionId?: string;
                     /** @description User id filter. */
                     userId?: number | null;
@@ -36625,6 +37759,11 @@ export interface operations {
                     endpoint?: string;
                     /** @description Minimum retry count. */
                     minRetryCount?: number | null;
+                    /**
+                     * @description Replay request filter.
+                     * @enum {string}
+                     */
+                    replayFilter?: "all" | "replay" | "non-replay";
                     /** @description Start timestamp in milliseconds. */
                     startTime?: number | null;
                     /** @description End timestamp in milliseconds. */
@@ -37689,7 +38828,7 @@ export interface operations {
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
                 endTime?: number | null;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description Model filter. */
                 model?: string;
@@ -37892,7 +39031,7 @@ export interface operations {
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
                 endTime?: number | null;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description Model filter. */
                 model?: string;

@@ -1,0 +1,158 @@
+import { availableParallelism } from "node:os";
+import { defineConfig } from "vitest/config";
+import { parsePositiveInt, parseWorkerLimit, sharedResolve } from "./tests/vitest.base.mts";
+
+const isIntegrationFileFilterRequested = process.argv.some((arg) =>
+  /tests[\\/]+integration(?:[\\/].+\.(test|spec)\.[cm]?[jt]sx?|[\\/]?$)/.test(arg)
+);
+
+function defaultMaxWorkers(): number {
+  const workerBudget = Math.floor(availableParallelism() * 0.75);
+  return Math.min(8, Math.max(2, workerBudget));
+}
+
+export default defineConfig({
+  test: {
+    // ==================== 全局配置 ====================
+    globals: true, // 使用全局 API (describe, test, expect)
+    projects: [
+      {
+        extends: true,
+        test: {
+          environment: "happy-dom",
+          include: [
+            "tests/unit/**/*.{test,spec}.tsx",
+            "tests/security/**/*.{test,spec}.{ts,tsx}",
+            "tests/api/**/*.{test,spec}.tsx",
+            "src/**/*.{test,spec}.tsx",
+          ],
+        },
+      },
+    ],
+
+    // 测试前置脚本
+    setupFiles: ["./tests/setup.ts"],
+
+    // UI 配置
+    // Vitest UI/Server 使用的是 test.api（不是 Vite 的 server 配置）
+    // 默认仅允许本机访问，避免浏览器尝试连接 0.0.0.0 导致 UI 显示 Disconnected
+    api: {
+      host: process.env.VITEST_API_HOST || "127.0.0.1",
+      port: Number(process.env.VITEST_API_PORT || 51204),
+      strictPort: false,
+    },
+    open: false, // 不自动打开浏览器（手动访问 http://localhost:51204/__vitest__/）
+
+    // ==================== 覆盖率配置 ====================
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov", "json"],
+      reportsDirectory: "./coverage",
+
+      // 排除文件
+      exclude: [
+        "node_modules/",
+        "tests/",
+        "*.config.*",
+        "**/*.d.ts",
+        ".next/",
+        "dist/",
+        "build/",
+        // 单元测试覆盖率仅统计「可纯函数化/可隔离」模块，避免把需要 DB/Redis/Next/Bull 的集成逻辑算进阈值
+        "src/actions/**",
+        "src/repository/**",
+        "src/app/v1/_lib/**",
+        "src/lib/provider-testing/**",
+        "src/lib/notification/**",
+        "src/lib/redis/**",
+        "src/lib/utils/**",
+        "src/lib/rate-limit/**",
+        "src/components/quota/**",
+        // 依赖外部系统或目前无单测覆盖的重模块（避免拉低全局阈值）
+        "src/lib/session-manager.ts",
+        "src/lib/session-tracker.ts",
+        "src/lib/circuit-breaker.ts",
+        "src/lib/error-override-validator.ts",
+        "src/lib/error-rule-detector.ts",
+        "src/lib/sensitive-word-detector.ts",
+        "src/lib/price-sync.ts",
+        "src/lib/proxy-status-tracker.ts",
+        "src/hooks/useCountdown.ts",
+      ],
+
+      // 覆盖率阈值（可选）
+      thresholds: {
+        lines: 50,
+        functions: 50,
+        branches: 40,
+        statements: 50,
+      },
+    },
+
+    // ==================== 超时配置 ====================
+    testTimeout: 10000, // 单个测试超时 10 秒
+    hookTimeout: 10000, // 钩子函数超时 10 秒
+    teardownTimeout: parsePositiveInt(process.env.VITEST_TEARDOWN_TIMEOUT_MS, 15000),
+    slowTestThreshold: parsePositiveInt(process.env.VITEST_SLOW_TEST_THRESHOLD_MS, 1000),
+
+    // ==================== 并发配置 ====================
+    maxConcurrency: 5, // 最大并发测试数
+    pool: "threads", // 使用线程池（推荐）
+    // 依据可用 CPU 自动调节，但上限保持 8，避免高核机器过度并行拖垮长尾测试。
+    // 允许通过环境变量覆盖：VITEST_MAX_WORKERS=8 或 VITEST_MAX_WORKERS=75%。
+    maxWorkers: parseWorkerLimit(process.env.VITEST_MAX_WORKERS, defaultMaxWorkers()),
+
+    // ==================== 文件匹配 ====================
+    include: [
+      "tests/unit/**/*.{test,spec}.ts", // 单元测试
+      "tests/security/**/*.{test,spec}.ts",
+      "tests/api/**/*.{test,spec}.ts", // API 测试
+      "src/**/*.{test,spec}.ts", // 支持源码中的测试
+      ...(isIntegrationFileFilterRequested
+        ? ["tests/integration/**/*.{test,spec}.ts", "tests/integration/**/*.{test,spec}.tsx"]
+        : []),
+    ],
+    exclude: [
+      "node_modules",
+      ".next",
+      "dist",
+      "build",
+      "coverage",
+      "**/*.d.ts",
+      ...(isIntegrationFileFilterRequested ? [] : ["tests/integration/**"]),
+      "tests/api/users-actions.test.ts",
+      "tests/api/providers-actions.test.ts",
+      "tests/api/keys-actions.test.ts",
+    ],
+
+    // ==================== 监听模式配置 ====================
+    // 不在配置文件中强制 watch=false，否则 vitest --ui 可能会在执行完一次后退出，UI 显示 Disconnected
+    // 通过命令行参数控制：vitest（watch）/ vitest run（单次运行）
+
+    // ==================== 报告器配置 ====================
+    reporters: ["verbose"], // 详细输出
+
+    // ==================== 隔离配置 ====================
+    isolate: true, // 每个测试文件在独立环境中运行
+
+    // ==================== Mock 配置 ====================
+    mockReset: true, // 每个测试后重置 mock
+    restoreMocks: true, // 每个测试后恢复原始实现
+    clearMocks: true, // 每个测试后清除 mock 调用记录
+
+    // ==================== 快照配置 ====================
+    resolveSnapshotPath: (testPath, snapExtension) => {
+      return testPath.replace(/\.test\.([tj]sx?)$/, `${snapExtension}.$1`);
+    },
+    server: {
+      deps: {
+        inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+      },
+    },
+  },
+
+  resolve: sharedResolve({ includeMessages: true }),
+  ssr: {
+    noExternal: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+  },
+});

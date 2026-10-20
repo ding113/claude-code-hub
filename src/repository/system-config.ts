@@ -6,6 +6,7 @@ import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 import {
   DEFAULT_FAKE_STREAMING_WHITELIST,
   type SystemSettings,
@@ -150,6 +151,7 @@ function createFallbackSettings(): SystemSettings {
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
     billHedgeLosers: true,
+    legacyHedgeMaxInFlight: 2,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -191,8 +193,21 @@ function createFallbackSettings(): SystemSettings {
     quotaLeaseCapUsd: null,
     publicStatusWindowHours: 24,
     publicStatusAggregationIntervalMinutes: 5,
+    discoveryEnabled: false,
+    discoveryConcurrency: 2,
+    maxDiscoveryRounds: 2,
+    discoverySlaMs: 10_000,
+    stickySlaMs: 20_000,
+    racingTotalTimeoutMs: 60_000,
+    stickyTimeoutCooldownMs: 300_000,
     ipExtractionConfig: null,
     ipGeoLookupEnabled: true,
+    streamGateMode: "enforce",
+    affinityIgnoreClientSessionId: true,
+    replayEnabled: null,
+    replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
+    cacheEffectivenessEnabled: null,
+    enableMemoryAdmission: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -247,6 +262,13 @@ const BASE_SETTINGS_COLUMNS: SettingsSelection = {
   quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
   publicStatusWindowHours: systemSettings.publicStatusWindowHours,
   publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
+  discoveryEnabled: systemSettings.discoveryEnabled,
+  discoveryConcurrency: systemSettings.discoveryConcurrency,
+  maxDiscoveryRounds: systemSettings.maxDiscoveryRounds,
+  discoverySlaMs: systemSettings.discoverySlaMs,
+  stickySlaMs: systemSettings.stickySlaMs,
+  racingTotalTimeoutMs: systemSettings.racingTotalTimeoutMs,
+  stickyTimeoutCooldownMs: systemSettings.stickyTimeoutCooldownMs,
   createdAt: systemSettings.createdAt,
   updatedAt: systemSettings.updatedAt,
   passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
@@ -264,6 +286,92 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "enableMemoryAdmission",
+    column: systemSettings.enableMemoryAdmission,
+    selectWarn: "system_settings 缺少 enableMemoryAdmission，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 enableMemoryAdmission，继续降级更新。",
+  },
+  {
+    key: "legacyHedgeMaxInFlight",
+    column: systemSettings.legacyHedgeMaxInFlight,
+    selectWarn: "system_settings 缺少 legacyHedgeMaxInFlight,回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 legacyHedgeMaxInFlight,继续降级更新。",
+  },
+  {
+    key: "replayCacheTtlMinutes",
+    column: systemSettings.replayCacheTtlMinutes,
+    selectWarn: "system_settings 缺少 replayCacheTtlMinutes,回退到上一代字段集.",
+    updateWarn: "system_settings 缺少 replayCacheTtlMinutes,继续降级更新.",
+  },
+  {
+    key: "cacheEffectivenessEnabled",
+    column: systemSettings.cacheEffectivenessEnabled,
+    selectWarn:
+      "system_settings 表除 cacheEffectivenessEnabled 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 cacheEffectivenessEnabled 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "replayEnabled",
+    column: systemSettings.replayEnabled,
+    selectWarn: "system_settings 表除 replayEnabled 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 replayEnabled 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "affinityIgnoreClientSessionId",
+    column: systemSettings.affinityIgnoreClientSessionId,
+    selectWarn:
+      "system_settings 表除 affinityIgnoreClientSessionId 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 affinityIgnoreClientSessionId 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "streamGateMode",
+    column: systemSettings.streamGateMode,
+    selectWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "stickyTimeoutCooldownMs",
+    column: systemSettings.stickyTimeoutCooldownMs,
+    selectWarn: "system_settings 缺少 stickyTimeoutCooldownMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 stickyTimeoutCooldownMs，回退到上一代字段集。",
+  },
+  {
+    key: "racingTotalTimeoutMs",
+    column: systemSettings.racingTotalTimeoutMs,
+    selectWarn: "system_settings 缺少 racingTotalTimeoutMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 racingTotalTimeoutMs，回退到上一代字段集。",
+  },
+  {
+    key: "stickySlaMs",
+    column: systemSettings.stickySlaMs,
+    selectWarn: "system_settings 缺少 stickySlaMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 stickySlaMs，回退到上一代字段集。",
+  },
+  {
+    key: "discoverySlaMs",
+    column: systemSettings.discoverySlaMs,
+    selectWarn: "system_settings 缺少 discoverySlaMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoverySlaMs，回退到上一代字段集。",
+  },
+  {
+    key: "maxDiscoveryRounds",
+    column: systemSettings.maxDiscoveryRounds,
+    selectWarn: "system_settings 缺少 maxDiscoveryRounds，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 maxDiscoveryRounds，回退到上一代字段集。",
+  },
+  {
+    key: "discoveryConcurrency",
+    column: systemSettings.discoveryConcurrency,
+    selectWarn: "system_settings 缺少 discoveryConcurrency，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoveryConcurrency，回退到上一代字段集。",
+  },
+  {
+    key: "discoveryEnabled",
+    column: systemSettings.discoveryEnabled,
+    selectWarn: "system_settings 缺少 discoveryEnabled，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoveryEnabled，回退到上一代字段集。",
+  },
   {
     key: "enableGeminiFunctionIdRectifier",
     column: systemSettings.enableGeminiFunctionIdRectifier,
@@ -320,6 +428,7 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
 // 历史世代字段集（冻结）：passThrough 世代之前的 schema 没有以下五列。
 // 注意：世代字段集相对近代阶梯末层会重新选取更晚引入的列（与历史实现一致）。
 const PASS_THROUGH_ERA_OMIT: readonly string[] = [
+  "legacyHedgeMaxInFlight",
   "billHedgeLosers",
   "billNonSuccessfulRequests",
   "passThroughUpstreamErrorMessage",
@@ -468,6 +577,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
           publicStatusAggregationIntervalMinutes: 5,
+          replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
         })
         .onConflictDoNothing();
     } catch (error) {
@@ -618,6 +728,32 @@ export async function updateSystemSettings(
     // 供应商竞速输家计费开关（如果提供）
     if (payload.billHedgeLosers !== undefined) {
       updates.billHedgeLosers = payload.billHedgeLosers;
+    }
+
+    if (payload.legacyHedgeMaxInFlight !== undefined) {
+      updates.legacyHedgeMaxInFlight = payload.legacyHedgeMaxInFlight;
+    }
+
+    if (payload.discoveryEnabled !== undefined) {
+      updates.discoveryEnabled = payload.discoveryEnabled;
+    }
+    if (payload.discoveryConcurrency !== undefined) {
+      updates.discoveryConcurrency = payload.discoveryConcurrency;
+    }
+    if (payload.maxDiscoveryRounds !== undefined) {
+      updates.maxDiscoveryRounds = payload.maxDiscoveryRounds;
+    }
+    if (payload.discoverySlaMs !== undefined) {
+      updates.discoverySlaMs = payload.discoverySlaMs;
+    }
+    if (payload.stickySlaMs !== undefined) {
+      updates.stickySlaMs = payload.stickySlaMs;
+    }
+    if (payload.racingTotalTimeoutMs !== undefined) {
+      updates.racingTotalTimeoutMs = payload.racingTotalTimeoutMs;
+    }
+    if (payload.stickyTimeoutCooldownMs !== undefined) {
+      updates.stickyTimeoutCooldownMs = payload.stickyTimeoutCooldownMs;
     }
 
     // 系统时区配置字段（如果提供）
@@ -771,6 +907,36 @@ export async function updateSystemSettings(
     // Fake 流式输出白名单（如果提供；空数组表示显式禁用，null 留待 transformer 落默认）
     if (payload.fakeStreamingWhitelist !== undefined) {
       updates.fakeStreamingWhitelist = payload.fakeStreamingWhitelist;
+    }
+
+    // F1 流式内容门控模式（如果提供）
+    if (payload.streamGateMode !== undefined) {
+      updates.streamGateMode = payload.streamGateMode;
+    }
+
+    // 忽略客户端 Session ID 开关（如果提供）
+    if (payload.affinityIgnoreClientSessionId !== undefined) {
+      updates.affinityIgnoreClientSessionId = payload.affinityIgnoreClientSessionId;
+    }
+
+    // F2 Replay 开关覆写（如果提供；null = 清除覆写跟随环境变量）
+    if (payload.replayEnabled !== undefined) {
+      updates.replayEnabled = payload.replayEnabled;
+    }
+
+    // F2 Replay 完成 payload 可重放窗口(分钟)
+    if (payload.replayCacheTtlMinutes !== undefined) {
+      updates.replayCacheTtlMinutes = payload.replayCacheTtlMinutes;
+    }
+
+    // F3b 缓存模拟开关覆写（如果提供；null = 清除覆写跟随环境变量）
+    if (payload.cacheEffectivenessEnabled !== undefined) {
+      updates.cacheEffectivenessEnabled = payload.cacheEffectivenessEnabled;
+    }
+
+    // 内存准入开关（如果提供）
+    if (payload.enableMemoryAdmission !== undefined) {
+      updates.enableMemoryAdmission = payload.enableMemoryAdmission;
     }
 
     let updated;

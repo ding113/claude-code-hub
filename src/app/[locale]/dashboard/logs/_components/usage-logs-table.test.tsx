@@ -5,6 +5,7 @@ import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { UsageLogRow } from "@/repository/usage-logs";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -23,7 +24,9 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children?: ReactNode }) => (
+    <div data-slot="tooltip-content">{children}</div>
+  ),
 }));
 
 vi.mock("@/components/ui/relative-time", () => ({
@@ -44,8 +47,21 @@ vi.mock("./model-display-with-redirect", () => ({
   ),
 }));
 
+const dialogProps = vi.hoisted(() => ({ latest: null as Record<string, unknown> | null }));
+
 vi.mock("./error-details-dialog", () => ({
-  ErrorDetailsDialog: () => <div data-slot="error-details-dialog" />,
+  ErrorDetailsDialog: (props: Record<string, unknown>) => {
+    dialogProps.latest = props;
+    return (
+      <div
+        data-slot="error-details-dialog"
+        data-replay={String(props.isReplay ?? false)}
+        data-replay-source-request-id={
+          props.isReplay ? String(props.replaySourceRequestId ?? "") : undefined
+        }
+      />
+    );
+  },
 }));
 
 import { UsageLogsTable } from "./usage-logs-table";
@@ -55,6 +71,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     id: 1,
     createdAt: new Date(),
     sessionId: null,
+    sourceSessionId: null,
+    sessionIdentityKind: null,
     requestSequence: null,
     userName: "u",
     keyName: "k",
@@ -71,6 +89,14 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     cacheCreation5mInputTokens: 0,
     cacheCreation1hInputTokens: 0,
     cacheTtlApplied: null,
+    theoreticalCacheTokens: null,
+    cacheScoreEligible: null,
+    cacheScoreExcludedReason: null,
+    cacheInputTotal: 1,
+    actualCacheRate: 0,
+    theoreticalCacheRate: null,
+    requestCacheCoefficientBp: null,
+    requestCacheMetricAvailability: "not_recorded",
     totalTokens: 2,
     costUsd: "0.01",
     costMultiplier: null,
@@ -78,11 +104,14 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: 100,
-    ttfbMs: 50,
+    ttftMs: 50,
+    firstByteMs: 50,
     errorMessage: null,
     providerChain: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: false,
+    replaySourceRequestId: null,
     userAgent: null,
     clientIp: null,
     messagesCount: null,
@@ -92,6 +121,163 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     ...overrides,
   };
 }
+
+const discoveryTrace: RoutingTraceV1 = {
+  version: 1,
+  mode: "discovery",
+  startedAt: 1,
+  updatedAt: 2,
+  discoveryEnabled: true,
+  eligible: true,
+  events: [],
+};
+
+describe("usage-logs-table thinking effort", () => {
+  test("forwards Replay provenance to the details dialog", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[makeLog({ isReplay: true, replaySourceRequestId: 7 })]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(dialogProps.latest).toEqual(
+      expect.objectContaining({ isReplay: true, replaySourceRequestId: 7 })
+    );
+    expect(html).toContain('data-replay-source-request-id="7"');
+  });
+
+  test("在计费模型右侧显示思考强度列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            model: "gpt-5.4",
+            specialSettings: [
+              {
+                type: "codex_reasoning_effort",
+                scope: "request",
+                hit: true,
+                effort: "low",
+              },
+              {
+                type: "provider_parameter_override",
+                scope: "provider",
+                providerId: 1,
+                providerName: "Codex",
+                providerType: "codex",
+                hit: true,
+                changed: true,
+                changes: [{ path: "reasoning.effort", before: "low", after: "max", changed: true }],
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const headers = [...container.querySelectorAll("thead th")].map((node) => node.textContent);
+    expect(headers.slice(6, 9)).toEqual([
+      "logs.columns.model",
+      "logs.columns.reasoningEffort",
+      "logs.columns.tokens",
+    ]);
+
+    const cells = [...container.querySelectorAll("tbody tr:first-child td")];
+    expect(cells[6]?.textContent).toContain("gpt-5.4");
+    expect(cells[7]?.textContent).toContain("low");
+    expect(cells[7]?.textContent).toContain("max");
+    expect(cells[7]?.className).toContain("overflow-visible");
+  });
+
+  test("显示 Anthropic 请求的思考强度", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            model: "claude-opus-4-5",
+            specialSettings: [
+              {
+                type: "anthropic_effort",
+                scope: "request",
+                hit: true,
+                effort: "medium",
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const cells = [...container.querySelectorAll("tbody tr:first-child td")];
+    expect(cells[7]?.textContent).toContain("medium");
+  });
+
+  test("hiddenColumns 含 reasoningEffort 时隐藏思考强度列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            specialSettings: [
+              { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "high" },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const headers = [...container.querySelectorAll("thead th")].map((node) => node.textContent);
+    expect(headers).not.toContain("logs.columns.reasoningEffort");
+    expect(headers).toHaveLength(12);
+    expect(container.querySelectorAll("tbody tr:first-child td")).toHaveLength(12);
+    expect(html).not.toContain('data-slot="thinking-effort"');
+  });
+
+  test("隐藏思考强度列后空态占满全部可见列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[]}
+        total={0}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const emptyCell = container.querySelector("tbody td");
+    expect(emptyCell?.getAttribute("colspan")).toBe("12");
+  });
+});
 
 describe("usage-logs-table multiplier badge", () => {
   test("does not render multiplier badge for null/undefined/empty/NaN/Infinity", () => {
@@ -127,6 +313,37 @@ describe("usage-logs-table multiplier badge", () => {
 
     expect(html).toContain("×0.20");
     expect(html).toContain("0.20x");
+  });
+
+  test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            costMultiplier: "0.01",
+            routingTrace: discoveryTrace,
+            providerChain: [
+              { id: 1, name: "failed", reason: "retry_failed", statusCode: 503 },
+              {
+                id: 2,
+                name: "winner",
+                reason: "retry_success",
+                statusCode: 200,
+                costMultiplier: 0.03,
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("×0.03");
   });
 
   test("renders the hedge billing split with cache tokens in the cost tooltip", () => {
@@ -243,11 +460,13 @@ describe("usage-logs-table multiplier badge", () => {
 
   test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
     const html = renderToStaticMarkup(
       <UsageLogsTable
-        logs={[makeLog({ id: 1, durationMs: 1000, ttfbMs: 950, outputTokens: 300 })]}
+        logs={[
+          makeLog({ id: 1, durationMs: 1000, ttftMs: 950, firstByteMs: 950, outputTokens: 300 }),
+        ]}
         total={1}
         page={1}
         pageSize={50}
@@ -258,16 +477,18 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
-    // TTFB should still appear
-    expect(html).toContain("TTFB");
+    // TTFT 行仍应出现
+    expect(html).toContain("logs.details.performance.ttft");
   });
 
   test("shows tok/s when conditions are normal", () => {
-    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
     const html = renderToStaticMarkup(
       <UsageLogsTable
-        logs={[makeLog({ id: 1, durationMs: 1000, ttfbMs: 500, outputTokens: 50 })]}
+        logs={[
+          makeLog({ id: 1, durationMs: 1000, ttftMs: 500, firstByteMs: 500, outputTokens: 50 }),
+        ]}
         total={1}
         page={1}
         pageSize={50}
@@ -278,8 +499,8 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should appear
     expect(html).toContain("tok/s");
-    // TTFB should also appear
-    expect(html).toContain("TTFB");
+    // TTFT 行同样应出现
+    expect(html).toContain("logs.details.performance.ttft");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {
@@ -395,6 +616,57 @@ describe("usage-logs-table multiplier badge", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  test("shows the client session ID and keeps the canonical prefix identity in the tooltip", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            sessionId: "pfx:scope:fingerprint",
+            sourceSessionId: "client-session-id",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain('data-session-id="client-session-id"');
+    expect(html).toContain("client-session-id");
+    expect(html).toContain("pfx:scope:fingerprint");
+  });
+
+  test("does not duplicate the canonical identity when it is the source fallback", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            sessionId: "same-session-id",
+            sourceSessionId: "same-session-id",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+      node.textContent?.includes("same-session-id")
+    );
+
+    expect(
+      [...(tooltip?.querySelectorAll("span") ?? [])].filter(
+        (node) => node.textContent === "same-session-id"
+      )
+    ).toHaveLength(1);
   });
 });
 

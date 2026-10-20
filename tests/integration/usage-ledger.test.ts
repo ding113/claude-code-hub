@@ -58,6 +58,14 @@ type InsertRequestInput = {
   inputTokens?: number | null;
   outputTokens?: number | null;
   providerChain?: Array<{ id: number; name: string }> | null;
+  sessionId?: string | null;
+  sessionIdentity?: string | null;
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
+  affinityScopeTag?: string | null;
+  affinityFingerprint?: string | null;
+  affinityFingerprintChain?: string[] | null;
+  isReplay?: boolean;
+  replaySourceRequestId?: number | null;
   createdAt?: Date;
 };
 
@@ -80,6 +88,14 @@ async function insertMessageRequestRow(input: InsertRequestInput) {
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
       providerChain: input.providerChain,
+      sessionId: input.sessionId,
+      sessionIdentity: input.sessionIdentity,
+      sessionIdentityKind: input.sessionIdentityKind,
+      affinityScopeTag: input.affinityScopeTag,
+      affinityFingerprint: input.affinityFingerprint,
+      affinityFingerprintChain: input.affinityFingerprintChain,
+      isReplay: input.isReplay,
+      replaySourceRequestId: input.replaySourceRequestId,
       createdAt: input.createdAt,
     })
     .returning({ id: messageRequest.id });
@@ -104,6 +120,14 @@ async function selectLedgerRowByRequestId(requestId: number) {
       originalModel: usageLedger.originalModel,
       endpoint: usageLedger.endpoint,
       apiType: usageLedger.apiType,
+      sessionId: usageLedger.sessionId,
+      sessionIdentity: usageLedger.sessionIdentity,
+      sessionIdentityKind: usageLedger.sessionIdentityKind,
+      affinityScopeTag: usageLedger.affinityScopeTag,
+      affinityFingerprint: usageLedger.affinityFingerprint,
+      affinityFingerprintChain: usageLedger.affinityFingerprintChain,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
       statusCode: usageLedger.statusCode,
       isSuccess: usageLedger.isSuccess,
       successRateOutcome: usageLedger.successRateOutcome,
@@ -221,6 +245,36 @@ run("usage ledger integration", () => {
       expect(rows[0]?.inputTokens).toBe(101);
       expect(rows[0]?.outputTokens).toBe(202);
       expect(rows[0]?.statusCode).toBe(201);
+    });
+
+    test("projects prefix Session identity and zero-cost Replay provenance", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("trigger-replay-identity"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        sessionId: "physical-session",
+        sessionIdentity: "pfx:scope-a:fingerprint-a",
+        sessionIdentityKind: "prefix_affinity",
+        affinityScopeTag: "scope-a",
+        affinityFingerprint: "fingerprint-a",
+        affinityFingerprintChain: ["fingerprint-root", "fingerprint-a"],
+        isReplay: true,
+        replaySourceRequestId: 7,
+        costUsd: "9.990000000000000",
+      });
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow).toMatchObject({
+        sessionId: "physical-session",
+        sessionIdentity: "pfx:scope-a:fingerprint-a",
+        sessionIdentityKind: "prefix_affinity",
+        affinityScopeTag: "scope-a",
+        affinityFingerprint: "fingerprint-a",
+        affinityFingerprintChain: ["fingerprint-root", "fingerprint-a"],
+        isReplay: true,
+        replaySourceRequestId: 7,
+      });
+      expect(toNumber(ledgerRow?.costUsd)).toBe(0);
     });
 
     test("does not insert usage_ledger row for warmup requests", async () => {
@@ -382,6 +436,54 @@ run("usage ledger integration", () => {
 
       const ledgerRow = await selectLedgerRowByRequestId(requestId);
       expect(ledgerRow?.successRateOutcome).toBe("excluded");
+    });
+
+    test("backfill repairs stale Session identity and Replay provenance", {
+      timeout: 60_000,
+    }, async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("backfill-replay-identity"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        sessionId: "physical-backfill",
+        sessionIdentity: "pfx:scope-b:fingerprint-b",
+        sessionIdentityKind: "prefix_affinity",
+        affinityScopeTag: "scope-b",
+        affinityFingerprint: "fingerprint-b",
+        affinityFingerprintChain: ["fingerprint-b"],
+        isReplay: true,
+        replaySourceRequestId: 8,
+        costUsd: "8.880000000000000",
+      });
+
+      await db
+        .update(usageLedger)
+        .set({
+          sessionIdentity: null,
+          sessionIdentityKind: null,
+          affinityScopeTag: null,
+          affinityFingerprint: null,
+          affinityFingerprintChain: null,
+          isReplay: false,
+          replaySourceRequestId: null,
+          costUsd: "8.880000000000000",
+        })
+        .where(eq(usageLedger.requestId, requestId));
+
+      const summary = await backfillUsageLedger();
+      expect(summary.alreadyExisted).toBeGreaterThanOrEqual(1);
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow).toMatchObject({
+        sessionIdentity: "pfx:scope-b:fingerprint-b",
+        sessionIdentityKind: "prefix_affinity",
+        affinityScopeTag: "scope-b",
+        affinityFingerprint: "fingerprint-b",
+        affinityFingerprintChain: ["fingerprint-b"],
+        isReplay: true,
+        replaySourceRequestId: 8,
+      });
+      expect(toNumber(ledgerRow?.costUsd)).toBe(0);
     });
   });
 

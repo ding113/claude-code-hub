@@ -7,5 +7,6 @@
   "invalidUrl": "有効な API アドレスを入力してください",
   "urlRequired": "プロバイダー URL を入力してください",
   "invalidWebsiteUrl": "有効な公式サイト URL を入力してください",
-  "updateFailed": "プロバイダーの更新に失敗しました"
+  "updateFailed": "プロバイダーの更新に失敗しました",
+  "invalidNewApiUserId": "ユーザー ID は正の整数で入力してください"
 }

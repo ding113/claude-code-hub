@@ -19,7 +19,7 @@ import type { ActionResult } from "./types";
  */
 export async function getNotificationSettingsAction(): Promise<NotificationSettings> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     throw new Error("无权限执行此操作");
   }
   return getNotificationSettings();
@@ -33,7 +33,7 @@ export async function updateNotificationSettingsAction(
 ): Promise<ActionResult<NotificationSettings>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -78,7 +78,7 @@ export async function testWebhookAction(
   type: NotificationJobType
 ): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return { success: false, error: "无权限执行此操作" };
   }
 

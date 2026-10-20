@@ -381,7 +381,7 @@ export function ActiveSessionsTable({
                     </TableCell>
                   )}
                   <TableCell className="font-mono text-xs">
-                    {session.sessionId.substring(0, 16)}...
+                    {(session.sessionFingerprint ?? session.sessionId).substring(0, 16)}...
                   </TableCell>
                   <TableCell className="text-center">
                     <SessionStatusCell session={session} inactive={inactive} />

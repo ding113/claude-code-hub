@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { APP_VERSION, compareVersions, GITHUB_REPO } from "@/lib/version";
+import {
+  APP_VERSION,
+  compareVersions,
+  GITHUB_REPO,
+  normalizeVersionForDisplay,
+} from "@/lib/version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,23 +39,6 @@ interface LatestVersionInfo {
   latest: string;
   releaseUrl?: string;
   publishedAt?: string;
-}
-
-function normalizeVersionForDisplay(version: string): string {
-  const trimmed = version.trim();
-  if (!trimmed) return trimmed;
-
-  // Normalize leading "V" to lowercase.
-  if (/^v/i.test(trimmed)) {
-    return `v${trimmed.slice(1)}`;
-  }
-
-  // Only add "v" prefix for semver-like strings; keep other values (e.g. "dev") as-is.
-  if (/^\d+(?:\.\d+)*(?:[-+].+)?$/.test(trimmed)) {
-    return `v${trimmed}`;
-  }
-
-  return trimmed;
 }
 
 function isDevBuild(version: string): boolean {

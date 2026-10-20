@@ -1,5 +1,13 @@
 import { z } from "@hono/zod-openapi";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
+import {
+  DISCOVERY_FIELD_LIMITS,
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
+} from "@/lib/validation/discovery-settings";
+import {
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 import { IsoDateTimeStringSchema } from "./_common";
 
 const currencyValues = Object.keys(CURRENCY_CONFIG) as [
@@ -20,7 +28,7 @@ const CodexPriorityBillingSourceSchema = z
 const TimeZoneSchema = z
   .string()
   .refine(
-    (value) => {
+    (value: string) => {
       try {
         new Intl.DateTimeFormat("en-US", { timeZone: value });
         return true;
@@ -98,6 +106,51 @@ export const SystemSettingsSchema = z
       .describe(
         "Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total)."
       ),
+    legacyHedgeMaxInFlight: z
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .describe(
+        "Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt)."
+      ),
+    discoveryEnabled: z.boolean().describe("Whether bounded streaming Discovery is enabled."),
+    discoveryConcurrency: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Maximum number of normal Discovery attempts in the initial batch."),
+    maxDiscoveryRounds: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Maximum number of Discovery rounds."),
+    discoverySlaMs: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoverySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoverySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("First-byte Discovery SLA in milliseconds."),
+    stickySlaMs: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Sticky probe SLA in milliseconds."),
+    racingTotalTimeoutMs: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Total pre-winner Discovery deadline in milliseconds."),
+    stickyTimeoutCooldownMs: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Sticky timeout cooldown in milliseconds."),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),
@@ -171,6 +224,39 @@ export const SystemSettingsSchema = z
       .number()
       .int()
       .describe("Public status aggregation interval in minutes."),
+    streamGateMode: z
+      .enum(["off", "shadow", "enforce"])
+      .describe(
+        "Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off."
+      ),
+    affinityIgnoreClientSessionId: z
+      .boolean()
+      .describe(
+        "Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding."
+      ),
+    enableMemoryAdmission: z
+      .boolean()
+      .describe(
+        "Whether local memory admission is enabled. When enabled, request bodies and stream gate prefixes are admitted against the available memory budget, spill to disk, and return a local 429 when capacity runs out. When disabled, they stay in memory without queuing or local 429."
+      ),
+    replayEnabled: z
+      .boolean()
+      .nullable()
+      .describe(
+        "Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable."
+      ),
+    replayCacheTtlMinutes: z
+      .number()
+      .int()
+      .min(REPLAY_CACHE_TTL_MINUTES_MIN)
+      .max(REPLAY_CACHE_TTL_MINUTES_MAX)
+      .describe("Replay completed payload reuse window in minutes."),
+    cacheEffectivenessEnabled: z
+      .boolean()
+      .nullable()
+      .describe(
+        "Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable."
+      ),
     createdAt: IsoDateTimeStringSchema.describe("Creation time."),
     updatedAt: IsoDateTimeStringSchema.describe("Last update time."),
   })

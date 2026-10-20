@@ -45,11 +45,11 @@ describe("public status slug page", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
       response: {} as never,
@@ -62,7 +62,7 @@ describe("public status slug page", () => {
 
     expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({ groupSlug: "anthropic" });
     expect(metadata).toMatchObject({
-      title: "Anthropic · Claude Code Hub",
+      title: "Anthropic · CC Hub",
       description: "Anthropic public models",
     });
   });
@@ -80,11 +80,11 @@ describe("public status slug page", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
       response: {} as never,
@@ -113,11 +113,11 @@ describe("public status slug page", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
       response: {} as never,
@@ -129,7 +129,7 @@ describe("public status slug page", () => {
     })) as Metadata;
 
     expect(metadata).toEqual({
-      title: "Claude Code Hub",
+      title: "CC Hub",
     });
     expect(mockNotFound).not.toHaveBeenCalled();
   });
@@ -154,11 +154,11 @@ describe("public status slug page", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
       response: {} as never,
@@ -170,7 +170,7 @@ describe("public status slug page", () => {
     })) as Metadata;
 
     expect(metadata).toMatchObject({
-      title: "Platform · Claude Code Hub",
+      title: "Platform · CC Hub",
       description: "Default group status",
     });
 

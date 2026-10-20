@@ -83,14 +83,14 @@ describe("public-status config publish integration", () => {
     });
     mockUpdateSystemSettings.mockResolvedValue({
       id: 1,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timezone: "UTC",
       publicStatusWindowHours: 24,
       publicStatusAggregationIntervalMinutes: 5,
     });
     mockGetSystemSettings.mockResolvedValue({
       id: 1,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timezone: "UTC",
       publicStatusWindowHours: 24,
       publicStatusAggregationIntervalMinutes: 5,

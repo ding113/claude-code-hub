@@ -43,8 +43,8 @@ describe("public status public API loader", () => {
             include: ["meta", "defaults", "groups", "timeline"],
           },
           meta: {
-            siteTitle: "Claude Code Hub",
-            siteDescription: "Claude Code Hub public status",
+            siteTitle: "CC Hub",
+            siteDescription: "CC Hub public status",
             timeZone: "UTC",
           },
           groups: [
@@ -71,7 +71,7 @@ describe("public status public API loader", () => {
 
     expect(request.url).toBe("http://localhost/api/public-status?groupSlug=anthropic");
     expect(result.status).toBe("ready");
-    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.siteTitle).toBe("CC Hub");
     expect(result.timeZone).toBe("UTC");
     expect(result.initialPayload.groups).toHaveLength(1);
   });
@@ -143,8 +143,8 @@ describe("public status public API loader", () => {
       new Response(
         JSON.stringify({
           available: true,
-          siteTitle: "Claude Code Hub",
-          siteDescription: "Claude Code Hub public status",
+          siteTitle: "CC Hub",
+          siteDescription: "CC Hub public status",
           timeZone: "UTC",
           source: "projection",
         }),
@@ -161,8 +161,8 @@ describe("public status public API loader", () => {
 
     await expect(loadPublicSiteMeta()).resolves.toEqual({
       available: true,
-      siteTitle: "Claude Code Hub",
-      siteDescription: "Claude Code Hub public status",
+      siteTitle: "CC Hub",
+      siteDescription: "CC Hub public status",
       timeZone: "UTC",
       source: "projection",
     });

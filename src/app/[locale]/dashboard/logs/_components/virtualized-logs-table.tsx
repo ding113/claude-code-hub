@@ -45,6 +45,7 @@ import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
+import { ThinkingEffortDisplay } from "./thinking-effort-display";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
@@ -69,6 +70,7 @@ export interface VirtualizedLogsTableFilters {
   actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
+  replayFilter?: "all" | "replay" | "non-replay";
 }
 
 const STATUS_BADGE_FALLBACK =
@@ -92,6 +94,47 @@ function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
     <Badge variant="outline" className={getStatusBadgeClassName(statusCode)}>
       {statusCode ?? "-"}
     </Badge>
+  );
+}
+
+function LiveProviderStack({ providers }: { providers: Array<{ id: number; name: string }> }) {
+  const visibleProviders = providers.slice(0, 3);
+  const hiddenProviderCount = providers.length - visibleProviders.length;
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={250}>
+        <TooltipTrigger asChild>
+          <span
+            className="flex min-w-0 items-center -space-x-2 cursor-help"
+            data-slot="live-provider-stack"
+          >
+            {visibleProviders.map((provider) => (
+              <span
+                key={provider.id}
+                className="relative max-w-[68px] truncate rounded-md border bg-background px-1.5 py-0.5 text-xs text-foreground shadow-sm"
+              >
+                {provider.name}
+              </span>
+            ))}
+            {hiddenProviderCount > 0 && (
+              <span className="relative rounded-md border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm">
+                +{hiddenProviderCount}
+              </span>
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[320px]" side="bottom" align="start">
+          <div data-slot="live-provider-tooltip">
+            <ul className="space-y-1 text-xs whitespace-normal break-words">
+              {providers.map((provider) => (
+                <li key={provider.id}>{provider.name}</li>
+              ))}
+            </ul>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -138,6 +181,7 @@ export function VirtualizedLogsTable({
   const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
+  const hideReasoningEffortColumn = hiddenColumns?.includes("reasoningEffort") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
   const hideKeyColumn = hiddenColumns?.includes("key") ?? false;
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
@@ -200,6 +244,13 @@ export function VirtualizedLogsTable({
   // Flatten all pages into a single array
   const pages = data?.pages;
   const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
+  const sourceSessionIdsByIdentity = useMemo<Record<string, string[]>>(
+    () =>
+      Object.fromEntries(
+        pages?.flatMap((page) => Object.entries(page.sourceSessionIdsByIdentity ?? {})) ?? []
+      ),
+    [pages]
+  );
   const filtersResetKey = useMemo(() => JSON.stringify(filters), [filters]);
   const previousFiltersResetKeyRef = useRef(filtersResetKey);
 
@@ -639,7 +690,7 @@ export function VirtualizedLogsTable({
 
       {/* Table with virtual scrolling */}
       <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
+        <div className="min-w-[900px]">
           {/* Fixed header */}
           <div className="bg-muted/30 border-b sticky top-0 z-10">
             <div className="flex items-center h-8 text-[11px] font-medium text-muted-foreground/80 tracking-wide">
@@ -692,6 +743,14 @@ export function VirtualizedLogsTable({
               >
                 {t("logs.columns.model")}
               </div>
+              {hideReasoningEffortColumn ? null : (
+                <div
+                  className="flex-[0.6] min-w-[64px] px-1.5 truncate"
+                  title={t("logs.columns.reasoningEffortTooltip")}
+                >
+                  {t("logs.columns.reasoningEffort")}
+                </div>
+              )}
               {hideTokensColumn ? null : (
                 <div
                   className="flex-[0.7] min-w-[70px] text-right px-1.5 truncate"
@@ -770,6 +829,16 @@ export function VirtualizedLogsTable({
                 }
 
                 const isNonBilling = isNonBillingEndpoint(log.endpoint);
+                const mappedSourceSessionIds = log.sessionId
+                  ? sourceSessionIdsByIdentity[log.sessionId]
+                  : undefined;
+                const displayedSourceSessionIds = (
+                  mappedSourceSessionIds?.length
+                    ? mappedSourceSessionIds
+                    : log.sourceSessionIds?.length
+                      ? log.sourceSessionIds
+                      : [log.sourceSessionId]
+                ).filter((id): id is string => Boolean(id));
                 const _isWarmupSkipped = log.blockedBy === "warmup";
                 return (
                   <div
@@ -827,15 +896,25 @@ export function VirtualizedLogsTable({
                                 <button
                                   type="button"
                                   className="w-full text-left font-mono text-xs truncate cursor-pointer hover:underline"
-                                  data-session-id={log.sessionId}
+                                  data-session-id={log.sourceSessionId ?? log.sessionId}
                                   onClick={handleCopySessionIdClick}
                                 >
-                                  {log.sessionId}
+                                  {log.sourceSessionId ?? log.sessionId}
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                                 <p className="text-xs whitespace-normal break-words font-mono">
-                                  {log.sessionId}
+                                  {displayedSourceSessionIds.map((id) => (
+                                    <span className="block" key={id}>
+                                      {id}
+                                    </span>
+                                  ))}
+                                  {log.sessionId &&
+                                    !displayedSourceSessionIds.includes(log.sessionId) && (
+                                      <span className="mt-1 block text-muted-foreground">
+                                        {log.sessionId}
+                                      </span>
+                                    )}
                                 </p>
                               </TooltipContent>
                             </Tooltip>
@@ -862,7 +941,12 @@ export function VirtualizedLogsTable({
                     {/* Provider */}
                     {hideProviderColumn ? null : (
                       <div className="flex-[1.5] min-w-[100px] px-1.5">
-                        {log.blockedBy ? (
+                        {log.isReplay ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-teal-100 dark:bg-teal-950 px-2 py-1 text-xs font-medium text-teal-700 dark:text-teal-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-teal-600 dark:bg-teal-400" />
+                            {t("logs.table.replay")}
+                          </span>
+                        ) : log.blockedBy ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
                             {t("logs.table.blocked")}
@@ -871,11 +955,21 @@ export function VirtualizedLogsTable({
                           log._liveChain ? (
                             <div className="flex items-center gap-1.5 min-w-0">
                               <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" />
-                              <span className="text-xs text-muted-foreground truncate">
-                                {log._liveChain.chain.length > 0
-                                  ? log._liveChain.chain[log._liveChain.chain.length - 1].name
-                                  : t("logs.details.inProgress")}
-                              </span>
+                              {log._liveChain.activeProviders ? (
+                                log._liveChain.activeProviders.length > 0 ? (
+                                  <LiveProviderStack providers={log._liveChain.activeProviders} />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground truncate">
+                                    {t("logs.details.inProgress")}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {log._liveChain.chain.length > 0
+                                    ? log._liveChain.chain[log._liveChain.chain.length - 1].name
+                                    : t("logs.details.inProgress")}
+                                </span>
+                              )}
                               {log._liveChain.phase === "retrying" && (
                                 <Badge
                                   variant="outline"
@@ -923,7 +1017,8 @@ export function VirtualizedLogsTable({
                                   multiplier !== 1;
                                 const showBadgeInTable = shouldShowCostBadgeInCell(
                                   log.providerChain,
-                                  multiplier
+                                  multiplier,
+                                  log.routingTrace
                                 );
 
                                 return (
@@ -931,6 +1026,7 @@ export function VirtualizedLogsTable({
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                       <ProviderChainPopover
                                         chain={log.providerChain ?? []}
+                                        routingTrace={log.routingTrace}
                                         finalProvider={
                                           getFinalProviderName(log.providerChain ?? []) ||
                                           log.providerName ||
@@ -995,6 +1091,13 @@ export function VirtualizedLogsTable({
                         </Tooltip>
                       </TooltipProvider>
                     </div>
+
+                    {/* Thinking Effort */}
+                    {hideReasoningEffortColumn ? null : (
+                      <div className="relative z-20 flex-[0.6] min-w-[64px] overflow-visible px-1.5 font-mono text-xs">
+                        <ThinkingEffortDisplay specialSettings={log.specialSettings} />
+                      </div>
+                    )}
 
                     {/* Tokens */}
                     {hideTokensColumn ? null : (
@@ -1103,23 +1206,53 @@ export function VirtualizedLogsTable({
                               <TooltipTrigger asChild>
                                 <span className="cursor-help inline-flex items-center gap-1">
                                   {formatCurrency(log.costUsd, currencyCode, 6)}
-                                  {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
-                                      title={t("logs.billingDetails.fastPriority")}
-                                    >
-                                      {t("logs.billingDetails.fast")}
-                                    </Badge>
-                                  )}
-                                  {log.context1mApplied && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
-                                    >
-                                      1M
-                                    </Badge>
-                                  )}
+                                  {(() => {
+                                    const hasFast = hasPriorityServiceTierSpecialSetting(
+                                      log.specialSettings
+                                    );
+                                    const hasContext1m = Boolean(log.context1mApplied);
+                                    if (hasFast && hasContext1m) {
+                                      return (
+                                        <Badge
+                                          variant="outline"
+                                          className="gap-0 px-0.5 text-[9px] leading-3"
+                                          title={t("logs.billingDetails.combinedFastContext", {
+                                            fast: t("logs.billingDetails.fast"),
+                                            context: "1M",
+                                          })}
+                                        >
+                                          <span className="text-orange-700 dark:text-orange-300">
+                                            {t("logs.billingDetails.fast")}
+                                          </span>
+                                          <span className="text-muted-foreground">·</span>
+                                          <span className="text-purple-700 dark:text-purple-300">
+                                            1M
+                                          </span>
+                                        </Badge>
+                                      );
+                                    }
+                                    return (
+                                      <>
+                                        {hasFast && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                                            title={t("logs.billingDetails.fastPriority")}
+                                          >
+                                            {t("logs.billingDetails.fast")}
+                                          </Badge>
+                                        )}
+                                        {hasContext1m && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                                          >
+                                            1M
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </span>
                               </TooltipTrigger>
                               {renderCostTooltip(log)}
@@ -1138,12 +1271,16 @@ export function VirtualizedLogsTable({
                           const rate = calculateOutputRate(
                             log.outputTokens,
                             log.durationMs,
-                            log.ttfbMs
+                            log.firstByteMs
                           );
-                          const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
-                          const ttfbLine =
-                            log.ttfbMs != null && log.ttfbMs > 0
-                              ? `TTFB ${formatDuration(log.ttfbMs)}`
+                          const hideRate = shouldHideOutputRate(
+                            rate,
+                            log.durationMs,
+                            log.firstByteMs
+                          );
+                          const ttftLine =
+                            log.ttftMs != null && log.ttftMs > 0
+                              ? `${t("logs.details.performance.ttftShort")} ${formatDuration(log.ttftMs)}`
                               : null;
                           const rateLine =
                             rate !== null && !hideRate ? `${rate.toFixed(0)} tok/s` : null;
@@ -1154,9 +1291,9 @@ export function VirtualizedLogsTable({
                                 <TooltipTrigger asChild>
                                   <div className="flex flex-col items-end cursor-help">
                                     <span>{formatDuration(log.durationMs)}</span>
-                                    {ttfbLine && (
+                                    {ttftLine && (
                                       <span className="text-muted-foreground text-[10px]">
-                                        {ttfbLine}
+                                        {ttftLine}
                                       </span>
                                     )}
                                     {rateLine && (
@@ -1171,10 +1308,16 @@ export function VirtualizedLogsTable({
                                     {t("logs.details.performance.duration")}:{" "}
                                     {formatDuration(log.durationMs)}
                                   </div>
-                                  {log.ttfbMs != null && (
+                                  {log.ttftMs != null && (
+                                    <div>
+                                      {t("logs.details.performance.ttft")}:{" "}
+                                      {formatDuration(log.ttftMs)}
+                                    </div>
+                                  )}
+                                  {log.firstByteMs != null && (
                                     <div>
                                       {t("logs.details.performance.ttfb")}:{" "}
-                                      {formatDuration(log.ttfbMs)}
+                                      {formatDuration(log.firstByteMs)}
                                     </div>
                                   )}
                                   {rate !== null && !hideRate && (
@@ -1200,10 +1343,16 @@ export function VirtualizedLogsTable({
                           statusCode={log.statusCode}
                           errorMessage={log.errorMessage}
                           providerChain={log.providerChain}
+                          routingTrace={log.routingTrace}
                           sessionId={log.sessionId}
+                          sourceSessionId={log.sourceSessionId}
+                          sessionIdentityKind={log.sessionIdentityKind}
                           requestSequence={log.requestSequence}
+                          requestId={log.id}
                           blockedBy={log.blockedBy}
                           blockedReason={log.blockedReason}
+                          isReplay={log.isReplay}
+                          replaySourceRequestId={log.replaySourceRequestId}
                           originalModel={log.originalModel}
                           currentModel={log.model}
                           actualResponseModel={log.actualResponseModel}
@@ -1220,6 +1369,14 @@ export function VirtualizedLogsTable({
                           cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                           cacheReadInputTokens={log.cacheReadInputTokens}
                           cacheTtlApplied={log.cacheTtlApplied}
+                          theoreticalCacheTokens={log.theoreticalCacheTokens}
+                          cacheScoreEligible={log.cacheScoreEligible}
+                          cacheScoreExcludedReason={log.cacheScoreExcludedReason}
+                          cacheInputTotal={log.cacheInputTotal}
+                          actualCacheRate={log.actualCacheRate}
+                          theoreticalCacheRate={log.theoreticalCacheRate}
+                          requestCacheCoefficientBp={log.requestCacheCoefficientBp}
+                          requestCacheMetricAvailability={log.requestCacheMetricAvailability}
                           swapCacheTtlApplied={log.swapCacheTtlApplied}
                           costUsd={log.costUsd}
                           costMultiplier={log.costMultiplier}
@@ -1228,7 +1385,8 @@ export function VirtualizedLogsTable({
                           hedgeLosers={log.hedgeLosers}
                           context1mApplied={log.context1mApplied}
                           durationMs={log.durationMs}
-                          ttfbMs={log.ttfbMs}
+                          ttftMs={log.ttftMs}
+                          firstByteMs={log.firstByteMs}
                           externalOpen={dialogState.logId === log.id ? true : undefined}
                           onExternalOpenChange={(open) => {
                             if (!open) setDialogState({ logId: null, scrollToRedirect: false });

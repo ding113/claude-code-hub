@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "Local request capacity exhausted; retry later.",
   "_comment": "Error messages for English",
 
   "REQUIRED_FIELD": "{field} is required",
@@ -30,12 +31,15 @@
   "PERMISSION_DENIED": "Permission denied",
   "TOKEN_REQUIRED": "Authentication token required",
   "INVALID_TOKEN": "Invalid authentication token",
+  "SESSION_REQUEST_SOURCE_MISMATCH": "The request source does not belong to this session",
+  "SESSION_REQUEST_SELECTOR_INCOMPLETE": "Prefix Session requests must specify both the physical source and request sequence",
   "PROXY_INVALID_API_KEY": "Invalid API key. The provided key does not exist or has been deleted.",
   "PROXY_API_KEY_DISABLED": "This API key has been disabled. Please contact your administrator to re-enable it, or use a different key.",
   "PROXY_API_KEY_EXPIRED": "This API key has expired. Please contact your administrator to renew it or rotate to a new key.",
 
   "INTERNAL_ERROR": "Internal server error, please try again later",
   "DATABASE_ERROR": "Database error",
+  "INVALID_NORMALIZED_BODY": "The normalized request body could not be serialized",
   "NOT_FOUND": "Resource not found",
   "OPERATION_FAILED": "Operation failed",
   "USER_5H_FIXED_RESET_REQUIRES_REDIS": "Resetting a fixed 5H limit requires Redis to be available",

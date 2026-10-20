@@ -1,8 +1,10 @@
 "use server";
 
+import type { ActionResult } from "@/actions/types";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { SessionManager } from "@/lib/session-manager";
+import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
 
 /**
  * 获取 session 响应体内容
@@ -13,8 +15,10 @@ import { SessionManager } from "@/lib/session-manager";
  * 安全修复：添加用户权限检查
  */
 export async function getSessionResponse(
-  sessionId: string
-): Promise<{ ok: true; data: string } | { ok: false; error: string }> {
+  sessionId: string,
+  requestSequence?: number,
+  requestedSourceSessionId?: string
+): Promise<ActionResult<string>> {
   try {
     // 0. 验证用户权限
     const authSession = await getSession();
@@ -29,8 +33,11 @@ export async function getSessionResponse(
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const { aggregateMultipleSessionStats } = await import("@/repository/message");
+    const [sessionStats] = await aggregateMultipleSessionStats(
+      [sessionId],
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -50,10 +57,35 @@ export async function getSessionResponse(
       };
     }
 
-    // 3. 获取响应体
-    const response = await SessionManager.getSessionResponse(sessionId);
+    const locatorResult = await resolveSessionRequestLocator(
+      sessionStats.sessionId,
+      requestSequence,
+      requestedSourceSessionId,
+      undefined,
+      sessionStats.userId
+    );
+    if (!locatorResult.ok) return locatorResult;
 
-    if (!response) {
+    if (
+      !(await SessionManager.isSessionRequestOwnedByKey(
+        locatorResult.locator.sourceSessionId,
+        locatorResult.locator.requestSequence,
+        locatorResult.locator.keyId
+      ))
+    ) {
+      return {
+        ok: false,
+        error: "响应体已过期（5分钟 TTL）或尚未记录",
+      };
+    }
+
+    // 3. 只读取 locator 已授权的物理请求响应体
+    const response = await SessionManager.getSessionResponse(
+      locatorResult.locator.sourceSessionId,
+      locatorResult.locator.requestSequence
+    );
+
+    if (response === null) {
       return {
         ok: false,
         error: "响应体已过期（5分钟 TTL）或尚未记录",

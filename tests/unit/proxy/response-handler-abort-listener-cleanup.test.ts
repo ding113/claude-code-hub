@@ -8,19 +8,34 @@ const testState = vi.hoisted(() => ({
   asyncTasks: [] as Promise<void>[],
   cancelTask: vi.fn(),
   cleanupTask: vi.fn(),
+  responseFixerProcess: vi.fn(async (_session: unknown, response: Response) => response),
 }));
 
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
   ResponseFixer: {
-    process: async (_session: unknown, response: Response) => response,
+    process: testState.responseFixerProcess,
   },
 }));
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       testState.asyncTasks.push(promise);
-      return new AbortController();
+      return controller;
     },
     touch: () => true,
     cleanup: testState.cleanupTask,
@@ -60,12 +75,14 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/redis/live-chain-store", () => ({
   deleteLiveChain: vi.fn(),
+  writeLiveRoutingTrace: vi.fn(),
 }));
 
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     clearSessionProvider: vi.fn(),
     storeSessionResponse: vi.fn(),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     updateSessionUsage: vi.fn(),
     storeSessionRequestPhaseSnapshot: vi.fn(),
     storeSessionResponsePhaseSnapshot: vi.fn(),
@@ -96,13 +113,21 @@ vi.mock("@/lib/endpoint-circuit-breaker", () => ({
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(async () => {}),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(async () => {}),
   updateMessageRequestDuration: vi.fn(),
 }));
 
 async function drainAsyncTasks(): Promise<void> {
   while (testState.asyncTasks.length > 0) {
     const tasks = testState.asyncTasks.splice(0);
-    await Promise.allSettled(tasks);
+    const settlements = await Promise.allSettled(tasks);
+    const failures = settlements
+      .filter((settlement): settlement is PromiseRejectedResult => settlement.status === "rejected")
+      .map((settlement) => settlement.reason);
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Async task failed during test drain");
+    }
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
@@ -188,8 +213,9 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     shouldPersistSessionDebugArtifacts: () => false,
     shouldTrackSessionObservability: () => false,
     getResolvedPricingByBillingSource: async () => null,
-    recordTtfb: vi.fn(),
-    ttfbMs: null,
+    recordTtft: vi.fn(),
+    ttftMs: null,
+    firstByteMs: null,
     addProviderToChain: vi.fn(),
     clearResponseTimeout: vi.fn(),
     releaseAgent: vi.fn(),
@@ -198,11 +224,61 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
   return session as unknown as ProxySession;
 }
 
+function makeCodexResponsesSession(stream = true): ProxySession {
+  const session = makeSession(null, stream) as ProxySession & {
+    endpointPolicy: ReturnType<typeof resolveEndpointPolicy>;
+  };
+  const endpointPolicy = resolveEndpointPolicy("/v1/responses");
+  session.provider = makeProvider({ providerType: "codex" });
+  session.providerType = "codex";
+  session.originalFormat = "response";
+  session.originalUrlPathname = "/v1/responses";
+  session.requestUrl = new URL("http://localhost/v1/responses");
+  session.endpointPolicy = endpointPolicy;
+  session.getEndpointPolicy = () => endpointPolicy;
+  session.getEndpoint = () => "/v1/responses";
+  return session;
+}
+
+function makeRemoteCompactionV2Session(): ProxySession {
+  const session = makeCodexResponsesSession() as ProxySession & {
+    endpointPolicy: ReturnType<typeof resolveEndpointPolicy>;
+  };
+  const endpointPolicy = resolveEndpointPolicy("/v1/responses/compact");
+  session.endpointPolicy = endpointPolicy;
+  session.getEndpointPolicy = () => endpointPolicy;
+  session.request.message.input = [{ type: "compaction_trigger" }];
+  return session;
+}
+
+const CODEX_RESPONSES_SSE = [
+  'event: response.created\ndata: {"response":{"id":"resp_missing_header"}}\n\n',
+  [
+    'event: response.completed\ndata: {"response":{"id":"resp_missing_header",',
+    '"status":"completed","usage":{"input_tokens":1,"output_tokens":2}},',
+    '"sequence_number":3}\n\n',
+  ].join(""),
+].join("");
+
+const REMOTE_COMPACTION_V2_SSE = [
+  [
+    'event: response.output_item.done\ndata: {"type":"response.output_item.done",',
+    '"output_index":0,"item":{"type":"compaction",',
+    '"encrypted_content":"opaque-state"}}\n\n',
+  ].join(""),
+  [
+    'event: response.completed\ndata: {"type":"response.completed",',
+    '"response":{"id":"resp_compact","status":"completed",',
+    '"output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}\n\n',
+  ].join(""),
+].join("");
+
 describe("ProxyResponseHandler client abort listener cleanup", () => {
   beforeEach(() => {
     testState.asyncTasks = [];
     testState.cancelTask.mockClear();
     testState.cleanupTask.mockClear();
+    testState.responseFixerProcess.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -248,6 +324,102 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     const abortAddCalls = addSpy.mock.calls.filter(([type]) => type === "abort");
     expect(abortAddCalls).toHaveLength(1);
     expect(removeSpy).toHaveBeenCalledWith("abort", abortAddCalls[0][1]);
+  });
+
+  it("preserves Codex Responses SSE without cloning a missing-header stream", async () => {
+    const session = makeCodexResponsesSession();
+    session.sessionId = "session-debug-artifacts";
+    session.shouldPersistSessionDebugArtifacts = () => true;
+    const upstreamResponse = new Response(new TextEncoder().encode(CODEX_RESPONSES_SSE));
+    const cloneSpy = vi.spyOn(upstreamResponse, "clone");
+    expect(upstreamResponse.headers.get("content-type")).toBeNull();
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    const responseText = await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.responseFixerProcess).not.toHaveBeenCalled();
+    expect(cloneSpy).not.toHaveBeenCalled();
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(responseText).toBe(CODEX_RESPONSES_SSE);
+  });
+
+  it("preserves headerless Remote Compaction v2 SSE under raw passthrough", async () => {
+    const session = makeRemoteCompactionV2Session();
+    session.sessionId = "session-debug-artifacts-compact";
+    session.shouldPersistSessionDebugArtifacts = () => true;
+    const upstreamResponse = new Response(new TextEncoder().encode(REMOTE_COMPACTION_V2_SSE));
+    const cloneSpy = vi.spyOn(upstreamResponse, "clone");
+    expect(session.getEndpointPolicy().kind).toBe("raw_passthrough");
+    expect(upstreamResponse.headers.get("content-type")).toBeNull();
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    const responseText = await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.responseFixerProcess).not.toHaveBeenCalled();
+    expect(cloneSpy).not.toHaveBeenCalled();
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(responseText).toBe(REMOTE_COMPACTION_V2_SSE);
+  });
+
+  it.each(["application/json", "application/problem+json"])(
+    "keeps explicit %s responses on non-stream handling",
+    async (contentType) => {
+      const session = makeCodexResponsesSession();
+      const upstreamText = JSON.stringify({ id: "resp_json", status: "completed", output: [] });
+      const upstreamResponse = new Response(upstreamText, {
+        headers: { "content-type": contentType },
+      });
+
+      const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+      const responseText = await response.text();
+      await drainAsyncTasks();
+
+      expect(testState.responseFixerProcess).toHaveBeenCalledOnce();
+      expect(response.headers.get("content-type")).toBe(contentType);
+      expect(responseText).toBe(upstreamText);
+    }
+  );
+
+  it("does not force a non-Codex response without content-type into stream handling", async () => {
+    const session = makeSession(null, true);
+    const upstreamResponse = new Response(new TextEncoder().encode(JSON.stringify({ output: [] })));
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.responseFixerProcess).toHaveBeenCalledOnce();
+    expect(response.headers.get("content-type")).toBeNull();
+  });
+
+  it("does not force a non-stream Codex request without content-type", async () => {
+    const session = makeCodexResponsesSession(false);
+    const upstreamResponse = new Response(new TextEncoder().encode(JSON.stringify({ output: [] })));
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.responseFixerProcess).toHaveBeenCalledOnce();
+    expect(response.headers.get("content-type")).toBeNull();
+  });
+
+  it("does not force a non-success Codex response without content-type", async () => {
+    const session = makeCodexResponsesSession();
+    const upstreamResponse = new Response(
+      new TextEncoder().encode(JSON.stringify({ error: { message: "bad request" } })),
+      { status: 400 }
+    );
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.responseFixerProcess).toHaveBeenCalledOnce();
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toBeNull();
   });
 
   it("uses no-op cleanup when client abort signal is null", async () => {

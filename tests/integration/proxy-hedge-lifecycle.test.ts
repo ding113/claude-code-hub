@@ -1,0 +1,1696 @@
+// Real loopback transport exercises production lifecycle code; persistence/control-plane seams are mocked.
+import { createServer, type ServerResponse } from "node:http";
+import type { Socket } from "node:net";
+import { Context } from "hono";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DiscoveryValidityParser } from "@/app/v1/_lib/proxy/discovery-validity";
+import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
+import { ProbedSseFrames } from "@/app/v1/_lib/proxy/stream-gate/probed-sse-frames";
+import {
+  getStreamGatePrebufferBudget,
+  StreamGatePrebufferBudget,
+} from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { MemoryGovernor } from "../../server-lib/memory-governor";
+import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
+import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
+import type { Key } from "@/types/key";
+import type { Provider } from "@/types/provider";
+import type { User } from "@/types/user";
+
+const state = vi.hoisted(() => {
+  return {
+    addLoserCost: vi.fn(),
+    billHedgeLosers: false,
+    bodyGovernor: null as MemoryGovernor | null,
+    discoveryEnabled: false,
+    stickyProviderId: null as number | null,
+    clearBinding: vi.fn(async () => ({
+      status: "ok",
+      snapshot: {
+        sessionId: "integration-discovery",
+        keyId: 22,
+        providerId: null,
+        generation: "g2",
+      },
+    })),
+    acquireDiscoveryLease: vi.fn(async () => ({
+      status: "acquired",
+      ownerToken: "integration-lease",
+      legacyFallbackAllowed: false,
+    })),
+    releaseDiscoveryLease: vi.fn(async () => ({
+      status: "released",
+      legacyFallbackAllowed: false,
+    })),
+    renewDiscoveryLease: vi.fn(async () => ({
+      status: "renewed",
+      legacyFallbackAllowed: false,
+    })),
+    compareAndSetBinding: vi.fn(async () => ({
+      status: "ok",
+      source: "updated",
+      legacyFallbackAllowed: false,
+      snapshot: {
+        sessionId: "integration-discovery",
+        keyId: 22,
+        providerId: 2,
+        generation: "g2",
+      },
+    })),
+    durableTerminal: vi.fn(
+      async (
+        _id: number,
+        details: unknown,
+        options?: { onCommitted?: (details: unknown) => void | Promise<void> }
+      ) => {
+        await options?.onCommitted?.(details);
+        return true;
+      }
+    ),
+    http2Error: ((): Error | null => null)(),
+    loserBilled: Promise.withResolvers<void>(),
+    pickAlternative: vi.fn(),
+    pickDiscovery: vi.fn(),
+    providers: Array.from<Provider>([]),
+    recordFailure: vi.fn(async () => {}),
+    settleLeaseBudgets: vi.fn(async () => {}),
+    streamGateMode: "off",
+    tasks: Array.from<Promise<void>>([]),
+    trackCost: vi.fn(async () => {}),
+    updateMessageRequestCostWithBreakdown: vi.fn(async () => {}),
+    updateMessageRequestDetailsIfUnfinalized: vi.fn(async () => {}),
+    updateWinnerCost: vi.fn(async () => {}),
+  };
+});
+
+vi.mock("@/lib/memory/governor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/memory/governor")>();
+  return {
+    ...actual,
+    // Keep the real governor while isolating fixture admission from host RAM.
+    getMemoryGovernor: () => {
+      state.bodyGovernor ??= new MemoryGovernor({
+        limit: 64 * 1024 ** 2,
+        remote: false,
+        monitor: false,
+        enabled: true,
+      });
+      return state.bodyGovernor;
+    },
+  };
+});
+
+vi.mock("@/lib/logger", () => ({
+  logger: Object.fromEntries(
+    ["debug", "error", "fatal", "info", "trace", "warn"].map((level) => [level, vi.fn()])
+  ),
+}));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    getCachedSystemSettings: async () => ({
+      billHedgeLosers: state.billHedgeLosers,
+      discoveryConcurrency: 2,
+      discoveryEnabled: state.discoveryEnabled,
+      discoverySlaMs: 100,
+      enableBillingHeaderRectifier: false,
+      enableClaudeMetadataUserIdInjection: false,
+      enableThinkingBudgetRectifier: false,
+      enableThinkingSignatureRectifier: false,
+      maxDiscoveryRounds: 1,
+      racingTotalTimeoutMs: 500,
+      stickySlaMs: 100,
+      stickyTimeoutCooldownMs: 300_000,
+    }),
+    isHttp2Enabled: async () => {
+      if (state.http2Error) throw state.http2Error;
+      return true;
+    },
+  };
+});
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: async () => ({ billNonSuccessfulRequests: false }),
+}));
+vi.mock("@/lib/system-settings/proxy-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/system-settings/proxy-runtime")>();
+  return {
+    ...actual,
+    getCachedProxyRuntimeSettings: () => ({
+      affinityIgnoreClientSessionId: true,
+      cacheEffectivenessEnabled: true,
+      replayEnabled: false,
+      streamGateMode: state.streamGateMode,
+    }),
+  };
+});
+vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
+  ProxyProviderResolver: {
+    pickDiscoveryProviders: state.pickDiscovery,
+    pickRandomProviderWithExclusion: state.pickAlternative,
+    resolveEffectivePriorityForSession: (provider: Provider) => provider.priority ?? 0,
+  },
+}));
+vi.mock("@/lib/session-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session-manager")>();
+  class TestSessionManager extends actual.SessionManager {
+    static override async ensureVersionedBindingCapability() {
+      return "available" as const;
+    }
+    static override async getSessionBindingSnapshot(sessionId: string, keyId: number) {
+      return {
+        status: "ok" as const,
+        source: "existing" as const,
+        legacyFallbackAllowed: false as const,
+        snapshot: { sessionId, keyId, providerId: state.stickyProviderId, generation: "g1" },
+      };
+    }
+    static override async clearVersionedSessionProvider() {
+      return state.clearBinding() as never;
+    }
+    static override async acquireSessionDiscoveryLease() {
+      return state.acquireDiscoveryLease();
+    }
+    static override async renewSessionDiscoveryLease() {
+      return state.renewDiscoveryLease();
+    }
+    static override getVersionedSessionBindingRefreshIntervalMs() {
+      return 100_000;
+    }
+    static override async touchVersionedSessionBinding(snapshot: SessionBindingSnapshot) {
+      return {
+        status: "ok" as const,
+        source: "touched" as const,
+        snapshot,
+        legacyFallbackAllowed: false as const,
+      };
+    }
+    static override async releaseSessionDiscoveryLease() {
+      return state.releaseDiscoveryLease();
+    }
+    static override async compareAndSetSessionProvider() {
+      return state.compareAndSetBinding();
+    }
+  }
+  return { ...actual, SessionManager: TestSessionManager };
+});
+vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
+  getEndpointFilterStats: vi.fn(async () => null),
+  getPreferredProviderEndpoints: vi.fn(async () => []),
+}));
+vi.mock("@/lib/circuit-breaker", () => ({
+  getCircuitState: vi.fn(() => "closed"),
+  getProviderHealthInfo: vi.fn(async () => ({
+    config: { failureThreshold: 3 },
+    health: { failureCount: 0 },
+  })),
+  recordFailure: state.recordFailure,
+  recordSuccess: vi.fn(),
+}));
+vi.mock("@/lib/endpoint-circuit-breaker", () => ({
+  recordEndpointFailure: vi.fn(),
+  recordEndpointSuccess: vi.fn(),
+  resetEndpointCircuit: vi.fn(),
+}));
+vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
+  isVendorTypeCircuitOpen: vi.fn(async () => false),
+  recordVendorTypeAllEndpointsTimeout: vi.fn(),
+}));
+vi.mock("@/lib/rate-limit/service", () => ({
+  RateLimitService: {
+    checkAndTrackProviderSession: vi.fn(async () => ({ allowed: true })),
+    releaseProviderSession: vi.fn(),
+  },
+}));
+vi.mock("@/lib/rate-limit", () => ({
+  RateLimitService: {
+    settleLeaseBudgets: state.settleLeaseBudgets,
+    trackCost: state.trackCost,
+    trackUserDailyCost: vi.fn(async () => {}),
+  },
+}));
+vi.mock("@/lib/request-filter-engine", () => ({
+  requestFilterEngine: { applyFinal: vi.fn(async () => {}) },
+}));
+vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
+  ResponseFixer: { process: async (_session: ProxySession, response: Response) => response },
+}));
+vi.mock("@/lib/async-task-manager", () => ({
+  AsyncTaskManager: {
+    cancel: vi.fn(),
+    cleanup: vi.fn(),
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { readonly abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      const task = Promise.resolve().then(() => factory(controller.signal));
+      void task.catch(() => undefined);
+      state.tasks.push(task);
+      return controller;
+    },
+    touch: vi.fn(() => true),
+  },
+}));
+vi.mock("@/repository/message", () => ({
+  addMessageRequestHedgeLoserCost: state.addLoserCost,
+  updateMessageRequestCostWithBreakdown: state.updateMessageRequestCostWithBreakdown,
+  updateMessageRequestDetails: vi.fn(async () => {}),
+  updateMessageRequestDetailsDurably: state.durableTerminal,
+  updateMessageRequestDetailsIfUnfinalized: state.updateMessageRequestDetailsIfUnfinalized,
+  updateMessageRequestDuration: vi.fn(async () => {}),
+  updateMessageRequestWinnerCost: state.updateWinnerCost,
+}));
+vi.mock("@/repository/model-price", () => ({
+  findLatestPriceByModel: vi.fn(async (modelName: string) => ({
+    createdAt: new Date(0),
+    id: 1,
+    modelName,
+    priceData: { input_cost_per_token: 0.001, output_cost_per_token: 0.002 },
+    source: "litellm",
+    updatedAt: new Date(0),
+  })),
+}));
+vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: vi.fn(async () => ({
+    billingModelSource: "redirected",
+    codexPriorityBillingSource: "requested",
+  })),
+}));
+vi.mock("@/lib/price-sync/cloud-price-updater", () => ({ requestCloudPriceTableSync: vi.fn() }));
+vi.mock("@/lib/langfuse/emit-proxy-trace", () => ({ emitProxyLangfuseTrace: vi.fn() }));
+vi.mock("@/lib/session-tracker", () => ({
+  SessionTracker: { refreshSession: vi.fn(async () => {}) },
+}));
+vi.mock("@/lib/proxy-status-tracker", () => ({
+  ProxyStatusTracker: { getInstance: () => ({ endRequest: vi.fn() }) },
+}));
+vi.mock("@/lib/redis/live-chain-store", () => ({
+  deleteLiveChain: vi.fn(async () => {}),
+  writeLiveChain: vi.fn(async () => {}),
+  writeLiveRoutingTrace: vi.fn(async () => {}),
+}));
+
+const CREATED_AT = new Date(0);
+const USER = {
+  createdAt: CREATED_AT,
+  dailyQuota: null,
+  dailyResetMode: "fixed",
+  dailyResetTime: "00:00",
+  description: "hedge lifecycle user",
+  id: 21,
+  isEnabled: true,
+  limit5hResetMode: "fixed",
+  name: "hedge-user",
+  providerGroup: null,
+  role: "user",
+  rpm: null,
+  updatedAt: CREATED_AT,
+} satisfies User;
+const KEY = {
+  cacheTtlPreference: null,
+  canLoginWebUi: false,
+  createdAt: CREATED_AT,
+  dailyResetMode: "fixed",
+  dailyResetTime: "00:00",
+  id: 22,
+  isEnabled: true,
+  key: "sk-hedge-lifecycle",
+  limit5hResetMode: "fixed",
+  limit5hUsd: null,
+  limitConcurrentSessions: 0,
+  limitDailyUsd: null,
+  limitMonthlyUsd: null,
+  limitWeeklyUsd: null,
+  name: "hedge-key",
+  providerGroup: null,
+  updatedAt: CREATED_AT,
+  userId: USER.id,
+} satisfies Key;
+const MESSAGE = {
+  apiKey: KEY.key,
+  createdAt: CREATED_AT,
+  id: 51,
+  key: KEY,
+  user: USER,
+} satisfies MessageContext;
+
+function createProvider(id: number, url: string, firstByteTimeoutStreamingMs: number): Provider {
+  return {
+    activeTimeEnd: null,
+    activeTimeStart: null,
+    allowedClients: [],
+    allowedModels: null,
+    anthropicAdaptiveThinking: null,
+    anthropicMaxTokensPreference: null,
+    anthropicThinkingBudgetPreference: null,
+    blockedClients: [],
+    cacheTtlPreference: null,
+    cc: 0,
+    circuitBreakerFailureThreshold: 5,
+    circuitBreakerHalfOpenSuccessThreshold: 2,
+    circuitBreakerOpenDuration: 1_800_000,
+    codexImageGenerationPreference: null,
+    codexParallelToolCallsPreference: null,
+    codexReasoningEffortPreference: null,
+    codexReasoningSummaryPreference: null,
+    codexServiceTierPreference: null,
+    codexTextVerbosityPreference: null,
+    context1mPreference: null,
+    costMultiplier: 1,
+    createdAt: CREATED_AT,
+    customHeaders: null,
+    dailyResetMode: "fixed",
+    dailyResetTime: "00:00",
+    disableSessionReuse: false,
+    faviconUrl: null,
+    firstByteTimeoutStreamingMs,
+    geminiGoogleSearchPreference: null,
+    groupPriorities: null,
+    groupTag: null,
+    id,
+    isEnabled: true,
+    key: `provider-key-${id}`,
+    limit5hResetMode: "fixed",
+    limit5hUsd: null,
+    limitConcurrentSessions: 0,
+    limitDailyUsd: null,
+    limitMonthlyUsd: null,
+    limitTotalUsd: null,
+    limitWeeklyUsd: null,
+    maxRetryAttempts: 1,
+    mcpPassthroughType: "none",
+    mcpPassthroughUrl: null,
+    modelRedirects: null,
+    name: `provider-${id}`,
+    preserveClientIp: false,
+    priority: id,
+    providerType: "claude",
+    providerVendorId: null,
+    proxyFallbackToDirect: false,
+    proxyUrl: null,
+    requestTimeoutNonStreamingMs: 0,
+    rpd: 0,
+    rpm: 0,
+    streamingIdleTimeoutMs: 0,
+    swapCacheTtlBilling: false,
+    totalCostResetAt: null,
+    tpm: 0,
+    updatedAt: CREATED_AT,
+    url,
+    websiteUrl: null,
+    weight: 1,
+  };
+}
+
+type Upstream = {
+  readonly abort: (error?: Error) => Promise<void>;
+  readonly abortCount: () => number;
+  readonly baseUrl: string;
+  readonly close: () => Promise<void>;
+  readonly requestCount: () => number;
+  readonly response: Promise<ServerResponse>;
+  readonly send: (body: string) => Promise<void>;
+  readonly terminated: Promise<void>;
+  readonly write: (body: string) => Promise<void>;
+};
+
+async function startUpstream(contentType = "text/event-stream"): Promise<Upstream> {
+  const sockets = new Set<Socket>();
+  const responseGate = Promise.withResolvers<ServerResponse>();
+  const terminationGate = Promise.withResolvers<void>();
+  let requests = 0;
+  let aborts = 0;
+  const server = createServer((request, response) => {
+    requests += 1;
+    request.resume();
+    response.writeHead(200, { "content-type": contentType });
+    response.flushHeaders();
+    response.once("close", () => {
+      if (!response.writableEnded) aborts += 1;
+      terminationGate.resolve();
+    });
+    responseGate.resolve(response);
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  const baseUrl = await new Promise<string>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Loopback fixture did not receive a TCP address"));
+        return;
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+  return {
+    abort: async (error = new Error("upstream stream aborted")) => {
+      const response = await responseGate.promise;
+      response.destroy(error);
+      await terminationGate.promise;
+    },
+    abortCount: () => aborts,
+    baseUrl,
+    close: async () => {
+      for (const socket of sockets) socket.destroy();
+      sockets.clear();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+    requestCount: () => requests,
+    response: responseGate.promise,
+    send: async (body) => {
+      const response = await responseGate.promise;
+      await new Promise<void>((resolve) => response.end(body, resolve));
+    },
+    terminated: terminationGate.promise,
+    write: async (body) => {
+      const response = await responseGate.promise;
+      await new Promise<void>((resolve, reject) => {
+        response.write(body, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    },
+  };
+}
+
+async function createSession(
+  provider: Provider,
+  pathname: string = "/v1/messages",
+  signal?: AbortSignal
+): Promise<ProxySession> {
+  const isResponsesRequest = pathname === "/v1/responses";
+  const request = new Request(`https://hub.test${pathname}`, {
+    body: JSON.stringify(
+      isResponsesRequest
+        ? {
+            input: [{ content: "integration", role: "user" }],
+            model: "gpt-5.6-sol",
+            store: false,
+            stream: true,
+          }
+        : {
+            max_tokens: 32,
+            messages: [{ content: "integration", role: "user" }],
+            model: "claude-test",
+            stream: true,
+          }
+    ),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+    ...(signal ? { signal } : {}),
+  });
+  const session = await ProxySession.fromContext(new Context(request));
+  session.setAuthState({ apiKey: KEY.key, key: KEY, success: true, user: USER });
+  session.setMessageContext(MESSAGE);
+  session.setOriginalFormat(isResponsesRequest ? "response" : "claude");
+  session.setOriginalModel(isResponsesRequest ? "gpt-5.6-sol" : "claude-test");
+  session.setProvider(provider);
+  return session;
+}
+
+function sse(inputTokens: number, outputTokens: number): string {
+  return `event: message_delta\ndata: ${JSON.stringify({
+    usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+  })}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n`;
+}
+
+function responsesFrame(eventName: string, data: Record<string, unknown>): string {
+  return `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function responsesStreamFixture(responseId: string, itemId: string) {
+  return {
+    neutralPrefix: [
+      responsesFrame("response.created", {
+        response: { id: responseId, status: "in_progress" },
+        sequence_number: 0,
+        type: "response.created",
+      }),
+      responsesFrame("response.in_progress", {
+        response: { id: responseId, status: "in_progress" },
+        sequence_number: 1,
+        type: "response.in_progress",
+      }),
+      responsesFrame("response.output_item.added", {
+        item: {
+          content: [],
+          id: itemId,
+          role: "assistant",
+          status: "in_progress",
+          type: "message",
+        },
+        output_index: 0,
+        sequence_number: 2,
+        type: "response.output_item.added",
+      }),
+      responsesFrame("response.content_part.added", {
+        content_index: 0,
+        item_id: itemId,
+        output_index: 0,
+        part: { annotations: [], logprobs: [], text: "", type: "output_text" },
+        sequence_number: 3,
+        type: "response.content_part.added",
+      }),
+    ],
+    firstContent: responsesFrame("response.output_text.delta", {
+      content_index: 0,
+      delta: "我",
+      item_id: itemId,
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 5,
+      type: "response.output_text.delta",
+    }),
+    completed: responsesFrame("response.completed", {
+      response: {
+        id: responseId,
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+      sequence_number: 6,
+      type: "response.completed",
+    }),
+  } as const;
+}
+
+function watchNeutralResponsesPrefixConsumption() {
+  const consumed = Promise.withResolvers<void>();
+  const decoder = new TextDecoder();
+  let observed = "";
+  const observe = (chunk: Uint8Array | string) => {
+    observed += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+    if (observed.includes('"sequence_number":3')) consumed.resolve();
+  };
+  const originalGateVisit = ProbedSseFrames.prototype.visit;
+  const gateSpy = vi
+    .spyOn(ProbedSseFrames.prototype, "visit")
+    .mockImplementation(function (chunk, visitor) {
+      observe(chunk);
+      return originalGateVisit.call(this, chunk, visitor);
+    });
+  const originalDiscoveryPush = DiscoveryValidityParser.prototype.push;
+  const discoverySpy = vi
+    .spyOn(DiscoveryValidityParser.prototype, "push")
+    .mockImplementation(function (chunk) {
+      observe(chunk);
+      return originalDiscoveryPush.call(this, chunk);
+    });
+  return {
+    consumed: consumed.promise,
+    restore: () => {
+      gateSpy.mockRestore();
+      discoverySpy.mockRestore();
+    },
+  } as const;
+}
+
+async function settleTasks(): Promise<void> {
+  while (state.tasks.length > 0) {
+    const settlements = await Promise.allSettled(state.tasks.splice(0, state.tasks.length));
+    const failures = settlements.flatMap((settlement) =>
+      settlement.status === "rejected" ? [settlement.reason] : []
+    );
+    if (failures.length > 0) throw new AggregateError(failures, "Proxy lifecycle task failed");
+  }
+}
+
+function watchAgentReleases(expectedReleases: number) {
+  const pool = getGlobalAgentPool();
+  const originalRelease = pool.releaseAgent.bind(pool);
+  const released = Promise.withResolvers<void>();
+  let releaseCount = 0;
+  const release = vi.spyOn(pool, "releaseAgent").mockImplementation((cacheKey, dispatcherId) => {
+    originalRelease(cacheKey, dispatcherId);
+    releaseCount += 1;
+    if (releaseCount === expectedReleases) released.resolve();
+  });
+  return { acquire: vi.spyOn(pool, "getAgent"), pool, release, released: released.promise };
+}
+
+beforeEach(async () => {
+  await resetGlobalAgentPool();
+  vi.clearAllMocks();
+  state.billHedgeLosers = false;
+  state.discoveryEnabled = false;
+  state.stickyProviderId = null;
+  state.http2Error = null;
+  state.loserBilled = Promise.withResolvers<void>();
+  state.providers.length = 0;
+  state.streamGateMode = "off";
+  state.tasks.length = 0;
+  state.addLoserCost.mockImplementation(async () => state.loserBilled.resolve());
+  state.pickAlternative.mockImplementation(async (_session: unknown, excludedIds: number[]) => {
+    return state.providers.find((provider) => !excludedIds.includes(provider.id)) ?? null;
+  });
+  state.pickDiscovery.mockImplementation(
+    async (_session: unknown, count: number, excludedIds: number[]) =>
+      state.providers.filter((provider) => !excludedIds.includes(provider.id)).slice(0, count)
+  );
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  await settleTasks();
+  await resetGlobalAgentPool();
+});
+
+describe("proxy hedge transport/lifecycle integration (persistence and control-plane seams mocked)", () => {
+  it.each([
+    {
+      expectedMode: "legacy_serial",
+      firstByteTimeoutStreamingMs: 0,
+      pathName: "sequential",
+    },
+    {
+      expectedMode: "legacy_hedge",
+      firstByteTimeoutStreamingMs: 5_000,
+      pathName: "first-byte hedge",
+    },
+  ])(
+    "records TTFT at the enforced Responses gate commit before downstream reads ($pathName path)",
+    async ({ expectedMode, firstByteTimeoutStreamingMs }) => {
+      const upstream = await startUpstream();
+      const client = new AbortController();
+      const now = vi.spyOn(Date, "now");
+      const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+      try {
+        // Given: the real fixture's four neutral events precede its first text delta.
+        now.mockReturnValue(10_000);
+        state.streamGateMode = "enforce";
+        const provider = createProvider(1, upstream.baseUrl, firstByteTimeoutStreamingMs);
+        provider.providerType = "codex";
+        const session = await createSession(provider, "/v1/responses", client.signal);
+        const agents = watchAgentReleases(1);
+        const stream = responsesStreamFixture("resp_gate", "msg_gate");
+
+        const forwarded = ProxyForwarder.send(session);
+        await upstream.response;
+        now.mockReturnValue(10_050);
+        await upstream.write(stream.neutralPrefix.join(""));
+        await neutralPrefixConsumption.consumed;
+        expect(session.firstByteMs).toBeNull();
+        expect(session.ttftMs).toBeNull();
+
+        // When: sequence 5 arrives, it is the first user-visible content boundary.
+        now.mockReturnValue(10_125);
+        await upstream.write(stream.firstContent);
+        const forwardedResponse = await forwarded;
+
+        // Then: TTFB and TTFT remain distinct before any downstream read occurs.
+        expect(session.firstByteMs).toBe(50);
+        expect(session.ttftMs).toBe(125);
+        expect(session.getRoutingTrace()?.mode).toBe(expectedMode);
+        const firstByteMsAtCommit = session.firstByteMs;
+
+        now.mockReturnValue(10_900);
+        const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+        await upstream.send(stream.completed);
+        await expect(downstream.text()).resolves.toBe(
+          [...stream.neutralPrefix, stream.firstContent, stream.completed].join("")
+        );
+        await settleTasks();
+        await agents.released;
+
+        expect(session.firstByteMs).toBe(firstByteMsAtCommit);
+        expect(session.ttftMs).toBe(125);
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              streamGate: expect.objectContaining({
+                eventName: "response.output_text.delta",
+                frameIndex: 5,
+              }),
+            }),
+          ])
+        );
+        expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        neutralPrefixConsumption.restore();
+        now.mockRestore();
+        await upstream.close();
+      }
+    }
+  );
+
+  it("records TTFT when a Discovery Responses winner commits before downstream reads", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    const now = vi.spyOn(Date, "now");
+    const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+    const governor = new MemoryGovernor({
+      limit: 8 * 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const budget = new StreamGatePrebufferBudget(() => 8 * 1024 ** 2, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
+    try {
+      // Given: Discovery has two Codex attempts and only the alternative emits the real fixture.
+      now.mockReturnValue(10_000);
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      initialProvider.providerType = "codex";
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      winningProvider.priority = initialProvider.priority;
+      winningProvider.providerType = "codex";
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/responses", client.signal);
+      session.sessionId = "integration-discovery-ttft";
+      const agents = watchAgentReleases(2);
+      const fixture = responsesStreamFixture("resp_discovery", "msg_discovery");
+      const stream = {
+        ...fixture,
+        neutralPrefix: [
+          responsesFrame("response.created", {
+            type: "response.created",
+            response: { status: "in_progress", instructions: "x".repeat(300000) },
+          }),
+          ...fixture.neutralPrefix,
+        ],
+      };
+
+      const forwarded = ProxyForwarder.send(session);
+      await Promise.all([loser.response, winner.response]);
+      now.mockReturnValue(10_050);
+      await winner.write(stream.neutralPrefix.join(""));
+      await neutralPrefixConsumption.consumed;
+      expect(session.ttftMs).toBeNull();
+      expect(governor.snapshot().usedBytes).toBeGreaterThan(300000 * 8);
+
+      // When: sequence 5 makes the alternative ready and Discovery commits it.
+      now.mockReturnValue(10_125);
+      await winner.write(stream.firstContent);
+      const forwardedResponse = await forwarded;
+
+      // Then: TTFT is fixed at winner commit, before ResponseHandler reads the stream.
+      expect(governor.snapshot().usedBytes).toBeGreaterThanOrEqual(300000);
+      expect(session.firstByteMs).toBe(50);
+      expect(session.ttftMs).toBe(125);
+      const firstByteMsAtCommit = session.firstByteMs;
+
+      now.mockReturnValue(10_900);
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await winner.send(stream.completed);
+      await expect(downstream.text()).resolves.toBe(
+        [...stream.neutralPrefix, stream.firstContent, stream.completed].join("")
+      );
+      await settleTasks();
+      await loser.terminated;
+      await agents.released;
+
+      expect(session.firstByteMs).toBe(firstByteMsAtCommit);
+      expect(session.ttftMs).toBe(125);
+      expect(loser.abortCount()).toBe(1);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+      expect(governor.snapshot().usedBytes).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      neutralPrefixConsumption.restore();
+      admission.mockRestore();
+      now.mockRestore();
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it.each([
+    { sticky: false, waitMs: 650, cancel: false },
+    { sticky: true, waitMs: 650, cancel: false },
+    { sticky: true, waitMs: 6500, cancel: true },
+  ])(
+    "does not spend Discovery SLA in local admission (sticky=$sticky, wait=$waitMs ms, cancel=$cancel)",
+    async ({ sticky, waitMs, cancel }) => {
+      const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      const governor = new MemoryGovernor({
+        limit: 1024 ** 2,
+        remote: false,
+        monitor: false,
+        enabled: true,
+      });
+      const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
+      const occupied = await budget.acquire(1024 ** 2);
+      const admission = vi
+        .spyOn(getStreamGatePrebufferBudget(), "acquire")
+        .mockImplementation((...args) => budget.acquire(...args));
+      let forwarded: Promise<Response | Error> | undefined;
+      try {
+        state.discoveryEnabled = true;
+        state.streamGateMode = "enforce";
+        state.stickyProviderId = sticky ? 1 : null;
+        const initial = createProvider(1, first.baseUrl, 0);
+        initial.providerType = "codex";
+        const alternative = createProvider(2, second.baseUrl, 0);
+        alternative.providerType = "codex";
+        alternative.priority = initial.priority;
+        state.providers.push(alternative);
+        const session = await createSession(initial, "/v1/responses", client.signal);
+        session.sessionId = "discovery-local-admission-sla";
+        vi.spyOn(session, "shouldReuseProvider").mockReturnValue(sticky);
+        let settled = false;
+        forwarded = ProxyForwarder.send(session)
+          .catch((error) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        expect(settled).toBe(false);
+        expect(first.requestCount() + second.requestCount()).toBe(0);
+        expect(
+          session
+            .getRoutingTrace()
+            ?.events.some(
+              (event) => event.type === "fallback_promoted" || event.type === "sticky_timeout"
+            )
+        ).toBe(false);
+        expect(state.clearBinding).not.toHaveBeenCalled();
+
+        if (cancel) {
+          // The configured lease initially lives for one second plus five seconds
+          // of handoff grace; this wait crosses that original expiry.
+          expect(state.renewDiscoveryLease.mock.calls.length).toBeGreaterThanOrEqual(2);
+          client.abort();
+          expect(await forwarded).toMatchObject({ statusCode: 499 });
+          const renewalCount = state.renewDiscoveryLease.mock.calls.length;
+          occupied.release();
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          expect(state.renewDiscoveryLease).toHaveBeenCalledTimes(renewalCount);
+          expect(first.requestCount() + second.requestCount()).toBe(0);
+          expect(budget.snapshot().waiting).toBe(0);
+          expect(governor.snapshot().usedBytes).toBe(0);
+          expect(state.clearBinding).not.toHaveBeenCalled();
+          return;
+        }
+        occupied.release();
+        await first.response;
+        const stream = responsesStreamFixture("resp_admitted", "msg_admitted");
+        await first.send(stream.firstContent + stream.completed);
+        const response = await forwarded;
+        expect(response).toBeInstanceOf(Response);
+        await (response as Response).body?.cancel();
+        expect(
+          session.getRoutingTrace()?.events.find((event) => event.type === "winner_committed")
+            ?.attemptKind
+        ).toBe(sticky ? "sticky" : "normal");
+        expect(state.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        client.abort();
+        occupied.release();
+        await forwarded;
+        admission.mockRestore();
+        await Promise.all([first.close(), second.close()]);
+      }
+    }
+  );
+
+  it("pauses Sticky and race deadlines during compatibility response admission", async () => {
+    const upstream = await startUpstream("application/json");
+    const client = new AbortController();
+    const governor = new MemoryGovernor({
+      limit: 1024 ** 2,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
+    const entered = Promise.withResolvers<void>();
+    let occupied: Awaited<ReturnType<typeof budget.acquire>> | undefined;
+    let acquireCount = 0;
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation(async (...args) => {
+        if (++acquireCount === 2) {
+          occupied = await budget.acquire(1024 ** 2);
+          entered.resolve();
+        }
+        return budget.acquire(...args);
+      });
+    let forwarded: Promise<Response | Error> | undefined;
+    try {
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      state.stickyProviderId = 1;
+      const initial = createProvider(1, upstream.baseUrl, 0);
+      const session = await createSession(initial, "/v1/messages", client.signal);
+      session.sessionId = "discovery-compatibility-admission";
+      vi.spyOn(session, "shouldReuseProvider").mockReturnValue(true);
+      let settled = false;
+      forwarded = ProxyForwarder.send(session)
+        .catch((error) => error)
+        .finally(() => {
+          settled = true;
+        });
+      await entered.promise;
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      expect(settled).toBe(false);
+      expect(upstream.requestCount()).toBe(1);
+      expect(state.clearBinding).not.toHaveBeenCalled();
+      expect(
+        session
+          .getRoutingTrace()
+          ?.events.some(
+            (event) => event.type === "fallback_promoted" || event.type === "sticky_timeout"
+          )
+      ).toBe(false);
+      client.abort();
+      expect(await forwarded).toMatchObject({ statusCode: 499 });
+      if (!occupied) throw new Error("expected the occupied gate lease to be held");
+      occupied.release();
+      expect(governor.snapshot().usedBytes).toBe(0);
+    } finally {
+      client.abort();
+      occupied?.release();
+      await forwarded;
+      admission.mockRestore();
+      await upstream.close();
+    }
+  });
+
+  it("still expires Discovery when admitted upstreams do not produce content", async () => {
+    const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      const initial = createProvider(1, first.baseUrl, 0);
+      const alternative = createProvider(2, second.baseUrl, 0);
+      alternative.priority = initial.priority;
+      state.providers.push(alternative);
+      const session = await createSession(initial, "/v1/messages", client.signal);
+      session.sessionId = "discovery-upstream-sla";
+      const rejected = expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+        statusCode: 503,
+      });
+      await Promise.all([first.response, second.response]);
+      await rejected;
+      expect(first.requestCount() + second.requestCount()).toBe(2);
+      expect(
+        session.getRoutingTrace()?.events.some((event) => event.type === "fallback_promoted")
+      ).toBe(true);
+    } finally {
+      client.abort();
+      await Promise.all([first.close(), second.close()]);
+    }
+  });
+
+  it("Discovery 解析容量不足返回本地 429，取消所有候选且不惩罚供应商", async () => {
+    const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    const governor = new MemoryGovernor({
+      limit: 256 * 1024,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
+    try {
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      const initial = createProvider(1, first.baseUrl, 0);
+      initial.providerType = "codex";
+      const alternative = createProvider(2, second.baseUrl, 0);
+      alternative.providerType = "codex";
+      alternative.priority = initial.priority;
+      state.providers.push(alternative);
+      const session = await createSession(initial, "/v1/responses", client.signal);
+      session.sessionId = "discovery-local-capacity";
+      const rejected = expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+        statusCode: 429,
+      });
+      await Promise.all([first.response, second.response]);
+      await first.write(
+        responsesFrame("response.created", {
+          type: "response.created",
+          response: { status: "in_progress", instructions: "x".repeat(40000) },
+        })
+      );
+      await rejected;
+      await Promise.all([first.terminated, second.terminated]);
+      expect(governor.snapshot().usedBytes).toBe(0);
+      expect(budget.snapshot().reservedBytes).toBe(0);
+      expect(state.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      client.abort();
+      admission.mockRestore();
+      await Promise.all([first.close(), second.close()]);
+    }
+  });
+
+  it.each([
+    ...[false, true].flatMap((discoveryEnabled) => [
+      {
+        discoveryEnabled,
+        failureBody: responsesFrame("response.failed", {
+          response: {
+            error: { message: "upstream connection closed before completion" },
+            id: "resp_failed",
+            status: "failed",
+          },
+          type: "response.failed",
+        }),
+        failureName: "response.failed",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        failureBody: responsesFrame("response.error", {
+          code: "stream_read_error",
+          message: "stream_read_error",
+          type: "response.error",
+        }),
+        failureName: "response.error",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        failureBody:
+          'event: response.in_progress\ndata: {"type":"response.in_progress","response":\n\n',
+        failureName: "malformed frame",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+    ]),
+  ])(
+    "keeps Responses tool metadata precommit and falls back on $failureName ($pathName)",
+    async ({ discoveryEnabled, failureBody }) => {
+      const [failed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      try {
+        state.discoveryEnabled = discoveryEnabled;
+        state.streamGateMode = "enforce";
+        const initialProvider = createProvider(1, failed.baseUrl, 0);
+        initialProvider.providerType = "codex";
+        const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+        fallbackProvider.priority = initialProvider.priority;
+        fallbackProvider.providerType = "codex";
+        state.providers.push(fallbackProvider);
+        const session = await createSession(initialProvider, "/v1/responses", client.signal);
+        session.sessionId = `integration-responses-precommit-${discoveryEnabled}`;
+
+        const forwarded = ProxyForwarder.send(session);
+        await failed.response;
+        if (discoveryEnabled) await fallback.response;
+
+        await failed.write(
+          responsesFrame("response.output_item.added", {
+            item: {
+              arguments: "",
+              id: "fc_failed",
+              name: "lookup",
+              status: "in_progress",
+              type: "function_call",
+            },
+            output_index: 0,
+            type: "response.output_item.added",
+          })
+        );
+
+        const precommitState = await Promise.race([
+          forwarded.then(
+            () => "resolved" as const,
+            () => "rejected" as const
+          ),
+          new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 25)),
+        ]);
+        expect(precommitState).toBe("pending");
+
+        await failed.send(failureBody);
+        await fallback.response;
+        const fallbackStream = responsesStreamFixture("resp_fallback", "msg_fallback");
+        await fallback.send(`${fallbackStream.firstContent}${fallbackStream.completed}`);
+
+        const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+        const body = await downstream.text();
+        await settleTasks();
+
+        expect(body).toContain('"delta":"我"');
+        expect(body).not.toContain("fc_failed");
+        expect(session.provider?.id).toBe(fallbackProvider.id);
+        if (discoveryEnabled) {
+          expect(session.getRoutingTrace()?.mode).toBe("discovery");
+        }
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: initialProvider.id }),
+            expect.objectContaining({ id: fallbackProvider.id, statusCode: 200 }),
+          ])
+        );
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        await Promise.all([failed.close(), fallback.close()]);
+      }
+    }
+  );
+
+  it.each(
+    [false, true].flatMap((discoveryEnabled) => [
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_failed","name":"lookup","input":{}}}\n\n',
+        metadataName: "tool start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
+        metadataName: "empty thinking start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":""}}\n\n',
+        metadataName: "empty redacted thinking start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+    ])
+  )(
+    "keeps Anthropic $metadataName precommit and falls back on transport abort ($pathName)",
+    async ({ discoveryEnabled, metadataBody }) => {
+      const [failed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      try {
+        state.discoveryEnabled = discoveryEnabled;
+        state.streamGateMode = "enforce";
+        const initialProvider = createProvider(1, failed.baseUrl, 0);
+        const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+        fallbackProvider.priority = initialProvider.priority;
+        state.providers.push(fallbackProvider);
+        const session = await createSession(initialProvider, "/v1/messages", client.signal);
+        session.sessionId = `integration-anthropic-precommit-${discoveryEnabled}`;
+
+        const forwarded = ProxyForwarder.send(session);
+        await failed.response;
+        if (discoveryEnabled) await fallback.response;
+
+        await failed.write(metadataBody);
+
+        const precommitState = await Promise.race([
+          forwarded.then(
+            () => "resolved" as const,
+            () => "rejected" as const
+          ),
+          new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 25)),
+        ]);
+        expect(precommitState).toBe("pending");
+
+        await failed.abort(new Error("stream interrupted before completion"));
+        await fallback.response;
+        await fallback.send(
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback"}}\n\n' +
+            'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+        );
+
+        const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+        const body = await downstream.text();
+        await settleTasks();
+
+        expect(body).toContain('"text":"fallback"');
+        expect(body).not.toContain("tu_failed");
+        expect(session.provider?.id).toBe(fallbackProvider.id);
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: initialProvider.id }),
+            expect.objectContaining({ id: fallbackProvider.id, statusCode: 200 }),
+          ])
+        );
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        await Promise.all([failed.close(), fallback.close()]);
+      }
+    }
+  );
+
+  it("does not splice a fallback stream after real Responses content is committed", async () => {
+    const [committed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.streamGateMode = "enforce";
+      const initialProvider = createProvider(1, committed.baseUrl, 0);
+      initialProvider.providerType = "codex";
+      const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+      fallbackProvider.providerType = "codex";
+      state.providers.push(fallbackProvider);
+      const session = await createSession(initialProvider, "/v1/responses", client.signal);
+      const stream = responsesStreamFixture("resp_committed", "msg_committed");
+
+      const forwarded = ProxyForwarder.send(session);
+      await committed.response;
+      await committed.write(stream.firstContent);
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      expect(fallback.requestCount()).toBe(0);
+
+      const malformed =
+        'event: response.in_progress\ndata: {"type":"response.in_progress","response":\n\n';
+      await committed.send(`${malformed}${stream.completed}`);
+      const body = await downstream.text();
+      await settleTasks();
+
+      expect(body).toContain('"delta":"我"');
+      expect(body).toContain(malformed);
+      expect(fallback.requestCount()).toBe(0);
+      expect(state.durableTerminal).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({
+          inputTokens: 1,
+          outputTokens: 1,
+          statusCode: 200,
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([committed.close(), fallback.close()]);
+    }
+  });
+
+  it("runs a leased Discovery race over real loopback transports and cancels the loser", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      winningProvider.priority = initialProvider.priority;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      await Promise.all([loser.response, winner.response]);
+      await winner.write(
+        'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_winner"}}\n\n'
+      );
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      await expect(downstream.text()).resolves.toContain("winner");
+      await settleTasks();
+      await loser.terminated;
+      await agents.released;
+
+      expect(loser.abortCount()).toBe(1);
+      expect(winner.abortCount()).toBe(0);
+      expect(state.addLoserCost).not.toHaveBeenCalled();
+      expect(state.acquireDiscoveryLease).toHaveBeenCalledTimes(1);
+      expect(state.compareAndSetBinding).toHaveBeenCalledTimes(1);
+      expect(state.releaseDiscoveryLease).toHaveBeenCalledTimes(1);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("drains and bills only a ready Discovery loser after a normal winner commits", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      // The lower-priority initial attempt may become ready, but the priority
+      // gate keeps it held until the preferred candidate resolves.
+      initialProvider.priority = 2;
+      winningProvider.priority = 1;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      const [loserResponse] = await Promise.all([loser.response, winner.response]);
+      loserResponse.write(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"loser"}}\n\n'
+      );
+      await vi.waitFor(() => {
+        expect(session.getRoutingTrace()?.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              attemptId: `${initialProvider.id}:1`,
+              outcome: "held",
+              type: "attempt_held",
+            }),
+          ])
+        );
+      });
+
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":8,"output_tokens":2}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const forwardedResponse = await forwarded;
+      await loser.send(
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":7,"output_tokens":2}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await expect(downstream.text()).resolves.toContain("winner");
+      await state.loserBilled.promise;
+      await settleTasks();
+      await agents.released;
+
+      expect(state.addLoserCost).toHaveBeenCalledTimes(1);
+      expect(state.addLoserCost).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ toString: expect.any(Function) }),
+        expect.objectContaining({
+          attemptNumber: 1,
+          costUsd: "0.011",
+          providerId: initialProvider.id,
+        })
+      );
+      expect(state.updateWinnerCost).toHaveBeenCalledTimes(1);
+      expect(state.updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+      expect(session.getRoutingTrace()?.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            attemptId: `${initialProvider.id}:1`,
+            cancellationKind: "discovery_loser",
+            outcome: "cancelled",
+            type: "attempt_finished",
+          }),
+        ])
+      );
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.release).toHaveBeenCalledTimes(2);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("does not bill a drained Discovery loser without a protocol completion marker", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      initialProvider.priority = 2;
+      winningProvider.priority = 1;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      const [loserResponse] = await Promise.all([loser.response, winner.response]);
+      loserResponse.write(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial loser"}}\n\n'
+      );
+      await vi.waitFor(() => {
+        expect(session.getRoutingTrace()?.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              attemptId: `${initialProvider.id}:1`,
+              outcome: "held",
+              type: "attempt_held",
+            }),
+          ])
+        );
+      });
+
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const forwardedResponse = await forwarded;
+      // Positive usage alone is insufficient: without message_stop this is a
+      // truncated Anthropic stream and must not be added to the request cost.
+      await loser.send(
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":7,"output_tokens":2}}\n\n'
+      );
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await expect(downstream.text()).resolves.toContain("winner");
+      await agents.released;
+
+      expect(state.addLoserCost).not.toHaveBeenCalled();
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("fences loser timers after winner settlement and releases each launched transport once", async () => {
+    const [slow, winner, fenced] = await Promise.all([
+      startUpstream(),
+      startUpstream(),
+      startUpstream(),
+    ]);
+    const client = new AbortController();
+    try {
+      const initialProvider = createProvider(1, slow.baseUrl, 50);
+      state.providers.push(
+        createProvider(2, winner.baseUrl, 50),
+        createProvider(3, fenced.baseUrl, 50)
+      );
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      const agents = watchAgentReleases(2);
+      vi.useFakeTimers({ toFake: ["clearTimeout", "setTimeout"] });
+
+      const forwarded = ProxyForwarder.send(session);
+      await slow.response;
+      await vi.advanceTimersByTimeAsync(50);
+      await winner.response;
+      await winner.send(sse(8, 2));
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      await expect(downstream.text()).resolves.toContain("message_stop");
+      await settleTasks();
+      await slow.terminated;
+      await agents.released;
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(fenced.requestCount()).toBe(0);
+      expect(slow.abortCount()).toBe(1);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.acquire).toHaveBeenCalledTimes(2);
+      expect(agents.release).toHaveBeenCalledTimes(2);
+      expect(new Set(agents.release.mock.calls.map(([key, id]) => `${key}|${id}`))).toHaveLength(2);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([slow.close(), winner.close(), fenced.close()]);
+    }
+  });
+
+  it("classifies local database overload before upstream fanout", async () => {
+    const [initial, alternative] = await Promise.all([startUpstream(), startUpstream()]);
+    try {
+      const initialProvider = createProvider(1, initial.baseUrl, 50);
+      state.providers.push(createProvider(2, alternative.baseUrl, 50));
+      const session = await createSession(initialProvider);
+      const wrapped = new Error("Failed query", {
+        cause: new DbPoolAdmissionError("data", 32),
+      });
+      state.http2Error = wrapped;
+
+      await expect(ProxyForwarder.send(session)).rejects.toBe(wrapped);
+
+      expect(initial.requestCount()).toBe(0);
+      expect(alternative.requestCount()).toBe(0);
+      expect(state.pickAlternative).not.toHaveBeenCalled();
+      expect(state.recordFailure).not.toHaveBeenCalled();
+      expect(session.getProviderChain()).toEqual([
+        expect.objectContaining({
+          errorDetails: expect.objectContaining({
+            system: expect.objectContaining({ errorCode: "DB_POOL_ADMISSION_EXCEEDED" }),
+          }),
+          reason: "system_error",
+        }),
+      ]);
+    } finally {
+      await Promise.all([initial.close(), alternative.close()]);
+    }
+  });
+
+  it("bills the hedge winner and naturally drained loser exactly once", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 50);
+      state.providers.push(createProvider(2, winner.baseUrl, 50));
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      const agents = watchAgentReleases(2);
+      vi.useFakeTimers({ toFake: ["clearTimeout", "setTimeout"] });
+
+      const forwarded = ProxyForwarder.send(session);
+      await loser.response;
+      await vi.advanceTimersByTimeAsync(50);
+      await winner.response;
+      await winner.send(sse(10, 3));
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      await downstream.text();
+      await settleTasks();
+      await loser.send(sse(7, 2));
+      await state.loserBilled.promise;
+      await agents.released;
+
+      expect(state.updateWinnerCost).toHaveBeenCalledTimes(1);
+      expect(state.updateWinnerCost.mock.calls[0]?.[0]).toBe(MESSAGE.id);
+      expect(String(state.updateWinnerCost.mock.calls[0]?.[1])).toBe("0.016");
+      expect(state.updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+
+      expect(state.addLoserCost).toHaveBeenCalledTimes(1);
+      expect(state.addLoserCost.mock.calls[0]?.[0]).toBe(MESSAGE.id);
+      expect(String(state.addLoserCost.mock.calls[0]?.[1])).toBe("0.011");
+      expect(state.addLoserCost.mock.calls[0]?.[2]).toEqual(
+        expect.objectContaining({ attemptNumber: 1, providerId: initialProvider.id })
+      );
+
+      expect(state.durableTerminal).toHaveBeenCalledTimes(1);
+      expect(state.durableTerminal).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({
+          inputTokens: 10,
+          outputTokens: 3,
+          providerId: 2,
+          statusCode: 200,
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+      expect(state.updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
+
+      expect(state.trackCost).toHaveBeenCalledTimes(2);
+      expect(state.trackCost).toHaveBeenNthCalledWith(
+        1,
+        KEY.id,
+        2,
+        "",
+        0.016,
+        expect.objectContaining({ requestId: MESSAGE.id, userId: USER.id })
+      );
+      expect(state.trackCost).toHaveBeenNthCalledWith(
+        2,
+        KEY.id,
+        initialProvider.id,
+        "",
+        0.011,
+        expect.objectContaining({
+          requestId: `${MESSAGE.id}:hedge-loser:${initialProvider.id}:1`,
+          userId: USER.id,
+        })
+      );
+      expect(state.settleLeaseBudgets).toHaveBeenCalledTimes(2);
+      expect(state.settleLeaseBudgets).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          cost: 0.016,
+          entities: expect.objectContaining({
+            provider: expect.objectContaining({ id: 2 }),
+          }),
+          requestId: MESSAGE.id,
+        })
+      );
+      expect(state.settleLeaseBudgets).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          cost: 0.011,
+          entities: expect.objectContaining({
+            provider: expect.objectContaining({ id: initialProvider.id }),
+          }),
+          requestId: `${MESSAGE.id}:hedge-loser:${initialProvider.id}:1`,
+        })
+      );
+      expect(loser.requestCount()).toBe(1);
+      expect(winner.requestCount()).toBe(1);
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.release).toHaveBeenCalledTimes(2);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(500);
+      await settleTasks();
+
+      expect(state.pickAlternative).toHaveBeenCalledTimes(1);
+      expect(loser.requestCount()).toBe(1);
+      expect(winner.requestCount()).toBe(1);
+      expect(state.updateWinnerCost).toHaveBeenCalledTimes(1);
+      expect(state.addLoserCost).toHaveBeenCalledTimes(1);
+      expect(state.updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+      expect(state.durableTerminal).toHaveBeenCalledTimes(1);
+      expect(state.updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
+      expect(state.trackCost).toHaveBeenCalledTimes(2);
+      expect(state.settleLeaseBudgets).toHaveBeenCalledTimes(2);
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.release).toHaveBeenCalledTimes(2);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("keeps the first-byte deadline armed across the public response handoff", async () => {
+    const silent = await startUpstream();
+    const client = new AbortController();
+    try {
+      const provider = createProvider(1, silent.baseUrl, 50);
+      const session = await createSession(provider, "/v1/messages/count_tokens", client.signal);
+      const agents = watchAgentReleases(1);
+      vi.useFakeTimers({ toFake: ["clearTimeout", "setTimeout"] });
+
+      const forwarded = ProxyForwarder.send(session);
+      await silent.response;
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      const bodyRejection = expect(downstream.text()).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(50);
+
+      await bodyRejection;
+      await settleTasks();
+      await silent.terminated;
+      await agents.released;
+      expect(silent.abortCount()).toBe(1);
+      expect(state.durableTerminal).toHaveBeenCalledOnce();
+      expect(state.durableTerminal).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ statusCode: 502 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+      expect(agents.release).toHaveBeenCalledOnce();
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await silent.close();
+    }
+  });
+});

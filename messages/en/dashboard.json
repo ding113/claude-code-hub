@@ -61,13 +61,13 @@
     "filters": {
       "user": "User",
       "provider": "Provider",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "Search users...",
       "searchProvider": "Search providers...",
-      "searchSessionId": "Search session IDs...",
+      "searchSessionId": "Search Session or Prefix IDs...",
       "noUserFound": "No matching users found",
       "noProviderFound": "No matching providers found",
-      "noSessionFound": "No matching session IDs found",
+      "noSessionFound": "No matching Session or Prefix IDs found",
       "model": "Model",
       "actualResponseModelMismatch": "Billing/actual model mismatch",
       "endpoint": "Endpoint",
@@ -88,6 +88,12 @@
       "minRetryCount": "Retry Count ≥",
       "minRetryCountPlaceholder": "Enter minimum retries",
       "enabled": "On",
+      "replay": {
+        "label": "Replay",
+        "all": "All requests",
+        "only": "Replay only",
+        "exclude": "Exclude Replay"
+      },
       "apply": "Apply Filter",
       "reset": "Reset",
       "last7days": "7d",
@@ -131,6 +137,8 @@
       "ip": "IP",
       "provider": "Provider",
       "model": "Billing Model",
+      "reasoningEffort": "Reasoning Effort",
+      "reasoningEffortTooltip": "Thinking effort of the model request",
       "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
@@ -162,6 +170,7 @@
       "prevPage": "Previous Page",
       "nextPage": "Next Page",
       "blocked": "Blocked",
+      "replay": "Replay",
       "nonBilling": "Non-Billing",
       "skipped": "Skipped",
       "specialSettings": "Special",
@@ -212,6 +221,23 @@
         "viewFullError": "View full error",
         "viewSession": "View Session"
       },
+      "cachePerformance": {
+        "title": "Cache Performance",
+        "actualRate": "Actual Cache Rate",
+        "theoreticalRate": "Theoretical Cache Rate",
+        "coefficient": "Request Cache Coefficient",
+        "rawCoefficient": "Raw single-request coefficient; provider confidence is not applied.",
+        "estimateNote": "The theoretical rate is estimated from the longest normalized prefix (bytes / 4).",
+        "availability": {
+          "available": "Eligible request with a measurable prefix cache estimate.",
+          "no_input": "No input tokens were recorded for this request.",
+          "no_affinity_key": "No Prefix ID was recorded, so the theoretical rate and coefficient are unavailable.",
+          "attempt_failed": "The request attempt failed; the coefficient is excluded.",
+          "not_observable": "Upstream cache usage was not observable; the coefficient is excluded.",
+          "stream_truncated": "The stream was truncated; the coefficient is excluded.",
+          "not_recorded": "Prefix cache metrics were not recorded for this request."
+        }
+      },
       "specialSettings": {
         "title": "Special settings"
       },
@@ -225,6 +251,7 @@
         "title": "Blocking Information",
         "type": "Blocking Type",
         "sensitiveWord": "Sensitive Word Blocking",
+        "localCapacity": "Local Capacity Exhausted",
         "word": "Sensitive Word",
         "matchType": "Match Type",
         "matchTypeContains": "Contains Match",
@@ -257,7 +284,7 @@
         "responseModelLabel": "Actual Response Model",
         "mismatchTooltip": "The upstream provider returned a different model than the one requested. Billing is still based on the requested model.",
         "secondaryLineAriaLabel": "Actual response model: {model}",
-        "arrowPrefix": "\u21b3",
+        "arrowPrefix": "↳",
         "noSignatureBadge": "No thinking signature",
         "noSignatureTooltip": "Thinking was enabled but no thinking signature was returned in the stream; the actual response model falls back to the plain model field from message_start."
       },
@@ -299,6 +326,7 @@
         "title": "Billing Details",
         "input": "Input",
         "output": "Output",
+        "cacheWrite": "Cache Write",
         "cacheWrite5m": "Cache Write (5m)",
         "cacheWrite1h": "Cache Write (1h)",
         "cacheRead": "Cache Read",
@@ -316,6 +344,7 @@
           "local_manual": "Local manual pricing",
           "cloud_exact": "Exact cloud provider pricing",
           "cloud_model_fallback": "Fallback model provider pricing",
+          "cloud_official": "Official cloud pricing",
           "priority_fallback": "Priority provider fallback pricing",
           "single_provider_top_level": "Top-level single-provider pricing",
           "official_fallback": "Official pricing"
@@ -345,30 +374,35 @@
       "performance": {
         "title": "Performance",
         "ttfb": "TTFB",
+        "ttft": "TTFT",
+        "ttftShort": "TTFT",
         "duration": "Total Duration",
-        "outputRate": "Output Rate"
+        "outputRate": "Output Rate",
+        "outputTokens": "Output Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "No performance data available",
-        "ttfbGauge": "Time to First Byte",
+        "ttftGauge": "Time to First Token",
         "outputRateGauge": "Output Rate",
         "latencyBreakdown": "Latency Breakdown",
         "generationTime": "Generation Time",
+        "segmentTtfb": "TTFB",
+        "segmentTtft": "Token Wait",
+        "segmentTotal": "Total",
         "assessment": {
           "excellent": "Excellent",
           "good": "Good",
           "warning": "Warning",
           "poor": "Poor"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1s",
-          "ttfbWarning": "TTFB 1-2s",
-          "ttfbPoor": "TTFB > 3s"
         }
       },
       "metadata": {
         "noMetadata": "No metadata available",
         "sessionInfo": "Session Info",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "Client Session ID",
         "clientInfo": "Client Info",
         "billingInfo": "Billing Info",
         "technicalTimeline": "Technical Timeline",
@@ -379,8 +413,157 @@
         "overridden": "Overridden by provider",
         "tooltip": "Thinking effort requested by the client (output_config.effort), shown verbatim. The proxy does not rename or convert levels."
       },
+      "routingTrace": {
+        "title": "Routing mode",
+        "modes": {
+          "discovery": "Bounded Discovery",
+          "legacy_hedge": "Legacy Hedge",
+          "legacy_serial": "Legacy serial fallback",
+          "single_upstream": "Single upstream",
+          "lease_conflict": "Single-route protection"
+        },
+        "bypassed": "Discovery was not used: {reason}",
+        "bypassReasons": {
+          "disabled": "Discovery is disabled",
+          "non_streaming": "Non-streaming request",
+          "retry_not_allowed": "This endpoint does not allow retries",
+          "provider_switch_not_allowed": "This endpoint does not allow provider switching",
+          "raw_passthrough": "Raw passthrough request",
+          "unsupported_protocol": "Protocol is not supported by Discovery",
+          "websocket": "WebSocket request",
+          "streaming_hedge_disabled": "Streaming racing is disabled for this request",
+          "raw_cross_provider_fallback": "Raw cross-provider fallback is enabled",
+          "missing_session": "Session identity is missing",
+          "missing_key": "API key identity is missing",
+          "rollout_ineligible": "Request is outside the current rollout",
+          "redis_capability_unavailable": "Redis binding capability is unavailable",
+          "binding_conflict": "Session binding conflict",
+          "lease_conflict": "Another request owns the Discovery lease; this request uses one upstream",
+          "lease_unavailable": "Discovery lease is unavailable",
+          "unknown": "Eligibility requirement was not met"
+        },
+        "discoveryTitle": "Discovery rounds",
+        "discoveryCompact": "{rounds}R · {attempts} tries",
+        "routeMode": "Route mode",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "Cold start",
+          "rediscovery": "Rediscovery"
+        },
+        "finalProvider": "Final provider",
+        "roundsLabel": "Rounds",
+        "attemptsLabel": "Attempts",
+        "winnerOrigin": "Winner origin",
+        "viewDetails": "View Discovery details",
+        "stickyPhase": "Sticky probe",
+        "round": "Round {round}",
+        "roundUnknown": "Round not recorded",
+        "attempts": "{count} attempts",
+        "noAttempts": "No provider attempts were recorded",
+        "providerFallback": "Provider {id}",
+        "elapsed": "+{elapsed}ms",
+        "priority": "Priority {priority}",
+        "roles": {
+          "sticky": "Sticky",
+          "normal": "Candidate",
+          "fallback": "Fallback"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "Normal candidate",
+          "fallback": "Fallback takeover"
+        },
+        "roleTransition": "{from} → {to}",
+        "outcomes": {
+          "success": "Success",
+          "pending": "Pending",
+          "ready": "Ready",
+          "held": "Ready, held",
+          "winner": "Winner",
+          "failed": "Failed",
+          "cancelled": "Cancelled",
+          "timeout": "SLA timeout",
+          "client_abort": "Client aborted",
+          "deadline": "Total deadline"
+        },
+        "terminalOutcome": "Request result",
+        "bindingResult": "Sticky binding",
+        "bindingActions": {
+          "create": "Create",
+          "renew": "Renew",
+          "clear": "Clear",
+          "none": "No change"
+        },
+        "bindingFallbackWinner": "Not written · Fallback winner",
+        "bindingOutcomes": {
+          "updated": "Updated",
+          "cleared": "Cleared",
+          "skipped": "Skipped",
+          "failed": "Failed",
+          "unknown": "Unknown"
+        },
+        "fallbackPromoted": "Promoted to fallback",
+        "winnerCommitted": "Winner committed",
+        "roundStarted": "Round started",
+        "events": {
+          "started": "Request started",
+          "ready": "Valid first content received",
+          "held": "Delivery held by routing policy",
+          "fallbackPromoted": "Promoted to fallback",
+          "winnerCommitted": "Committed as winner",
+          "finished": "Finished: {outcome}"
+        },
+        "traceTruncated": "Some events were omitted because this trace reached its storage limit.",
+        "summary": "{rounds} rounds · {attempts} attempts · max {maxActive} active",
+        "config": "Configuration snapshot",
+        "configConcurrency": "Concurrency",
+        "configLegacyHedgeMaxInFlight": "Legacy hedge cap",
+        "configMaxRounds": "Maximum rounds",
+        "configDiscoverySla": "Round SLA",
+        "configStickySla": "Sticky SLA",
+        "configTotalTimeout": "Total timeout",
+        "configStickyCooldown": "Sticky timeout cooldown",
+        "configStickyBindingTtl": "Sticky binding validity (SESSION_TTL)",
+        "slotSaturation": "Hedge slots saturated ({count})",
+        "slotSaturationEvent": "{provider} · {active}/{cap} active · {elapsed}ms elapsed",
+        "attemptDetails": {
+          "providerId": "Provider ID",
+          "attempt": "Attempt",
+          "status": "HTTP status",
+          "inferred": "inferred",
+          "endpoint": "Endpoint",
+          "error": "Upstream error",
+          "cancellation": "Cancellation reason",
+          "timeline": "Attempt timeline",
+          "billing": "Cost and usage",
+          "billed": "Included in total cost",
+          "billedCost": "Billed cost",
+          "winnerCost": "Winner cost",
+          "notObtained": "Cancelled; usage unavailable"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "Another Discovery attempt won",
+          "discovery_sla_timeout": "Discovery SLA expired",
+          "round_timeout": "Round SLA expired",
+          "sticky_timeout": "Sticky SLA expired",
+          "request_deadline": "Total Discovery deadline reached",
+          "client_abort": "Client disconnected",
+          "winner_committed": "Another provider was committed"
+        }
+      },
+      "reasoningEffort": {
+        "label": "Reasoning effort",
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort in the Codex request (reasoning.effort), shown verbatim."
+      },
+      "reasoningEffortOpenai": {
+        "label": "Reasoning effort",
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort in the OpenAI chat/completions request (reasoning_effort / reasoning.effort), shown verbatim."
+      },
       "logicTrace": {
         "title": "Decision Chain",
+        "singleRouteSelectionTitle": "Provider selection under single-route protection",
         "noDecisionData": "No decision data available",
         "providersCount": "{count} providers",
         "healthyCount": "{count} healthy",
@@ -407,6 +590,12 @@
         "originDecisionLoading": "Loading original decision...",
         "originDecisionUnavailable": "Original decision record unavailable",
         "originDecisionExpand": "View original selection"
+      },
+      "replayServe": {
+        "title": "Served from Replay Cache",
+        "desc": "This request was served from the replay cache (identical request already in flight or completed). No upstream provider call was made and no cost was incurred.",
+        "replayId": "Replay ID",
+        "sourceRequestId": "Source request"
       }
     },
     "providerChain": {
@@ -437,6 +626,7 @@
       "totalCost": "Total Cost",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} context",
       "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
       "context1mEnabled": "1M context window enabled",
@@ -446,6 +636,7 @@
         "local_manual": "Local manual pricing",
         "cloud_exact": "Exact cloud provider pricing",
         "cloud_model_fallback": "Fallback model provider pricing",
+        "cloud_official": "Official cloud pricing",
         "priority_fallback": "Priority provider fallback pricing",
         "single_provider_top_level": "Top-level single-provider pricing",
         "official_fallback": "Official pricing"
@@ -523,19 +714,21 @@
       "cost": "Cost",
       "cacheHitRequests": "Cache-eligible Requests",
       "cacheHitRate": "Cache Hit Rate",
+      "cacheCoefficient": "Cache Coefficient",
+      "cacheCoefficientTooltip": "A higher cache coefficient means fewer provider account switches and less noticeable cache degradation. 0.9+ is excellent, 0.8+ is good.",
       "cacheReadTokens": "Cache Read Tokens",
       "totalTokens": "Total Tokens",
       "cacheCreationConsumedAmount": "Cache Creation Spend",
       "totalConsumedAmount": "Total Spend",
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time",
-      "avgTtfbMs": "Avg TTFB",
+      "avgTtftMs": "Avg TTFT",
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
       "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
       "unknownModel": "Unknown",
       "successRateUnavailable": "N/A",
-      "successRateBasisDisclosure": "Success rate is unavailable here because redirected billing mode can merge multiple original models into one row."
+      "successRateBasisDisclosure": "No countable success/failure outcomes were recorded for this model in the selected period."
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",
@@ -628,6 +821,8 @@
     },
     "details": {
       "title": "Session Messages",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "Client Session ID",
       "messages": "Messages",
       "info": "Session Info",
       "timeline": "Timeline",
@@ -740,11 +935,16 @@
       "loadError": "Load failed",
       "fetchFailed": "Fetch Failed",
       "unknownError": "Unknown Error",
+      "error": "Session details could not be loaded",
       "storageNotEnabled": "Not Stored",
       "storageNotEnabledHint": "Tip: Check REDIS_URL and ENABLE_RATE_LIMIT=true (session details cache). To store unredacted messages, set STORE_SESSION_MESSAGES=true."
     },
     "errors": {
-      "copyFailed": "Copy Failed"
+      "copyFailed": "Copy Failed",
+      "fetchSessionsFailed": "Failed to load sessions",
+      "fetchSessionsTimeout": "The sessions request timed out",
+      "fetchSettingsFailed": "Failed to load system settings",
+      "retry": "Retry"
     },
     "requestList": {
       "title": "Requests",
@@ -755,7 +955,9 @@
       "prev": "Prev",
       "next": "Next",
       "orderAsc": "Switch to ascending order (oldest first)",
-      "orderDesc": "Switch to descending order (newest first)"
+      "orderDesc": "Switch to descending order (newest first)",
+      "itemTitle": "Request #{sequence} - {model}",
+      "unknownModel": "Unknown model"
     },
     "back": "Back",
     "loadingError": "Loading failed"
@@ -1709,6 +1911,12 @@
         "confirmDescription": "This will permanently delete all request logs and usage statistics for this user. This action cannot be undone.",
         "confirm": "Yes, Reset All",
         "loading": "Resetting...",
+        "queued": "Reset queued",
+        "running": "Reset in progress",
+        "completed": "Reset completed",
+        "failed": "Reset failed. You can retry.",
+        "statusUnavailable": "Unable to refresh the reset status",
+        "retryStatus": "Retry status",
         "success": "All statistics have been reset"
       }
     },

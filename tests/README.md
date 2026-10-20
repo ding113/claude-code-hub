@@ -1,4 +1,4 @@
-# 🧪 Claude Code Hub 测试指南
+# 🧪 CC Hub 测试指南
 
 > **统一 Vitest 框架** | 38 个基础测试 + 103 个集成测试 ✅
 
@@ -90,6 +90,22 @@ bash scripts/cleanup-test-users.sh
 
 ---
 
+## Provider 批量写 durable ledger（真实 PostgreSQL）
+
+该并发测试使用专用配置，不读取 `.env`，只接受显式提供的
+`PROVIDER_BATCH_TEST_DSN`。数据库名必须包含 `test`；未提供 DSN 时测试会明确跳过。
+
+先对临时数据库应用迁移，再运行测试：
+
+```bash
+DSN='postgres://.../cch_provider_batch_test' bun run db:migrate
+PROVIDER_BATCH_TEST_DSN='postgres://.../cch_provider_batch_test' \
+  bun run test:integration:provider-batch-ledger
+```
+
+测试会创建带 `it-provider-batch-ledger-` 前缀的数据并在结束时清理，不需要 Redis，
+也不会访问或修改线上环境。
+
 ## 📁 目录结构
 
 ```
@@ -158,7 +174,7 @@ echo 'DSN=postgres://postgres:postgres@localhost:5432/claude_code_hub' > .env.te
 
 3. **启用所有测试**：
 
-编辑 `vitest.config.ts`，注释掉 exclude 中的这几行：
+编辑 `vitest.config.mts`，注释掉 exclude 中的这几行：
 ```typescript
 // "tests/integration/**",
 // "tests/api/users-actions.test.ts",
@@ -256,14 +272,14 @@ bun run test:ui
 # 启动数据库
 docker compose up -d postgres redis
 
-# 启用所有测试（修改 vitest.config.ts）
+# 启用所有测试（修改 vitest.config.mts）
 # 然后运行
 bun run test
 ```
 
 ---
 
-**维护者**: Claude Code Hub Team
+**维护者**: CC Hub Team
 **测试框架**: Vitest 4.0.16
 **基础测试**: 100% (38/38)
 **最后更新**: 2025-12-17

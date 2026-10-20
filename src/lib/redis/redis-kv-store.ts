@@ -46,7 +46,7 @@ export class RedisKVStore<T> {
 
   private getReadyRedis(): RedisKVClient | null {
     const redis = this.resolveRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return null;
     }
     return redis;

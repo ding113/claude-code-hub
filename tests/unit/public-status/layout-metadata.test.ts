@@ -34,7 +34,7 @@ describe("public-status layout metadata", () => {
   it("reads site metadata from the public site meta loader for public status requests", async () => {
     mockLoadPublicSiteMeta.mockResolvedValue({
       available: true,
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Projection-only public status",
       timeZone: "UTC",
       source: "projection",
@@ -45,7 +45,7 @@ describe("public-status layout metadata", () => {
     );
 
     await expect(mod.resolveSiteMetadataSource()).resolves.toEqual({
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Projection-only public status",
     });
 
@@ -73,7 +73,7 @@ describe("public-status layout metadata", () => {
   it("reads timezone from the public site meta loader for public status requests", async () => {
     mockLoadPublicSiteMeta.mockResolvedValue({
       available: true,
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Projection-only public status",
       timeZone: "Asia/Shanghai",
       source: "projection",

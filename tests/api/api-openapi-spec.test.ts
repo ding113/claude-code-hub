@@ -98,7 +98,7 @@ describe("OpenAPI 规范验证", () => {
   test("应该符合 OpenAPI 3.1.0 规范", () => {
     expect(openApiDoc.openapi).toBe("3.1.0");
     expect(openApiDoc.info).toBeDefined();
-    expect(openApiDoc.info.title).toBe("Claude Code Hub API");
+    expect(openApiDoc.info.title).toBe("CC Hub API");
     expect(openApiDoc.info.version).toBeDefined();
   });
 
@@ -232,9 +232,10 @@ describe("OpenAPI 规范验证", () => {
     expect(publicStatusOperation?.responses?.["200"]).toBeDefined();
     expect(publicStatusOperation?.responses?.["400"]).toBeDefined();
     expect(publicStatusOperation?.responses?.["503"]).toBeDefined();
-    expect(publicStatusOperation?.parameters).toBeDefined();
+    const publicStatusParameters = publicStatusOperation?.parameters;
+    expect(publicStatusParameters).toBeDefined();
 
-    const parameterNames = (publicStatusOperation?.parameters as Array<{ name?: string }>).map(
+    const parameterNames = ((publicStatusParameters ?? []) as Array<{ name?: string }>).map(
       (parameter) => parameter.name
     );
     expect(parameterNames).toEqual(

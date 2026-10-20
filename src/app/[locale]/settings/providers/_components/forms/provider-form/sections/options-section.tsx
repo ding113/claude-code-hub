@@ -105,7 +105,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                 />
               </ToggleRow>
 
-              {/* Static Custom Request Headers - persistent provider config (not exposed in batch mode) */}
+              {/* Custom request headers: static values or request-time templates */}
               {!isBatch && (
                 <SmartInputWrapper
                   label={t("sections.routing.customHeaders.label")}
@@ -119,7 +119,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     }
                     placeholder={CUSTOM_HEADERS_PLACEHOLDER}
                     disabled={state.ui.isPending}
-                    rows={3}
+                    rows={6}
                     spellCheck={false}
                   />
                 </SmartInputWrapper>
@@ -192,15 +192,22 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                             />
                           </SelectTrigger>
                           <SelectContent>
-                            {["inherit", "minimal", "low", "medium", "high", "xhigh", "none"].map(
-                              (val) => (
-                                <SelectItem key={val} value={val}>
-                                  {t(
-                                    `sections.routing.codexOverrides.reasoningEffort.options.${val}`
-                                  )}
-                                </SelectItem>
-                              )
-                            )}
+                            {[
+                              "inherit",
+                              "none",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max",
+                            ].map((val) => (
+                              <SelectItem key={val} value={val}>
+                                {t(
+                                  `sections.routing.codexOverrides.reasoningEffort.options.${val}`
+                                )}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <Info

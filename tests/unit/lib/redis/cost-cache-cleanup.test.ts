@@ -18,6 +18,7 @@ const redisPipelineMock = {
 const redisMock = {
   status: "ready" as string,
   pipeline: vi.fn(() => redisPipelineMock),
+  eval: vi.fn(),
 };
 const getRedisClientMock = vi.fn(() => redisMock);
 vi.mock("@/lib/redis", () => ({
@@ -43,6 +44,7 @@ describe("clearUserCostCache", () => {
     getRedisClientMock.mockReturnValue(redisMock);
     redisMock.status = "ready";
     redisMock.pipeline.mockReturnValue(redisPipelineMock);
+    redisMock.eval.mockResolvedValue(1);
     redisPipelineMock.del.mockReturnThis();
     redisPipelineMock.exec.mockResolvedValue([]);
     scanPatternMock.mockResolvedValue([]);
@@ -105,6 +107,68 @@ describe("clearUserCostCache", () => {
     expect(redisPipelineMock.exec).toHaveBeenCalled();
   });
 
+  test("preserves fixed 5h cost windows while invalidating other cost and lease keys", async () => {
+    scanPatternMock.mockImplementation(async (_redis: unknown, pattern: string) => {
+      if (pattern === "key:1:cost_*") {
+        return ["key:1:cost_5h_fixed", "key:1:cost_daily_rolling"];
+      }
+      if (pattern === "user:10:cost_*") return ["user:10:cost_5h_fixed"];
+      if (pattern === "lease:key:1:*") return ["lease:key:1:5h:fixed"];
+      return [];
+    });
+    redisPipelineMock.exec.mockResolvedValue([
+      [null, 1],
+      [null, 1],
+    ]);
+
+    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+    const result = await clearUserCostCache({
+      userId: 10,
+      keyIds: [1],
+      keyHashes: [],
+      preserveFixed5hCostKeys: true,
+    });
+
+    expect(result?.costKeysDeleted).toBe(2);
+    expect(redisPipelineMock.del).not.toHaveBeenCalledWith("key:1:cost_5h_fixed");
+    expect(redisPipelineMock.del).not.toHaveBeenCalledWith("user:10:cost_5h_fixed");
+    expect(redisPipelineMock.del).toHaveBeenCalledWith("key:1:cost_daily_rolling");
+    expect(redisPipelineMock.del).toHaveBeenCalledWith("lease:key:1:5h:fixed");
+  });
+
+  test("prepares fixed 5h reset atomically and idempotently by reset id", async () => {
+    redisMock.eval.mockResolvedValue(1_775_304_000_123);
+    const { prepareUserStatisticsResetFixed5h } = await import("@/lib/redis/cost-cache-cleanup");
+
+    await expect(
+      prepareUserStatisticsResetFixed5h({ resetId: "reset-1", userId: 10, keyIds: [1, 2] })
+    ).resolves.toBe("2026-04-04T12:00:00.123Z");
+
+    expect(redisMock.eval).toHaveBeenCalledWith(
+      expect.stringMatching(/EXISTS[\s\S]*TIME[\s\S]*SETEX/),
+      7,
+      "cch:user-statistics-reset:fixed5h:reset-1",
+      "user:10:cost_5h_fixed",
+      "lease:user:10:5h:fixed",
+      "key:1:cost_5h_fixed",
+      "lease:key:1:5h:fixed",
+      "key:2:cost_5h_fixed",
+      "lease:key:2:5h:fixed",
+      604_800
+    );
+  });
+
+  test("rejects invalid fixed 5h cutoff values returned by Redis", async () => {
+    const { prepareUserStatisticsResetFixed5h } = await import("@/lib/redis/cost-cache-cleanup");
+
+    for (const invalid of [null, undefined, "", 0, "not-a-timestamp", []]) {
+      redisMock.eval.mockResolvedValueOnce(invalid);
+      await expect(
+        prepareUserStatisticsResetFixed5h({ resetId: "reset-1", userId: 10, keyIds: [] })
+      ).resolves.toBeNull();
+    }
+  });
+
   test("returns metrics (costKeysDeleted, activeSessionsDeleted, durationMs)", async () => {
     scanPatternMock.mockImplementation(async (_redis: unknown, pattern: string) => {
       if (pattern === "key:1:cost_*") return ["key:1:cost_daily"];
@@ -157,6 +221,22 @@ describe("clearUserCostCache", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  test("uses maintenance Redis and reports scan failures", async () => {
+    scanPatternMock.mockRejectedValue(new Error("scan failed"));
+
+    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+    const result = await clearUserCostCache({
+      userId: 10,
+      keyIds: [],
+      keyHashes: [],
+      allowWhenRateLimitDisabled: true,
+    });
+
+    expect(getRedisClientMock).toHaveBeenCalledWith({ allowWhenRateLimitDisabled: true });
+    expect(result).toMatchObject({ cleanupFailed: true, errorCount: 4 });
+    expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
 
   test("includeActiveSessions=true adds session key DELs", async () => {
@@ -241,6 +321,29 @@ describe("clearUserCostCache", () => {
       "Some Redis deletes failed during cost cache cleanup",
       expect.objectContaining({ errorCount: 1, userId: 10 })
     );
+  });
+
+  test("pipeline exceptions include scan failures in the returned error count", async () => {
+    let scanCall = 0;
+    scanPatternMock.mockImplementation(async () => {
+      scanCall += 1;
+      if (scanCall === 1) throw new Error("scan failed");
+      if (scanCall === 2) return ["key:1:cost_daily"];
+      return [];
+    });
+    redisPipelineMock.exec.mockRejectedValue(new Error("Connection reset"));
+
+    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+    const result = await clearUserCostCache({
+      userId: 10,
+      keyIds: [1],
+      keyHashes: [],
+    });
+
+    expect(result).toMatchObject({
+      cleanupFailed: true,
+      errorCount: 2,
+    });
   });
 
   test("no keys (empty keyIds/keyHashes) -- only user patterns scanned", async () => {

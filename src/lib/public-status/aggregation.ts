@@ -39,7 +39,8 @@ export interface PublicStatusRequestRow {
   model?: string | null;
   originalModel?: string | null;
   durationMs?: number | null;
-  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  firstByteMs?: number | null;
   outputTokens?: number | null;
   providerChain?: PublicStatusRequestChainItem[] | null;
 }
@@ -176,7 +177,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
   type MutableBucket = {
     successCount: number;
     failureCount: number;
-    ttfbValues: number[];
+    ttftValues: number[];
     tpsValues: number[];
   };
 
@@ -215,7 +216,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
             buckets: Array.from({ length: bucketCount }, () => ({
               successCount: 0,
               failureCount: 0,
-              ttfbValues: [],
+              ttftValues: [],
               tpsValues: [],
             })),
           },
@@ -304,7 +305,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
     const tps = computeTokensPerSecond({
       outputTokens: request.outputTokens,
       durationMs: request.durationMs,
-      ttfbMs: request.ttfbMs,
+      firstByteMs: request.firstByteMs,
     });
 
     for (const [sourceGroupName, outcome] of groupOutcome.entries()) {
@@ -323,8 +324,9 @@ export function buildPublicStatusPayloadFromRequests(input: {
         bucket.failureCount += 1;
       }
 
-      if (outcome === "success" && typeof request.ttfbMs === "number") {
-        bucket.ttfbValues.push(request.ttfbMs);
+      // ttftValues -> bucket.ttftMs 是对外 payload 字段，装的是 TTFT
+      if (outcome === "success" && typeof request.ttftMs === "number") {
+        bucket.ttftValues.push(request.ttftMs);
       }
       if (outcome === "success" && typeof tps === "number") {
         bucket.tpsValues.push(tps);
@@ -349,7 +351,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
         timeline: rawTimeline,
       });
 
-      let latestTtfbMs: number | null = null;
+      let latestTtftMs: number | null = null;
       let latestTps: number | null = null;
 
       const timeline: PublicStatusTimelineBucket[] = (modelState?.buckets ?? []).map(
@@ -365,11 +367,11 @@ export function buildPublicStatusPayloadFromRequests(input: {
                   ? 0
                   : null
               : Number(((bucket.successCount / total) * 100).toFixed(2));
-          const ttfbMs = median(bucket.ttfbValues);
+          const ttftMs = median(bucket.ttftValues);
           const computedTps = median(bucket.tpsValues);
 
-          if (ttfbMs !== null) {
-            latestTtfbMs = ttfbMs;
+          if (ttftMs !== null) {
+            latestTtftMs = ttftMs;
           }
           if (computedTps !== null) {
             latestTps = computedTps;
@@ -385,7 +387,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
                   ? "failed"
                   : "no_data",
             availabilityPct,
-            ttfbMs,
+            ttftMs,
             tps: computedTps,
             sampleCount: total,
           };
@@ -414,7 +416,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
         requestTypeBadge: modelState?.requestTypeBadge ?? model.requestTypeBadge,
         latestState,
         availabilityPct,
-        latestTtfbMs,
+        latestTtftMs,
         latestTps,
         timeline,
       } satisfies PublicStatusPayload["groups"][number]["models"][number];
@@ -455,7 +457,8 @@ export async function queryPublicStatusRequests(input: {
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       durationMs: messageRequest.durationMs,
-      ttfbMs: messageRequest.ttfbMs,
+      ttftMs: messageRequest.ttftMs,
+      firstByteMs: messageRequest.firstByteMs,
       outputTokens: messageRequest.outputTokens,
       statusCode: messageRequest.statusCode,
       errorMessage: messageRequest.errorMessage,
@@ -495,7 +498,8 @@ export async function queryPublicStatusRequests(input: {
         model: row.model,
         originalModel: row.originalModel,
         durationMs: row.durationMs,
-        ttfbMs: row.ttfbMs,
+        ttftMs: row.ttftMs,
+        firstByteMs: row.firstByteMs,
         outputTokens: row.outputTokens,
         providerChain: existingChain,
       },

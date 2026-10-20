@@ -48,8 +48,18 @@ export class ProxyWarmupGuard {
     if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       const seq = session.getRequestSequence();
       await Promise.allSettled([
-        SessionManager.storeSessionResponse(session.sessionId, responseText, seq),
-        SessionManager.storeSessionResponseHeaders(session.sessionId, responseHeaders, seq),
+        SessionManager.storeSessionResponseBodySet(
+          session.sessionId,
+          { legacy: responseText },
+          seq,
+          authState.key.id
+        ),
+        SessionManager.storeSessionResponseHeaders(
+          session.sessionId,
+          responseHeaders,
+          seq,
+          authState.key.id
+        ),
         SessionManager.storeSessionUpstreamRequestMeta(
           session.sessionId,
           { url: WARMUP_UPSTREAM_META_URL, method: session.method },
@@ -58,7 +68,8 @@ export class ProxyWarmupGuard {
         SessionManager.storeSessionUpstreamResponseMeta(
           session.sessionId,
           { url: WARMUP_UPSTREAM_META_URL, statusCode: 200 },
-          seq
+          seq,
+          authState.key.id
         ),
       ]);
     }
@@ -80,7 +91,8 @@ export class ProxyWarmupGuard {
         messagesCount: session.getMessagesLength(),
         statusCode: 200,
         durationMs,
-        ttfbMs: durationMs,
+        ttftMs: durationMs,
+        firstByteMs: durationMs,
         // 不计费：显式写 NULL，避免前端误显示 “$0”
         costUsd: null,
         blockedBy: "warmup",

@@ -29,8 +29,8 @@ describe("layout-site-metadata", () => {
 
     const mod = await import("@/lib/layout-site-metadata");
     await expect(mod.resolveDefaultSiteMetadataSource()).resolves.toEqual({
-      siteTitle: "Claude Code Hub",
-      siteDescription: "Claude Code Hub",
+      siteTitle: "CC Hub",
+      siteDescription: "CC Hub",
     });
     expect(mockLoggerWarn).toHaveBeenCalled();
   });

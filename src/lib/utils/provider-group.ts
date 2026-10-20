@@ -59,3 +59,33 @@ export function resolveProviderGroupsWithDefault(value: unknown): string[] {
 
   return groups;
 }
+
+/**
+ * Resolve the provider groups that should participate in billing.
+ *
+ * Explicit user/key groups are intersected with the selected provider's tags,
+ * preserving the user/key declaration order. A wildcard grants access to all
+ * providers but only falls back to the provider's own tag order when there is
+ * no explicit matching group.
+ */
+export function resolveBillingProviderGroups(
+  providerGroupTag: unknown,
+  userGroupsValue: unknown
+): string[] {
+  const providerGroups = resolveProviderGroupsWithDefault(providerGroupTag);
+  const userGroups = parseProviderGroups(userGroupsValue);
+  const providerGroupSet = new Set(providerGroups);
+
+  const explicitMatches = userGroups.filter(
+    (group) => group !== PROVIDER_GROUP.ALL && providerGroupSet.has(group)
+  );
+  if (explicitMatches.length > 0) {
+    return explicitMatches;
+  }
+
+  if (userGroups.includes(PROVIDER_GROUP.ALL)) {
+    return providerGroups;
+  }
+
+  return [];
+}

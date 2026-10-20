@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  ALWAYS_VISIBLE_COLUMNS,
   DEFAULT_HIDDEN_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   getHiddenColumns,
@@ -49,6 +50,16 @@ describe("column-visibility", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("keeps only structural columns always visible", () => {
+    expect(ALWAYS_VISIBLE_COLUMNS).toEqual(["time", "model", "status"]);
+  });
+
+  test("makes reasoning effort toggleable and visible by default", () => {
+    expect(DEFAULT_VISIBLE_COLUMNS).toContain("reasoningEffort");
+    expect(DEFAULT_HIDDEN_COLUMNS).not.toContain("reasoningEffort");
+    expect(getVisibleColumns(userId, tableId)).toContain("reasoningEffort");
   });
 
   describe("getHiddenColumns", () => {
@@ -194,6 +205,17 @@ describe("column-visibility", () => {
       expect(visibleAfterToggleBack).not.toContain("cost");
       expect(getVisibleColumns(userId, tableId)).toContain("cost");
     });
+
+    test("toggles reasoning effort column visibility and persists it", () => {
+      const hiddenAfterToggle = toggleColumn(userId, tableId, "reasoningEffort");
+      expect(hiddenAfterToggle).toContain("reasoningEffort");
+      expect(getVisibleColumns(userId, tableId)).not.toContain("reasoningEffort");
+      expect(mockStorage[storageKey]).toContain("reasoningEffort");
+
+      const visibleAfterToggleBack = toggleColumn(userId, tableId, "reasoningEffort");
+      expect(visibleAfterToggleBack).not.toContain("reasoningEffort");
+      expect(getVisibleColumns(userId, tableId)).toContain("reasoningEffort");
+    });
   });
 
   describe("resetColumns", () => {
@@ -223,6 +245,7 @@ describe("column-visibility", () => {
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("key");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("sessionId");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("provider");
+      expect(DEFAULT_VISIBLE_COLUMNS).toContain("reasoningEffort");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("tokens");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cost");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cache");
