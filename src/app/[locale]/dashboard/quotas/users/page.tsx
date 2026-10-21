@@ -6,6 +6,7 @@ import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
+import { mapWithConcurrency } from "@/lib/provider-balance/concurrency";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { sumKeyTotalCostBatchByIds, sumUserTotalCostBatch } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
@@ -16,6 +17,11 @@ import { UsersQuotaClient } from "./_components/users-quota-client";
 
 // Force dynamic rendering (this page needs real-time data and auth)
 export const dynamic = "force-dynamic";
+
+// Per-user limit usage still issues a few sequential queries per user, so cap
+// how many users are in flight at once. An unbounded Promise.all over all
+// users can exceed the database pool admission limit (issue #1511).
+const USER_QUOTA_QUERY_CONCURRENCY = 6;
 
 async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const collectedUsers: UserDisplay[] = [];
@@ -66,9 +72,10 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
     }
   }
 
-  // 3 queries total instead of N+M individual SUM queries
+  // Total costs are batched aggregations; per-user limit usage runs with
+  // bounded concurrency instead of an N-way fan-out.
   const [quotaResults, userCostMap, keyCostMap] = await Promise.all([
-    Promise.all(users.map((u) => getUserLimitUsage(u.id))),
+    mapWithConcurrency(users, USER_QUOTA_QUERY_CONCURRENCY, (u) => getUserLimitUsage(u.id)),
     sumUserTotalCostBatch(
       allUserIds,
       Infinity,
