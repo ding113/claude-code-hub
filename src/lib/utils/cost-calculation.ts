@@ -15,6 +15,10 @@ type UsageMetrics = {
   // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
   input_image_tokens?: number;
   output_image_tokens?: number;
+  // hosted-tool / nested-iteration usage (parsed from the response, priced into extra_cost_usd by the billing code)
+  web_search_requests?: number;
+  extra_iterations?: unknown[];
+  extra_cost_usd?: number;
 };
 
 export interface ResolvedLongContextPricing {
@@ -868,6 +872,14 @@ export function calculateRequestCost(
     const imageCostPerToken =
       priceData.input_cost_per_image_token ?? priceData.input_cost_per_token;
     segments.push(multiplyCost(usage.input_image_tokens, imageCostPerToken));
+  }
+
+  // hosted-tool fees and nested-iteration (advisor / compaction) cost, priced by the billing code (response-handler.ts: withHostedCost)
+  if (typeof usage.extra_cost_usd === "number" && Number.isFinite(usage.extra_cost_usd) && usage.extra_cost_usd > 0) {
+    const extra = toDecimal(usage.extra_cost_usd);
+    if (extra) {
+      segments.push(extra);
+    }
   }
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
