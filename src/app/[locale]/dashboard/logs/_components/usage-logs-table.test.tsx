@@ -702,4 +702,39 @@ describe("usage-logs-table pricing resolution", () => {
     expect(html).toContain("openai");
     expect(html).toContain("logs.billingDetails.pricingSource.priority_fallback");
   });
+
+  test("derives cache ratios from the stored cost breakdown instead of fixed values", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            costUsd: "0.045460",
+            inputTokens: 1244,
+            outputTokens: 282,
+            cacheReadInputTokens: 82560,
+            costBreakdown: {
+              input: "0.002488",
+              output: "0.001692",
+              cache_creation: "0",
+              cache_read: "0.04128",
+              base_total: "0.04546",
+              provider_multiplier: 1,
+              group_multiplier: 1,
+              total: "0.04546",
+            },
+          }),
+          makeLog({ id: 2, inputTokens: 100, cacheReadInputTokens: 500 }),
+        ]}
+        total={2}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("(0.25x)");
+    expect(html).not.toContain("(0.1x)");
+  });
 });
