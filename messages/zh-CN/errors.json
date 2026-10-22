@@ -39,6 +39,7 @@
 
   "INTERNAL_ERROR": "系统内部错误，请稍后重试",
   "DATABASE_ERROR": "数据库错误",
+  "RESPONSES_WS_PREVIOUS_RESPONSE_NOT_FOUND": "此连接上的上一条响应已不可用。请携带完整对话上下文重试，不要传入 previous_response_id。",
   "INVALID_NORMALIZED_BODY": "规范化后的请求体无法序列化",
   "NOT_FOUND": "资源不存在",
   "OPERATION_FAILED": "操作失败",

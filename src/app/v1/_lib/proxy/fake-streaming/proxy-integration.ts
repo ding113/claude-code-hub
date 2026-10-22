@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import type { SystemSettings } from "@/types/system-config";
+import { isConnectionLocalResponsesWsRequest } from "../../responses-ws/continuation";
 import type { ClientFormat } from "../format-mapper";
 import { ProxyForwarder } from "../forwarder";
 import type { ProxySession } from "../session";
@@ -46,6 +47,9 @@ export async function tryFakeStreamingPath(
   session: ProxySession,
   systemSettings: SystemSettings
 ): Promise<Response | null> {
+  if (isConnectionLocalResponsesWsRequest(session.headers ?? {}, session.request.message))
+    return null;
+
   const clientModel = (session.request.model ?? "").toString();
   const providerGroup = session.provider?.groupTag ?? null;
   const eligible = isFakeStreamingEligible(

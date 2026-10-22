@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   isHttp2Enabled: vi.fn(async () => false),
@@ -57,6 +57,16 @@ vi.mock("@/lib/request-filter-engine", () => ({
   },
 }));
 
+import {
+  attachResponsesWsOutcome,
+  getResponsesWsOutcome,
+  setResponsesWsContinuationBinding,
+} from "@/app/v1/_lib/responses-ws/continuation";
+import {
+  INTERNAL_SECRET_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+} from "@/app/v1/_lib/responses-ws/internal-secret";
+import { ResponsesWsContinuationError } from "@/app/v1/_lib/proxy/errors";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { rectifyResponseInput } from "@/app/v1/_lib/proxy/response-input-rectifier";
@@ -464,5 +474,171 @@ describe("ProxyForwarder raw passthrough regression", () => {
 
     expect(capturedHeaders?.get("connection")).toBeNull();
     expect(capturedHeaders?.get("transfer-encoding")).toBeNull();
+  });
+});
+
+describe("authoritative local WS transport metadata and fallback fencing", () => {
+  const binding = {
+    sessionId: "physical-ws",
+    generation: "generation-1",
+    providerId: 1,
+    endpointId: null,
+    upstreamUrl: "https://upstream.example.com/v1/responses",
+    fingerprint: "fingerprint",
+    connectionLocal: true,
+    active: false,
+  };
+  function localSession(previous = false) {
+    const session = createRawPassthroughSession(
+      JSON.stringify({
+        model: "gpt-test",
+        stream: true,
+        store: false,
+        ...(previous ? { previous_response_id: "resp-test" } : {}),
+        input: [{ type: "compaction_trigger" }],
+      }),
+      {
+        "x-cch-client-transport": "websocket",
+        [INTERNAL_SECRET_HEADER]: "metadata-ws-test",
+        [WS_FORWARD_FLAG_HEADER]: "1",
+      }
+    );
+    session.requestUrl = new URL("https://proxy.example.com/v1/responses");
+    return session;
+  }
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.stubEnv("CCH_RESPONSES_WS_INTERNAL_SECRET", "metadata-ws-test");
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: true,
+      eligible: true,
+    });
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  const doForward = (session: ProxySession) =>
+    (ProxyForwarder as any).doForward(session, createProvider(), binding.upstreamUrl);
+
+  it("reports final store=false after an allowed complete-request HTTP fallback", async () => {
+    mocks.tryResponsesWebsocketUpstream.mockResolvedValue({
+      failed: true,
+      reason: "ws_upgrade_rejected",
+      cacheableAsUnsupported: false,
+    });
+    vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode").mockResolvedValue(
+      new Response("{}", {
+        headers: {
+          "content-type": "application/json",
+          "x-cch-responses-ws-generation": "spoofed",
+          "x-cch-upstream-transport": "websocket",
+        },
+      })
+    );
+    const response = await doForward(localSession());
+    expect(response.headers.get("x-cch-upstream-connection-local")).toBe("1");
+    expect(response.headers.get("x-cch-upstream-transport")).toBe("http");
+    expect(response.headers.get("x-cch-responses-ws-generation")).toBeNull();
+  });
+
+  it("uses adapter-owned metadata and carries its mutable outcome through the response wrapper", async () => {
+    const state = { generation: binding.generation, connectionLocal: true };
+    mocks.tryResponsesWebsocketUpstream.mockResolvedValue({
+      response: attachResponsesWsOutcome(
+        new Response('data: {"type":"response.completed"}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        }),
+        state
+      ),
+      connected: true,
+      reused: true,
+    });
+    const session = localSession(true);
+    setResponsesWsContinuationBinding(session, binding);
+    const response = await doForward(session);
+    expect(response.headers.get("x-cch-upstream-transport")).toBe("websocket");
+    expect(response.headers.get("x-cch-responses-ws-generation")).toBe(binding.generation);
+    expect(getResponsesWsOutcome(response)).toBe(state);
+    expect(mocks.tryResponsesWebsocketUpstream).toHaveBeenCalledWith(
+      expect.objectContaining({ continuationBinding: binding })
+    );
+  });
+
+  it.each(["disabled", "failure", "throw"])(
+    "cannot use HTTP for a protected continuation when WS is %s",
+    async (kind) => {
+      const session = localSession(true);
+      setResponsesWsContinuationBinding(session, binding);
+      if (kind === "disabled")
+        mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+          isWebsocketClient: true,
+          eligible: false,
+        });
+      if (kind === "failure")
+        mocks.tryResponsesWebsocketUpstream.mockResolvedValue({
+          failed: true,
+          reason: "ws_payload_too_large",
+        });
+      if (kind === "throw")
+        mocks.tryResponsesWebsocketUpstream.mockRejectedValue(
+          new ResponsesWsContinuationError("upstream_session_changed")
+        );
+      const fallback = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+      await expect(doForward(session)).rejects.toBeInstanceOf(ResponsesWsContinuationError);
+      expect(fallback).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects a final local continuation without a selection snapshot before opening transport", async () => {
+    const session = localSession(true);
+    const fallback = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    await expect(doForward(session)).rejects.toBeInstanceOf(ResponsesWsContinuationError);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(mocks.tryResponsesWebsocketUpstream).not.toHaveBeenCalled();
+  });
+
+  it("strips spoofed internal response metadata from external HTTP", async () => {
+    const session = createRawPassthroughSession(
+      JSON.stringify({ model: "gpt-test", store: false, input: [] })
+    );
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: false,
+      eligible: false,
+    });
+    vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode").mockResolvedValue(
+      new Response("{}", {
+        headers: {
+          "content-type": "application/json",
+          "x-cch-upstream-connection-local": "1",
+          "x-cch-responses-ws-generation": "spoofed",
+          "x-cch-upstream-transport": "websocket",
+        },
+      })
+    );
+    const response = await doForward(session);
+    for (const name of [
+      "x-cch-upstream-connection-local",
+      "x-cch-responses-ws-generation",
+      "x-cch-upstream-transport",
+    ])
+      expect(response.headers.has(name)).toBe(false);
+  });
+  it("fences a continuation introduced by a final provider filter before eligibility or HTTP", async () => {
+    const session = localSession();
+    const policy = resolveEndpointPolicy("/v1/responses");
+    session.getEndpointPolicy = () => policy;
+    session.originalFormat = "response";
+    mocks.applyFinalRequestFilters.mockImplementationOnce(async (_session, message) => {
+      message.previous_response_id = "resp-added-by-filter";
+      message.store = false;
+    });
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: true,
+      eligible: false,
+    });
+    const fallback = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    await expect(doForward(session)).rejects.toBeInstanceOf(ResponsesWsContinuationError);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(mocks.evaluateResponsesWsEligibility).not.toHaveBeenCalled();
+    expect(mocks.tryResponsesWebsocketUpstream).not.toHaveBeenCalled();
   });
 });

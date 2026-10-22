@@ -1810,6 +1810,22 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
+  const terminalError = meta?.responsesWsOutcome?.terminalError;
+  const continuationFailure =
+    terminalError?.code === "previous_response_not_found" ? terminalError : undefined;
+  const trustedWsFailure =
+    continuationFailure ??
+    (session.getEndpointPolicy().kind === "raw_passthrough" ? terminalError : undefined);
+  // Serial WS attempts predate explicit deferred ref ownership. Claim only
+  // their already-owned ref; Discovery/Hedge keep their explicit ownership.
+  if (
+    trustedWsFailure &&
+    meta &&
+    meta.providerSessionRefOwned === undefined &&
+    session.hasProviderSessionRef?.(meta.providerId)
+  ) {
+    meta.providerSessionRefOwned = true;
+  }
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   let bindingTraceRecorded = false;
   const recordBindingFinalized = async (options: {
@@ -2043,6 +2059,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     streamEndedNormally &&
     !completionInspection.hasMarker;
   const allowAuxiliarySessionBinding =
+    !trustedWsFailure &&
     isSessionBindingMutationAllowed(session) &&
     !completionInspection.sawIncomplete &&
     !completionMarkerMissingForBinding &&
@@ -2107,9 +2124,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     protocolFailure &&
     (protocolFailure.verdict === "error" ||
       (streamEndedNormally && !successfulPostcommitMalformed));
-  const detected =
-    !bodyDetected.isError &&
-    ((shouldDetectFake200 && completionInspection.hasProtocolError) || fatalHttpProtocolFailure)
+  const detected = trustedWsFailure
+    ? ({ isError: true, code: trustedWsFailure.code, detail: undefined } as const)
+    : !bodyDetected.isError &&
+        ((shouldDetectFake200 && completionInspection.hasProtocolError) || fatalHttpProtocolFailure)
       ? ({
           isError: true,
           code: "UPSTREAM_PROTOCOL_ERROR",
@@ -2125,7 +2143,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
-    if (protocolFailure) return false;
+    if (protocolFailure || trustedWsFailure) return false;
     if (completionInspection.sawIncomplete) return false;
 
     const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
@@ -2162,6 +2180,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
             (meta.healthPausedDurationMs ?? 0)
         );
   const clientAbortNoFirstByte =
+    !trustedWsFailure &&
     !clientAbortCompleteSuccess &&
     clientAborted &&
     meta?.healthAttemptId != null &&
@@ -2206,7 +2225,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     !detected.isError &&
     upstreamStatusCode >= 200 &&
     upstreamStatusCode < 300;
-  if (detected.isError) {
+  if (trustedWsFailure) {
+    effectiveStatusCode = trustedWsFailure.status;
+    errorMessage = trustedWsFailure.code;
+  } else if (detected.isError) {
     const inferred = parseResponseDiagnostics
       ? inferUpstreamErrorStatusCodeFromText(allContent)
       : null;
@@ -2371,7 +2393,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // 同时，为了让故障转移/熔断能正确工作：
   // - 客户端主动中断：默认不计入熔断器；仅 legacy serial 的静默首字节阈值命中会归因供应商
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
-  if ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) {
+  if (!trustedWsFailure && (clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) {
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
@@ -2426,18 +2448,27 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   if (detected.isError) {
-    logger.warn("[ResponseHandler] SSE completed but body indicates error (fake 200)", {
-      providerId: meta.providerId,
-      providerName: meta.providerName,
-      upstreamStatusCode: meta.upstreamStatusCode,
-      effectiveStatusCode,
-      statusCodeInferred,
-      statusCodeInferenceMatcherId: statusCodeInferenceMatcherId ?? null,
-      code: detected.code,
-      detail: detected.detail ?? null,
-    });
+    logger.warn(
+      continuationFailure
+        ? "[ResponseHandler] WS continuation context unavailable"
+        : "[ResponseHandler] SSE completed but body indicates error (fake 200)",
+      {
+        providerId: meta.providerId,
+        providerName: meta.providerName,
+        upstreamStatusCode: meta.upstreamStatusCode,
+        effectiveStatusCode,
+        statusCodeInferred,
+        statusCodeInferenceMatcherId: statusCodeInferenceMatcherId ?? null,
+        code: detected.code,
+        detail: detected.detail ?? null,
+      }
+    );
 
-    const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
+    const chainReason = continuationFailure
+      ? "client_error_non_retryable"
+      : effectiveStatusCode === 404
+        ? "resource_not_found"
+        : "retry_failed";
 
     // NOTE: Do NOT call recordEndpointFailure here. Fake-200 errors are key-level
     // issues (invalid key, auth failure). The endpoint returned HTTP 200 successfully;
@@ -2463,6 +2494,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
         // 404 is RESOURCE_NOT_FOUND and must not penalize the Provider circuit.
         if (
+          !continuationFailure &&
           effectiveStatusCode !== 404 &&
           session.getEndpointPolicy().allowCircuitBreakerAccounting
         ) {
