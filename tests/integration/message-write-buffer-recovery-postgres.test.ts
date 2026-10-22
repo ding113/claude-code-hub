@@ -33,7 +33,7 @@ vi.resetModules();
 const run = describe.skipIf(!dsn);
 const KEY_PREFIX = `it-message-buffer-recovery-${randomUUID()}`;
 
-run.sequential("message write buffer PostgreSQL recovery", () => {
+run("message write buffer PostgreSQL recovery", { concurrent: false }, () => {
   let dbModule: typeof import("@/drizzle/db");
   let messageRepository: typeof import("@/repository/message");
   let writeBuffer: typeof import("@/repository/message-write-buffer");

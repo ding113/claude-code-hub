@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
     process: vi.fn(),
     removeRepeatableByKey: vi.fn(async () => undefined),
   };
-  const Queue = vi.fn(function MockQueue() {
+  const Queue = vi.fn(function mockQueue() {
     return queue;
   });
 

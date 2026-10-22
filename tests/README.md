@@ -67,24 +67,24 @@ bash scripts/cleanup-test-users.sh
 
 **前提**：需要开发服务器运行（`bun run dev`）
 
-| 测试文件 | 测试数 | 说明 | 依赖 |
-|---------|--------|------|------|
-| api-openapi-spec.test.ts | 13 | OpenAPI 规范验证 | 无 |
-| api-endpoints.test.ts | 10 | API 端点测试 | 无 |
-| api-actions-integrity.test.ts | 12 | 端点完整性检查 | 无 |
-| request-filter-engine.test.ts | 2 | 请求过滤引擎 | 无 |
-| terminate-active-sessions-batch.test.ts | 2 | Session 批量操作 | 无 |
+| 测试文件                                | 测试数 | 说明             | 依赖 |
+| --------------------------------------- | ------ | ---------------- | ---- |
+| api-openapi-spec.test.ts                | 13     | OpenAPI 规范验证 | 无   |
+| api-endpoints.test.ts                   | 10     | API 端点测试     | 无   |
+| api-actions-integrity.test.ts           | 12     | 端点完整性检查   | 无   |
+| request-filter-engine.test.ts           | 2      | 请求过滤引擎     | 无   |
+| terminate-active-sessions-batch.test.ts | 2      | Session 批量操作 | 无   |
 
 ### ⚠️ 集成测试（需要数据库）
 
-| 测试文件 | 测试数 | 说明 | 依赖 |
-|---------|--------|------|------|
-| users-actions.test.ts | 35 | 用户管理 CRUD | 数据库 + Token |
-| providers-actions.test.ts | 35 | 供应商管理 CRUD | 数据库 + Token |
-| keys-actions.test.ts | 28 | API Key 管理 | 数据库 + Token |
-| proxy-errors.test.ts | 24 | 代理错误检测 | 数据库 |
-| error-rule-detector.test.ts | 16 | 错误规则检测器 | 数据库 |
-| e2e-error-rules.test.ts | 20 | E2E 完整流程 | 数据库 + 认证 |
+| 测试文件                    | 测试数 | 说明            | 依赖           |
+| --------------------------- | ------ | --------------- | -------------- |
+| users-actions.test.ts       | 35     | 用户管理 CRUD   | 数据库 + Token |
+| providers-actions.test.ts   | 35     | 供应商管理 CRUD | 数据库 + Token |
+| keys-actions.test.ts        | 28     | API Key 管理    | 数据库 + Token |
+| proxy-errors.test.ts        | 24     | 代理错误检测    | 数据库         |
+| error-rule-detector.test.ts | 16     | 错误规则检测器  | 数据库         |
+| e2e-error-rules.test.ts     | 20     | E2E 完整流程    | 数据库 + 认证  |
 
 **总计**：38 + 103 = **141 个测试**
 
@@ -218,6 +218,7 @@ bun run typecheck         # 类型检查（✅ 已通过）
 ## 📚 测试覆盖范围
 
 ### ✅ 基础测试（38 个）
+
 - OpenAPI 规范完整性
 - API 端点注册和文档
 - HTTP 认证机制
@@ -228,6 +229,7 @@ bun run typecheck         # 类型检查（✅ 已通过）
 - Session 批量操作
 
 ### ⚠️ 集成测试（103 个 - 需要数据库）
+
 - **用户管理**：创建、编辑、删除、启用/禁用、续期（35 个）
 - **供应商管理**：CRUD、权重配置、代理设置（35 个）
 - **Key 管理**：创建、删除、查询（28 个）
@@ -238,18 +240,21 @@ bun run typecheck         # 类型检查（✅ 已通过）
 ## 🏆 整理成果
 
 ### 目录优化
+
 - ✅ 删除 4 个多余文档
 - ✅ 删除 4 个无用目录（fixtures, examples, helpers, mocks）
 - ✅ 测试文件分类（api/ unit/ integration/）
 - ✅ 扁平化工具文件
 
 ### 测试框架统一
+
 - ✅ 移除 Bun Test
 - ✅ 统一使用 Vitest
 - ✅ 中文化测试描述
 - ✅ Vitest UI 正常运行
 
 ### 测试覆盖提升
+
 - **之前**：38 个测试
 - **现在**：38 个（基础）+ 103 个（集成）= **141 个测试**
 - **提升**：+270%
@@ -259,6 +264,7 @@ bun run typecheck         # 类型检查（✅ 已通过）
 ## 💡 推荐使用方式
 
 ### 日常开发（推荐）
+
 ```bash
 # 运行基础测试（快速、稳定）
 bun run test
@@ -268,6 +274,7 @@ bun run test:ui
 ```
 
 ### 完整验证（需要时）
+
 ```bash
 # 启动数据库
 docker compose up -d postgres redis

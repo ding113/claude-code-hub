@@ -48,6 +48,23 @@ function renderWithProviders(node: ReactNode) {
   };
 }
 
+function FailingMutationButton({
+  error,
+  onError,
+}: {
+  error: Error;
+  onError: (...args: unknown[]) => void;
+}) {
+  const mutation = useApiMutation({
+    mutationFn: async () => {
+      throw error;
+    },
+    onError,
+  });
+
+  return <button onClick={() => mutation.mutate({ id: 1 })}>run</button>;
+}
+
 describe("useApiMutation", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -62,18 +79,9 @@ describe("useApiMutation", () => {
       detail: "Admin access is required.",
     });
 
-    function TestComponent() {
-      const mutation = useApiMutation({
-        mutationFn: async () => {
-          throw error;
-        },
-        onError,
-      });
-
-      return <button onClick={() => mutation.mutate({ id: 1 })}>run</button>;
-    }
-
-    const { unmount } = renderWithProviders(<TestComponent />);
+    const { unmount } = renderWithProviders(
+      <FailingMutationButton error={error} onError={onError} />
+    );
 
     await act(async () => {
       document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -91,18 +99,9 @@ describe("useApiMutation", () => {
     const onError = vi.fn();
     const error = new Error("Failed to fetch");
 
-    function TestComponent() {
-      const mutation = useApiMutation({
-        mutationFn: async () => {
-          throw error;
-        },
-        onError,
-      });
-
-      return <button onClick={() => mutation.mutate({ id: 1 })}>run</button>;
-    }
-
-    const { unmount } = renderWithProviders(<TestComponent />);
+    const { unmount } = renderWithProviders(
+      <FailingMutationButton error={error} onError={onError} />
+    );
 
     await act(async () => {
       document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -21,12 +21,27 @@ function clampLangfusePropagatedString(value: string | undefined): string | unde
     : value.slice(0, LANGFUSE_PROPAGATED_STRING_MAX_CHARS);
 }
 
+// Langfuse 先对 metadata 值做 JSON 编码，再按编码后的长度校验，超过上限的值会被整个丢弃
+function clampLangfusePropagatedMetadataValue(value: string): string {
+  if (JSON.stringify(value).length <= LANGFUSE_PROPAGATED_STRING_MAX_CHARS) return value;
+
+  // 两侧引号占 2 个字符，其余预算按每个字符编码后的长度累计，避免截断在转义序列或代理对中间
+  let budget = LANGFUSE_PROPAGATED_STRING_MAX_CHARS - 2;
+  let clamped = "";
+  for (const char of value) {
+    const encodedLength = JSON.stringify(char).length - 2;
+    if (encodedLength > budget) break;
+    budget -= encodedLength;
+    clamped += char;
+  }
+  return clamped;
+}
+
 function clampLangfusePropagatedMetadata(metadata: Record<string, string>): Record<string, string> {
   const clamped: Record<string, string> = {};
   for (const [key, value] of Object.entries(metadata)) {
-    const next = clampLangfusePropagatedString(value);
-    if (next !== undefined) {
-      clamped[key] = next;
+    if (value) {
+      clamped[key] = clampLangfusePropagatedMetadataValue(value);
     }
   }
   return clamped;
@@ -446,7 +461,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       getStatusCategory(statusCode),
     ]);
 
-    // Build trace-level metadata (propagateAttributes requires all values to be strings ≤200)
+    // trace 级 metadata：propagateAttributes 要求每个值 JSON 编码后不超过 200 字符
     const traceMetadata = clampLangfusePropagatedMetadata({
       userName: messageContext?.user?.name ?? session.userName ?? "",
       keyName: messageContext?.key?.name ?? "",
@@ -540,7 +555,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     const displayName =
       buildLangfuseDisplayName(username, session.getCurrentModel() ?? undefined) ?? "unknown";
 
-    // Official v5: wrap ALL observations in propagateAttributes so userId/sessionId/tags
+    // Langfuse SDK: wrap ALL observations in propagateAttributes so userId/sessionId/tags
     // land on the root span too. Child startObservation on the wrapper drops startTime;
     // use the module-level API with parentSpanContext instead.
     await propagateAttributes(

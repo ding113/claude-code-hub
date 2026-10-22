@@ -14,7 +14,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
   isClientAbortError: vi.fn(() => false),
 }));
 
-describe.sequential("AsyncTaskManager edge runtime", () => {
+describe("AsyncTaskManager edge runtime", { concurrent: false }, () => {
   const prevRuntime = process.env.NEXT_RUNTIME;
   const prevCi = process.env.CI;
 

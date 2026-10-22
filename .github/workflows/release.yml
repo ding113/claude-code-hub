@@ -193,7 +193,7 @@ jobs:
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version-file: .node-version
 
       - name: Setup Bun
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'

@@ -27,98 +27,100 @@ interface UseLazyFilterOptionsReturn<T> {
 }
 
 /**
- * 通用惰性加载 Hook 工厂函数
- * 消除重复代码，统一处理竞态条件和错误状态
+ * 通用惰性加载 Hook
+ * 消除重复代码，统一处理竞态条件和错误状态。fetcher 必须是模块级常量，保证引用稳定。
  */
-function createLazyFilterHook<T>(
+function useLazyFilterOptions<T>(
   fetcher: () => Promise<ActionResult<T[]>>
-): () => UseLazyFilterOptionsReturn<T> {
-  return function useLazyFilter(): UseLazyFilterOptionsReturn<T> {
-    const [data, setData] = useState<T[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isLoaded, setIsLoaded] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+): UseLazyFilterOptionsReturn<T> {
+  const [data, setData] = useState<T[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    // 防止组件卸载后状态更新
-    const mountedRef = useRef(true);
-    // 防止竞态条件：追踪进行中的请求
-    const inFlightRef = useRef<Promise<void> | null>(null);
+  // 防止组件卸载后状态更新
+  const mountedRef = useRef(true);
+  // 防止竞态条件：追踪进行中的请求
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
-    useEffect(() => {
-      mountedRef.current = true;
-      return () => {
-        mountedRef.current = false;
-      };
-    }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    const load = useCallback(async () => {
-      // 如果已加载或有进行中的请求，跳过
-      if (isLoaded || inFlightRef.current) return;
+  const load = useCallback(async () => {
+    // 如果已加载或有进行中的请求，跳过
+    if (isLoaded || inFlightRef.current) return;
 
-      const promise = (async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const result = await fetcher();
-          if (!mountedRef.current) return;
+    const promise = (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await fetcher();
+        if (!mountedRef.current) return;
 
-          if (result.ok) {
-            setData(result.data);
-          } else {
-            setError(result.error || "Failed to load data");
-          }
-        } catch (err) {
-          if (!mountedRef.current) return;
-          setError(err instanceof Error ? err.message : "Unknown error");
-        } finally {
-          if (mountedRef.current) {
-            setIsLoaded(true);
-            setIsLoading(false);
-          }
-          inFlightRef.current = null;
+        if (result.ok) {
+          setData(result.data);
+        } else {
+          setError(result.error || "Failed to load data");
         }
-      })();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        if (mountedRef.current) {
+          setIsLoaded(true);
+          setIsLoading(false);
+        }
+        inFlightRef.current = null;
+      }
+    })();
 
-      inFlightRef.current = promise;
-      return promise;
-    }, [isLoaded]);
+    inFlightRef.current = promise;
+    return promise;
+  }, [fetcher, isLoaded]);
 
-    const onOpenChange = useCallback(
-      (open: boolean) => {
-        if (open) load();
-      },
-      [load]
-    );
+  const onOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) load();
+    },
+    [load]
+  );
 
-    return { data, isLoading, isLoaded, error, load, onOpenChange };
-  };
+  return { data, isLoading, isLoaded, error, load, onOpenChange };
+}
+
+async function getNonBlankModelList(): Promise<ActionResult<string[]>> {
+  const result = await getModelList();
+  if (!result.ok) return result;
+  return { ...result, data: result.data.filter(isNonBlankString) };
 }
 
 /**
  * 惰性加载 Models 列表
  * 用于 Model 筛选器下拉，展开时才加载数据
  */
-export const useLazyModels: () => UseLazyFilterOptionsReturn<string> = createLazyFilterHook<string>(
-  async () => {
-    const result = await getModelList();
-    if (!result.ok) return result;
-    return { ...result, data: result.data.filter(isNonBlankString) };
-  }
-);
+export function useLazyModels(): UseLazyFilterOptionsReturn<string> {
+  return useLazyFilterOptions(getNonBlankModelList);
+}
 
 /**
  * 惰性加载 StatusCodes 列表
  * 用于 StatusCode 筛选器下拉，展开时才加载数据
  */
-export const useLazyStatusCodes: () => UseLazyFilterOptionsReturn<number> =
-  createLazyFilterHook<number>(getStatusCodeList);
+export function useLazyStatusCodes(): UseLazyFilterOptionsReturn<number> {
+  return useLazyFilterOptions(getStatusCodeList);
+}
 
 /**
  * 惰性加载 Endpoints 列表
  * 用于 Endpoint 筛选器下拉，展开时才加载数据
  */
-export const useLazyEndpoints: () => UseLazyFilterOptionsReturn<string> =
-  createLazyFilterHook<string>(getEndpointList);
+export function useLazyEndpoints(): UseLazyFilterOptionsReturn<string> {
+  return useLazyFilterOptions(getEndpointList);
+}
 
 function isNonBlankString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;

@@ -135,7 +135,6 @@ own upstream streams active.
 ## Acceptance Signals
 
 For the fixed revision under the default workload:
-
 - Node heap remains bounded while external and ArrayBuffer memory follow active stream count.
 - `write_backlog_too_large` makes an inactive Replay spool fall back to the 60-second drain window.
 - Every disconnected task reaches `Client abort drain window exceeded` and the active task count

@@ -24,7 +24,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe.sequential("request-only multicore instrumentation startup", () => {
+describe("request-only multicore instrumentation startup", { concurrent: false }, () => {
   it("initializes local caches without migrations, schedulers or queue consumers", async () => {
     vi.resetModules();
     process.env.NEXT_RUNTIME = "nodejs";

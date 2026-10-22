@@ -3945,13 +3945,11 @@ export class ProxyForwarder {
 
     if (isStreaming) {
       // 流式请求：使用首字节超时（快速失败）
-      responseTimeoutMs =
-        provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0;
+      responseTimeoutMs = Math.max(provider.firstByteTimeoutStreamingMs, 0);
       responseTimeoutType = "streaming_first_byte";
     } else {
       // 非流式请求：使用总超时（防止无限挂起）
-      responseTimeoutMs =
-        provider.requestTimeoutNonStreamingMs > 0 ? provider.requestTimeoutNonStreamingMs : 0;
+      responseTimeoutMs = Math.max(provider.requestTimeoutNonStreamingMs, 0);
       responseTimeoutType = "non_streaming_total";
     }
 
@@ -6263,8 +6261,7 @@ export class ProxyForwarder {
         },
         responseController: null,
         clearResponseTimeout: null,
-        firstByteTimeoutMs:
-          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        firstByteTimeoutMs: Math.max(provider.firstByteTimeoutStreamingMs, 0),
         attemptId: `legacy-hedge-${launchedProviderCount}-1`,
         startedAtMonotonic: 0,
         thresholdStartedAtMonotonic: 0,
@@ -6290,8 +6287,7 @@ export class ProxyForwarder {
         thresholdTriggered: false,
         thresholdTimer: null,
         thresholdDeadlineAt: null,
-        thresholdRemainingMs:
-          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        thresholdRemainingMs: Math.max(provider.firstByteTimeoutStreamingMs, 0),
         thresholdPaused: false,
         reader: null,
         response: null,

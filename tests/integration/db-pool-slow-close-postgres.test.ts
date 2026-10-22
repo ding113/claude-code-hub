@@ -59,7 +59,7 @@ async function waitFor<T>(
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-run.sequential("PostgreSQL slow pool close integration", () => {
+run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
   test("keeps cleanup attached to an advisory-lock-blocked data query until every pool closes", async () => {
     const originalEnv = {
       DSN: process.env.DSN,
