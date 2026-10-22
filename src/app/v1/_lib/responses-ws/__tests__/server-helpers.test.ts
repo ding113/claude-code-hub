@@ -1,13 +1,15 @@
-// Co-located smoke test for the small helpers exported from `server.js`. We
-// only validate the log-sanitization helper here; the full custom server is
-// integration-tested separately.
+// Co-located smoke tests for the small helpers exported from `server.js`.
+// Upgrade routing has separate socket-level regression coverage.
+import type { IncomingMessage } from "node:http";
 import { describe, expect, it } from "vitest";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { sanitizedRequestPath, isNextDevMode } = require("../../../../../../server.js") as {
-  sanitizedRequestPath: (rawUrl: string) => string;
-  isNextDevMode: (nodeEnv: string | undefined) => boolean;
-};
+const { sanitizedRequestPath, isNextDevMode, isResponsesWsUpgrade } =
+  require("../../../../../../server.js") as {
+    sanitizedRequestPath: (rawUrl: string) => string;
+    isNextDevMode: (nodeEnv: string | undefined) => boolean;
+    isResponsesWsUpgrade: (req: Pick<IncomingMessage, "url">) => boolean;
+  };
 
 describe("server.js sanitizedRequestPath", () => {
   it("returns the path unchanged when there is no query string", () => {
@@ -42,4 +44,20 @@ describe("server.js isNextDevMode", () => {
     expect(isNextDevMode("staging")).toBe(true);
     expect(isNextDevMode("production")).toBe(false);
   });
+});
+
+describe("server.js isResponsesWsUpgrade", () => {
+  it.each(["/v1/responses", "/v1/responses?model=test&probe=1"])(
+    "recognizes the exact Responses pathname in %s",
+    (url) => {
+      expect(isResponsesWsUpgrade({ url })).toBe(true);
+    }
+  );
+
+  it.each([undefined, "", "/v1/responses/", "/v1/responses-extra", "/_next/hmr"])(
+    "does not claim unrelated or absent paths: %s",
+    (url) => {
+      expect(isResponsesWsUpgrade({ url })).toBe(false);
+    }
+  );
 });

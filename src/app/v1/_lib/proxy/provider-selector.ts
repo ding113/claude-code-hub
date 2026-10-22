@@ -22,6 +22,12 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
+import {
+  isConnectionLocalResponsesWsContinuation,
+  setResponsesWsContinuationBinding,
+} from "../responses-ws/continuation";
+import { getResponsesWsSessionId } from "../responses-ws/eligibility";
+import { getResponsesWsSessionBinding } from "../responses-ws/upstream-adapter";
 import { type AffinityLookupResult, getAffinityStore } from "./affinity/affinity-store";
 import { isAffinityRoutingEnabledWith } from "./affinity/config";
 import {
@@ -30,6 +36,7 @@ import {
   fingerprintTip,
 } from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
+import { ResponsesWsContinuationError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
 import { ProxyResponses } from "./responses";
@@ -195,6 +202,34 @@ export class ProxyProviderResolver {
       );
     }
 
+    const protectedContinuation = isConnectionLocalResponsesWsContinuation(
+      session.headers ?? {},
+      session.request.message
+    );
+    if (protectedContinuation) {
+      const wsSessionId = getResponsesWsSessionId(session.headers);
+      const binding = wsSessionId ? getResponsesWsSessionBinding(wsSessionId) : null;
+      if (!binding || binding.active) {
+        throw new ResponsesWsContinuationError("upstream_connection_unavailable");
+      }
+      const provider = await ProxyProviderResolver.validateAffinityCandidate(
+        session,
+        binding.providerId,
+        true
+      );
+      if (!provider) {
+        throw new ResponsesWsContinuationError("bound_provider_unavailable");
+      }
+      setResponsesWsContinuationBinding(session, { ...binding });
+      session.setProvider(provider);
+      session.addProviderToChain(provider, {
+        reason: "session_reuse",
+        selectionMethod: "session_reuse",
+        endpointId: binding.endpointId,
+        circuitState: getCircuitState(provider.id),
+      });
+    }
+
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
@@ -205,13 +240,16 @@ export class ProxyProviderResolver {
     let affinityRoutingEnabled = false;
     let skipSessionBinding = false;
     try {
-      const runtimeSettings = await getProxyRuntimeSettings();
-      affinityRoutingEnabled = isAffinityRoutingEnabledWith(runtimeSettings);
-      const fingerprintable = ProxyProviderResolver.ensureAffinityState(
-        session,
-        affinityRoutingEnabled
-      );
-      skipSessionBinding = runtimeSettings.affinityIgnoreClientSessionId && fingerprintable;
+      const runtimeSettings = protectedContinuation ? null : await getProxyRuntimeSettings();
+      affinityRoutingEnabled = runtimeSettings
+        ? isAffinityRoutingEnabledWith(runtimeSettings)
+        : false;
+      const fingerprintable = protectedContinuation
+        ? false
+        : ProxyProviderResolver.ensureAffinityState(session, affinityRoutingEnabled);
+      skipSessionBinding =
+        protectedContinuation ||
+        Boolean(runtimeSettings?.affinityIgnoreClientSessionId && fingerprintable);
     } catch (error) {
       affinityRoutingEnabled = false;
       skipSessionBinding = false;
@@ -375,6 +413,10 @@ export class ProxyProviderResolver {
                   currentConcurrent: checkResult.count,
                 },
           });
+
+          if (protectedContinuation) {
+            throw new ResponsesWsContinuationError("bound_provider_concurrent_limit");
+          }
 
           // 加入排除列表
           excludedProviders.push(session.provider.id);
@@ -727,12 +769,13 @@ export class ProxyProviderResolver {
    */
   private static async validateAffinityCandidate(
     session: ProxySession,
-    providerId: number
+    providerId: number,
+    connectionLocal = false
   ): Promise<Provider | null> {
     const provider = await findProviderById(providerId);
     if (!provider?.isEnabled) return null;
     // 尊重供应商的会话粘性 opt-out：亲和与会话复用同属粘性机制
-    if (provider.disableSessionReuse) return null;
+    if (provider.disableSessionReuse && !connectionLocal) return null;
 
     const systemTimezone = await resolveSystemTimezone();
     if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {

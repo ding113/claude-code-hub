@@ -571,6 +571,51 @@ describe("Endpoint circuit breaker isolation", () => {
     setupCommonMocks();
   });
 
+  it.each([false, true])(
+    "does not penalize health or bind a WS continuation failure (raw=%s)",
+    async (raw) => {
+      const session = createSession();
+      Object.assign(session, {
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy(raw ? "/v1/responses/compact" : "/v1/responses"),
+        provider: { ...session.provider, providerType: "codex" },
+      });
+      session.recordProviderSessionRef(1);
+      setDeferredMeta(session, 42, {
+        responsesWsOutcome: {
+          generation: "canonical-error-generation",
+          connectionLocal: true,
+          continuationError: { code: "previous_response_not_found", status: 400 },
+        },
+      });
+      const response = new Response(
+        'data: {"type":"error","error":{"code":"previous_response_not_found"}}\n\n',
+        { headers: { "content-type": "text/event-stream" } }
+      );
+      const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(mockRecordFailure).not.toHaveBeenCalled();
+      expect(mockRecordSuccess).not.toHaveBeenCalled();
+      expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+      expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+      expect(RateLimitService.releaseProviderSession).toHaveBeenCalledExactlyOnceWith(
+        1,
+        "fake-session"
+      );
+      expect(session.hasProviderSessionRef(1)).toBe(false);
+      expect(session.getProviderChain()).toContainEqual(
+        expect.objectContaining({
+          reason: "client_error_non_retryable",
+          statusCode: 400,
+          errorMessage: "previous_response_not_found",
+        })
+      );
+    }
+  );
+
   it("fake-200 error should call recordFailure but NOT recordEndpointFailure", async () => {
     const session = createSession();
     setDeferredMeta(session, 42);

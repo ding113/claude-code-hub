@@ -1,6 +1,7 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { buildScopeTag, sha256Hex, stableStringify } from "@/lib/request-identity";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
+import { isConnectionLocalResponsesWsRequest } from "../../responses-ws/continuation";
 import type { ClientFormat } from "../format-mapper";
 import type { ProxySession } from "../session";
 
@@ -47,6 +48,8 @@ export function isReplayEnabled(): boolean {
 
 export function deriveReplayIdentity(session: ProxySession): ReplayIdentity | null {
   try {
+    if (isConnectionLocalResponsesWsRequest(session.headers ?? {}, session.request.message))
+      return null;
     if (!isReplayEnabled()) return null;
     if (session.getEndpointPolicy().kind !== "default") return null;
     if (session.method !== "POST") return null;
