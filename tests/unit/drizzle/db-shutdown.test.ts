@@ -9,7 +9,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-describe.sequential("数据库连接池 shutdown", () => {
+describe("数据库连接池 shutdown", { concurrent: false }, () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useRealTimers();

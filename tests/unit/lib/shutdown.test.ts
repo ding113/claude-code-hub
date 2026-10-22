@@ -9,7 +9,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-describe.sequential("lifecycle/shutdown", () => {
+describe("lifecycle/shutdown", { concurrent: false }, () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useRealTimers();

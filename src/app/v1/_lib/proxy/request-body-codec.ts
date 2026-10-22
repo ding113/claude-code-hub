@@ -7,9 +7,10 @@
  * 出站黑名单重算）。
  *
  * 运行时为 Node.js（route.ts: `runtime = "nodejs"`）。`node:zlib` 自 Node 22.15 起
- * 原生提供 zstd 同步解压（gzip/deflate/br 更早即有），无需第三方依赖。该最低版本要求
- * 由 package.json 的 `engines` 字段声明；生产镜像（deploy/Dockerfile 的 node:trixie-slim）
- * 运行 Node 24+，满足要求。
+ * 原生提供 zstd 同步解压（gzip/deflate/br 更早即有），无需第三方依赖。br 解压在鉴权前执行，
+ * 因此运行时还必须包含 CVE-2026-111497（Brotli 解码越界写入）的修复。两项最低版本要求
+ * 由 package.json 的 `engines` 字段声明；生产镜像（deploy/Dockerfile）固定为
+ * node:26.12.1-trixie-slim，满足要求。
  *
  * 注意：解压在 `ProxySession.fromContext` 内、鉴权 guard 之前同步执行（与既有的请求体
  * `JSON.parse` 一致）。单层编码 + maxOutputBytes 输出上限将其最坏开销限定为单次有界解压。

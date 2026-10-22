@@ -1,7 +1,48 @@
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useCallback, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+type UseInViewOnce = typeof import("@/lib/hooks/use-in-view-once").useInViewOnce;
+
+// 每个用例在 vi.resetModules 之后重新导入 hook，保证共享 observer 的模块状态互不干扰
+let useInViewOnceUnderTest: UseInViewOnce;
+
+async function importFreshHook() {
+  ({ useInViewOnce: useInViewOnceUnderTest } = await import("@/lib/hooks/use-in-view-once"));
+}
+
+function VisibilityProbe({ onView }: { onView: (value: boolean) => void }) {
+  const { ref, isInView } = useInViewOnceUnderTest<HTMLDivElement>();
+  useEffect(() => {
+    onView(isInView);
+  }, [isInView, onView]);
+
+  return <div ref={ref} />;
+}
+
+function TrackedProbe({
+  onNode,
+  onView,
+}: {
+  onNode: (node: Element | null) => void;
+  onView: (value: boolean) => void;
+}) {
+  const { ref, isInView } = useInViewOnceUnderTest<HTMLDivElement>();
+  const mergedRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      ref(node);
+      onNode(node);
+    },
+    [onNode, ref]
+  );
+
+  useEffect(() => {
+    onView(isInView);
+  }, [isInView, onView]);
+
+  return <div ref={mergedRef} />;
+}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");
@@ -41,21 +82,11 @@ describe("useInViewOnce", () => {
     });
     globalThis.IntersectionObserver = ioCtor as any;
 
-    const { useEffect } = await import("react");
-    const { useInViewOnce } = await import("@/lib/hooks/use-in-view-once");
+    await importFreshHook();
 
     let lastValue = false;
 
-    function Probe() {
-      const { ref, isInView } = useInViewOnce<HTMLDivElement>();
-      useEffect(() => {
-        lastValue = isInView;
-      }, [isInView]);
-
-      return <div ref={ref} />;
-    }
-
-    const { unmount } = render(<Probe />);
+    const { unmount } = render(<VisibilityProbe onView={(value) => (lastValue = value)} />);
     await act(async () => {});
 
     expect(lastValue).toBe(true);
@@ -97,39 +128,17 @@ describe("useInViewOnce", () => {
 
     globalThis.IntersectionObserver = MockIntersectionObserver as any;
 
-    const { useCallback, useEffect } = await import("react");
-    const { useInViewOnce } = await import("@/lib/hooks/use-in-view-once");
+    await importFreshHook();
 
     let node1: Element | null = null;
     let node2: Element | null = null;
     let inView1 = false;
     let inView2 = false;
 
-    function Probe(props: {
-      onNode: (node: Element | null) => void;
-      onView: (value: boolean) => void;
-    }) {
-      const { ref, isInView } = useInViewOnce<HTMLDivElement>();
-      const { onNode, onView } = props;
-      const mergedRef = useCallback(
-        (node: HTMLDivElement | null) => {
-          ref(node);
-          onNode(node);
-        },
-        [onNode, ref]
-      );
-
-      useEffect(() => {
-        onView(isInView);
-      }, [isInView, onView]);
-
-      return <div ref={mergedRef} />;
-    }
-
     const { unmount } = render(
       <div>
-        <Probe onNode={(node) => (node1 = node)} onView={(value) => (inView1 = value)} />
-        <Probe onNode={(node) => (node2 = node)} onView={(value) => (inView2 = value)} />
+        <TrackedProbe onNode={(node) => (node1 = node)} onView={(value) => (inView1 = value)} />
+        <TrackedProbe onNode={(node) => (node2 = node)} onView={(value) => (inView2 = value)} />
       </div>
     );
     await act(async () => {});

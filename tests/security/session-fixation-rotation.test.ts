@@ -20,7 +20,7 @@ const {
     mockGetSessionTokenMode: vi.fn(),
     mockRevoke,
     mockRotate,
-    mockRedisSessionStoreCtor: vi.fn().mockImplementation(function RedisSessionStoreMock() {
+    mockRedisSessionStoreCtor: vi.fn().mockImplementation(function redisSessionStoreMock() {
       return {
         revoke: mockRevoke,
         rotate: mockRotate,
@@ -94,7 +94,7 @@ describe("session fixation rotation and logout revocation", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    mockRedisSessionStoreCtor.mockImplementation(function RedisSessionStoreMock() {
+    mockRedisSessionStoreCtor.mockImplementation(function redisSessionStoreMock() {
       return {
         revoke: mockRevoke,
         rotate: mockRotate,
