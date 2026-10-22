@@ -559,6 +559,81 @@ export async function sumUserTotalCost(
   return Number(result[0]?.total || 0);
 }
 
+function isValidResetAt(resetAt: Date | null | undefined): resetAt is Date {
+  return resetAt instanceof Date && !Number.isNaN(resetAt.getTime());
+}
+
+/**
+ * Resolve the effective lower bound for a total-cost query: the later of the
+ * max-age cutoff and a valid reset timestamp. Returns null for all-time.
+ */
+function resolveTotalCostCutoff(maxAgeDays: number, resetAt?: Date | null): Date | null {
+  const maxAgeCutoff =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+  if (isValidResetAt(resetAt)) {
+    return maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
+  return maxAgeCutoff;
+}
+
+// Keep each VALUES-join statement well below the driver parameter limit.
+const TOTAL_COST_CUTOFF_CHUNK_SIZE = 1000;
+
+interface TotalCostCutoffEntry {
+  entityKey: number | string;
+  cutoff: Date;
+}
+
+/**
+ * Total cost for entities that each carry their own cutoff, aggregated in a
+ * single SQL statement (per chunk) instead of one query per entity.
+ *
+ * A per-entity Promise.all fan-out here can exceed the database pool
+ * admission limit on fan-out pages such as the user quota list (issue #1511).
+ * Returns Map of String(entityKey) -> totalCost. Duplicate entity keys keep
+ * the last cutoff, matching the previous per-entity overwrite order.
+ */
+async function sumTotalCostWithCutoffs(
+  entityType: "user" | "key",
+  entries: readonly TotalCostCutoffEntry[]
+): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  const entityColumn = entityType === "user" ? usageLedger.userId : usageLedger.key;
+
+  const deduped = new Map<string, TotalCostCutoffEntry>();
+  for (const entry of entries) {
+    deduped.set(String(entry.entityKey), entry);
+  }
+  const uniqueEntries = [...deduped.values()];
+
+  for (let start = 0; start < uniqueEntries.length; start += TOTAL_COST_CUTOFF_CHUNK_SIZE) {
+    const chunk = uniqueEntries.slice(start, start + TOTAL_COST_CUTOFF_CHUNK_SIZE);
+    const valueRows = chunk.map((entry) =>
+      entityType === "user"
+        ? sql`(${entry.entityKey as number}::int, ${entry.cutoff.toISOString()}::timestamptz)`
+        : sql`(${entry.entityKey as string}::text, ${entry.cutoff.toISOString()}::timestamptz)`
+    );
+
+    const rows = await db.execute(sql`
+      SELECT c.entity_id AS entity_id, COALESCE(SUM(${usageLedger.costUsd}), 0) AS total
+      FROM (VALUES ${sql.join(valueRows, sql`, `)}) AS c(entity_id, cutoff)
+      LEFT JOIN ${usageLedger}
+        ON ${entityColumn} = c.entity_id
+       AND ${usageLedger.createdAt} >= c.cutoff
+       AND ${LEDGER_BILLING_CONDITION}
+      GROUP BY c.entity_id
+    `);
+
+    for (const row of Array.from(rows) as Array<{ entity_id: unknown; total: unknown }>) {
+      totals.set(String(row.entity_id), Number(row.total || 0));
+    }
+  }
+
+  return totals;
+}
+
 /**
  * Batch query: total cost grouped by user_id (single SQL query)
  * @param userIds - Array of user IDs
@@ -574,26 +649,29 @@ export async function sumUserTotalCostBatch(
   if (userIds.length === 0) return result;
   for (const id of userIds) result.set(id, 0);
 
-  // Split users: those with costResetAt need individual queries
-  const resetUserIds: number[] = [];
+  // Split users: those with a valid costResetAt carry their own cutoff and
+  // are aggregated in a single statement. An invalid reset date behaves
+  // like no reset, matching sumUserTotalCost.
+  const resetEntries: Array<{ id: number; cutoff: Date }> = [];
   const batchUserIds: number[] = [];
   for (const id of userIds) {
-    if (resetAtMap?.has(id)) {
-      resetUserIds.push(id);
+    const resetAt = resetAtMap?.get(id);
+    if (isValidResetAt(resetAt)) {
+      // A valid reset always yields a cutoff (at least the reset itself).
+      resetEntries.push({ id, cutoff: resolveTotalCostCutoff(maxAgeDays, resetAt) as Date });
     } else {
       batchUserIds.push(id);
     }
   }
 
-  // Individual queries for users with costResetAt
-  if (resetUserIds.length > 0) {
-    const resetResults = await Promise.all(
-      resetUserIds.map(async (id) => ({
-        id,
-        total: await sumUserTotalCost(id, maxAgeDays, resetAtMap!.get(id)),
-      }))
+  if (resetEntries.length > 0) {
+    const resetTotals = await sumTotalCostWithCutoffs(
+      "user",
+      resetEntries.map(({ id, cutoff }) => ({ entityKey: id, cutoff }))
     );
-    for (const { id, total } of resetResults) result.set(id, total);
+    for (const { id } of resetEntries) {
+      result.set(id, resetTotals.get(String(id)) ?? 0);
+    }
   }
 
   // Batch query for users without costResetAt
@@ -643,34 +721,35 @@ export async function sumKeyTotalCostBatchByIds(
     .where(inArray(keys.id, keyIds));
 
   const keyStringToId = new Map(keyMappings.map((k) => [k.key, k.id]));
-  const idToKeyString = new Map(keyMappings.map((k) => [k.id, k.key]));
   const keyStrings = keyMappings.map((k) => k.key);
   if (keyStrings.length === 0) return result;
 
-  // Split keys: those with costResetAt need individual queries
-  const resetKeyIds: number[] = [];
+  // Split keys: those with a valid costResetAt carry their own cutoff and
+  // are aggregated in a single statement. An invalid reset date behaves
+  // like no reset, matching sumKeyTotalCost.
+  const resetEntries: Array<{ id: number; keyString: string; cutoff: Date }> = [];
   const batchKeyStrings: string[] = [];
   for (const mapping of keyMappings) {
-    if (resetAtMap?.has(mapping.id)) {
-      resetKeyIds.push(mapping.id);
+    const resetAt = resetAtMap?.get(mapping.id);
+    if (isValidResetAt(resetAt)) {
+      resetEntries.push({
+        id: mapping.id,
+        keyString: mapping.key,
+        cutoff: resolveTotalCostCutoff(maxAgeDays, resetAt) as Date,
+      });
     } else {
       batchKeyStrings.push(mapping.key);
     }
   }
 
-  // Individual queries for keys with costResetAt
-  if (resetKeyIds.length > 0) {
-    const resetResults = await Promise.all(
-      resetKeyIds.map(async (id) => {
-        const keyString = idToKeyString.get(id);
-        if (!keyString) return { id, total: 0 };
-        return {
-          id,
-          total: await sumKeyTotalCost(keyString, maxAgeDays, resetAtMap!.get(id)),
-        };
-      })
+  if (resetEntries.length > 0) {
+    const resetTotals = await sumTotalCostWithCutoffs(
+      "key",
+      resetEntries.map(({ keyString, cutoff }) => ({ entityKey: keyString, cutoff }))
     );
-    for (const { id, total } of resetResults) result.set(id, total);
+    for (const { id, keyString } of resetEntries) {
+      result.set(id, resetTotals.get(keyString) ?? 0);
+    }
   }
 
   // Step 2: Batch aggregate for keys without costResetAt
