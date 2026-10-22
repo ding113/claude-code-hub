@@ -14,6 +14,49 @@ import { ActiveSessionsTable } from "./active-sessions-table";
 const REFRESH_INTERVAL = 3000; // 3秒刷新一次
 const PAGE_SIZE = 20;
 
+// 分页控件组件
+function PaginationControls({
+  page,
+  setPage,
+  total,
+  hasMore,
+  label,
+}: {
+  page: number;
+  setPage: (page: number) => void;
+  total: number;
+  hasMore: boolean;
+  label: string;
+}) {
+  const t = useTranslations("dashboard.sessions");
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+      <span>
+        {label}: {total} {t("pagination.total")}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPage(Math.max(1, page - 1))}
+          disabled={page <= 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span>
+          {page} / {totalPages}
+        </span>
+        <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={!hasMore}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * 活跃 Session 实时监控页面
  */
@@ -58,48 +101,6 @@ export function ActiveSessionsClient() {
       return t("errors.fetchSettingsFailed");
     }
     return error.message;
-  };
-
-  // 分页控件组件
-  const PaginationControls = ({
-    page,
-    setPage,
-    total,
-    hasMore,
-    label,
-  }: {
-    page: number;
-    setPage: (page: number) => void;
-    total: number;
-    hasMore: boolean;
-    label: string;
-  }) => {
-    const totalPages = Math.ceil(total / PAGE_SIZE);
-    if (totalPages <= 1) return null;
-
-    return (
-      <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-        <span>
-          {label}: {total} {t("pagination.total")}
-        </span>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span>
-            {page} / {totalPages}
-          </span>
-          <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={!hasMore}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    );
   };
 
   return (

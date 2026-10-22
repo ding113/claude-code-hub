@@ -27,7 +27,7 @@ function loadServerModule(): ServerJsModule {
   return requireFromHere("../../server.js") as ServerJsModule;
 }
 
-describe.sequential("registerOrchestratedShutdown", () => {
+describe("registerOrchestratedShutdown", { concurrent: false }, () => {
   let prevExit: typeof process.exit;
   let originalSigterm: typeof process.on;
   let prevStdoutWrite: typeof process.stdout.write;

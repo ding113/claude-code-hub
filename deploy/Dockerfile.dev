@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM oven/bun:debian AS build-base
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-debian AS build-base
 WORKDIR /app
 
 FROM build-base AS deps
@@ -27,14 +27,14 @@ RUN --mount=type=cache,target=/app/.next/cache \
     bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
-FROM node:trixie-slim AS runner
+FROM node:26.12.1-trixie-slim AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 WORKDIR /app
 
 # 安装 PostgreSQL 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
-# node:trixie-slim 基于 Debian Trixie，需手动安装 postgresql-client
+# node:26.12.1-trixie-slim 基于 Debian Trixie，需手动安装 postgresql-client
 # 使用 BuildKit 缓存挂载加速 APT 安装
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \

@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => {
     disconnect: mockDisconnect,
   };
 
-  function MockRedisConstructor() {
+  function mockRedisConstructor() {
     return mockInstance;
   }
-  MockRedisConstructor.prototype = {};
-  const MockRedis = vi.fn(MockRedisConstructor);
+  mockRedisConstructor.prototype = {};
+  const MockRedis = vi.fn(mockRedisConstructor);
 
   return { MockRedis, mockInstance, mockOn, mockQuit, mockDisconnect, state };
 });

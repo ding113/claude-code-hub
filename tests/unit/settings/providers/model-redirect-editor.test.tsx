@@ -50,6 +50,22 @@ async function flushTicks(times = 3) {
   }
 }
 
+function StatefulHarness({
+  messages,
+  initialRules,
+}: {
+  messages: ReturnType<typeof loadMessages>;
+  initialRules: ProviderModelRedirectRule[];
+}) {
+  const [rules, setRules] = useState(initialRules);
+
+  return (
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <ModelRedirectEditor value={rules} onChange={setRules} />
+    </NextIntlClientProvider>
+  );
+}
+
 describe("ModelRedirectEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,17 +79,7 @@ describe("ModelRedirectEditor", () => {
       { matchType: "prefix", source: "model-b", target: "target-b" },
     ];
 
-    function StatefulHarness() {
-      const [rules, setRules] = useState(initialRules);
-
-      return (
-        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-          <ModelRedirectEditor value={rules} onChange={setRules} />
-        </NextIntlClientProvider>
-      );
-    }
-
-    const { unmount } = render(<StatefulHarness />);
+    const { unmount } = render(<StatefulHarness messages={messages} initialRules={initialRules} />);
 
     await flushTicks(3);
 

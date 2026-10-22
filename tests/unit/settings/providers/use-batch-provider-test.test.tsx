@@ -43,15 +43,16 @@ function redData() {
   };
 }
 
+// 每次渲染都把最新的 hook 结果交给测试，测试读取的始终是最新状态
+function HookProbe({ onRender }: { onRender: (hook: UseBatchProviderTestResult) => void }) {
+  onRender(useBatchProviderTest());
+  return null;
+}
+
 describe("useBatchProviderTest", () => {
   let hook: UseBatchProviderTestResult;
   let root: Root;
   let container: HTMLDivElement;
-
-  function HookProbe() {
-    hook = useBatchProviderTest();
-    return null;
-  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -59,7 +60,13 @@ describe("useBatchProviderTest", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     act(() => {
-      root.render(<HookProbe />);
+      root.render(
+        <HookProbe
+          onRender={(value) => {
+            hook = value;
+          }}
+        />
+      );
     });
 
     return () => {

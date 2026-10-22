@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatCacheCostRatio, resolveCacheCostRatios } from "@/lib/utils/cache-cost-ratio";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import {
@@ -44,12 +45,40 @@ export function MetadataTab({
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
+  costBreakdown,
   context1mApplied,
   providerChain,
   hasMessages,
   checkingMessages,
 }: MetadataTabProps) {
   const t = useTranslations("dashboard.logs.details");
+
+  const showCacheWrite5m =
+    (cacheCreation5mInputTokens ?? 0) > 0 ||
+    ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h");
+  const showCacheWrite1h =
+    (cacheCreation1hInputTokens ?? 0) > 0 ||
+    ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h");
+  const cacheWrite5mTokens = showCacheWrite5m
+    ? (cacheCreation5mInputTokens ?? 0) > 0
+      ? cacheCreation5mInputTokens
+      : cacheCreationInputTokens
+    : 0;
+  const cacheWrite1hTokens = showCacheWrite1h
+    ? (cacheCreation1hInputTokens ?? 0) > 0
+      ? cacheCreation1hInputTokens
+      : cacheCreationInputTokens
+    : 0;
+  const cacheRatios = resolveCacheCostRatios({
+    costBreakdown,
+    inputTokens,
+    cacheWrite5mTokens,
+    cacheWrite1hTokens,
+    cacheReadTokens: cacheReadInputTokens,
+  });
+  const cacheWrite5mRatio = formatCacheCostRatio(cacheRatios.cacheWrite5m);
+  const cacheWrite1hRatio = formatCacheCostRatio(cacheRatios.cacheWrite1h);
+  const cacheReadRatio = formatCacheCostRatio(cacheRatios.cacheRead);
   const sessionRequestParams = new URLSearchParams();
   if (requestSequence != null) {
     sessionRequestParams.set("seq", String(requestSequence));
@@ -178,33 +207,27 @@ export function MetadataTab({
               </div>
 
               {/* Cache Write 5m */}
-              {((cacheCreation5mInputTokens ?? 0) > 0 ||
-                ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h")) && (
+              {showCacheWrite5m && (
                 <div className="flex justify-between col-span-2">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite5m")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(
-                      (cacheCreation5mInputTokens ?? 0) > 0
-                        ? cacheCreation5mInputTokens
-                        : cacheCreationInputTokens
-                    )}{" "}
-                    tokens <span className="text-orange-600">(1.25x)</span>
+                    {formatTokenAmount(cacheWrite5mTokens)} tokens
+                    {cacheWrite5mRatio && (
+                      <span className="ml-1 text-orange-600">({cacheWrite5mRatio})</span>
+                    )}
                   </span>
                 </div>
               )}
 
               {/* Cache Write 1h */}
-              {((cacheCreation1hInputTokens ?? 0) > 0 ||
-                ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h")) && (
+              {showCacheWrite1h && (
                 <div className="flex justify-between col-span-2">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite1h")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(
-                      (cacheCreation1hInputTokens ?? 0) > 0
-                        ? cacheCreation1hInputTokens
-                        : cacheCreationInputTokens
-                    )}{" "}
-                    tokens <span className="text-orange-600">(2x)</span>
+                    {formatTokenAmount(cacheWrite1hTokens)} tokens
+                    {cacheWrite1hRatio && (
+                      <span className="ml-1 text-orange-600">({cacheWrite1hRatio})</span>
+                    )}
                   </span>
                 </div>
               )}
@@ -214,8 +237,10 @@ export function MetadataTab({
                 <div className="flex justify-between col-span-2">
                   <span className="text-muted-foreground">{t("billingDetails.cacheRead")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(cacheReadInputTokens)} tokens{" "}
-                    <span className="text-emerald-600">(0.1x)</span>
+                    {formatTokenAmount(cacheReadInputTokens)} tokens
+                    {cacheReadRatio && (
+                      <span className="ml-1 text-emerald-600">({cacheReadRatio})</span>
+                    )}
                   </span>
                 </div>
               )}

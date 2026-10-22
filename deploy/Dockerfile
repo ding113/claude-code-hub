@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # 构建阶段：使用真实 Node.js 执行 Next.js，Bun 仅负责包管理和 script 调度
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-debian AS bun-runtime
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-debian AS bun-runtime
 
-FROM --platform=$BUILDPLATFORM node:trixie-slim AS build-base
+FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim AS build-base
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 
@@ -31,9 +31,10 @@ ENV CI=true
 RUN bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
-# 要求 Node >= 22.19（undici 8 和入站请求体 zstd 解压依赖，见 package.json engines）。
-# node:trixie-slim 基于 Debian Trixie，提供 Node 24+，满足该要求。
-FROM node:trixie-slim AS runner
+# Node 版本下限见 package.json engines：undici 8 和入站请求体 zstd 解压要求 Node >= 22.19，
+# CVE-2026-111497（Brotli 解码越界写入，入站 br 请求体在鉴权前解压）要求 22.23.4 / 24.22.1 / 26.12.1 及以上。
+# 固定到具体补丁版本，保证每个架构的镜像都包含该修复。
+FROM node:26.12.1-trixie-slim AS runner
 ARG APP_VERSION=dev
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
@@ -43,7 +44,7 @@ ENV HOSTNAME=0.0.0.0
 WORKDIR /app
 
 # 安装 PostgreSQL 18 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
-# node:trixie-slim 基于 Debian Trixie，默认只有 PostgreSQL 17.x
+# node:26.12.1-trixie-slim 基于 Debian Trixie，默认只有 PostgreSQL 17.x
 # 使用 PostgreSQL 官方仓库安装 18.x 以匹配 docker-compose 中的 postgres:18
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates gnupg && \

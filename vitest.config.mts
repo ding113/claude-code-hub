@@ -146,7 +146,9 @@ export default defineConfig({
     },
     server: {
       deps: {
-        inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+        // next-intl 的 navigation 入口以无扩展名的 "next/navigation" 引用 next，而 next 没有 exports map，
+        // 外置给 Node 原生 ESM 加载时无法解析，因此交给 Vite 解析
+        inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji", "next-intl"],
       },
     },
   },

@@ -9,7 +9,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-describe.sequential("shutdownLangfuse", () => {
+describe("shutdownLangfuse", { concurrent: false }, () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useRealTimers();

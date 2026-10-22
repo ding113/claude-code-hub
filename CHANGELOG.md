@@ -35,6 +35,14 @@
   重试切商并计入供应商熔断的问题：门控、Discovery 竞速、非流式空响应检测与 fake-streaming 校验统一把 refusal
   视为可交付结果原样透传；门控本地错误体与日志新增上游真实状态 `upstream_status_code` 与熔断计入标记 (#1491)
 
+### 安全
+
+- 修复 Node.js Brotli 解码越界写入漏洞 CVE-2026-111497（高危，可远程执行代码）：入站 `content-encoding: br`
+  请求体在鉴权前解压，生产镜像运行时固定为包含修复的 `node:26.12.1-trixie-slim`，`package.json` engines 收紧为
+  `^22.23.4 || ^24.22.1 || >=26.12.1`，CI 统一从 `.node-version` 读取 Node 版本；Bun 升级到 1.4.3
+- 前后端依赖全部升级到最新版本，包括 Next.js 16.4.2、React 19.3.1、undici 8.12.3、Hono 4.13.13、
+  Langfuse SDK 6、OpenTelemetry SDK 0.223、Vitest 5、Biome 2.6、happy-dom 21、@lobehub/ui 6 与 @lobehub/icons 6
+
 ---
 
 ## v0.8.7 (2026-06-14)

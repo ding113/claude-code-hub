@@ -24,7 +24,7 @@ vi.mock("@/lib/redis/pubsub", () => ({
   publishCacheInvalidation: mocks.publishCacheInvalidation,
 }));
 
-describe.sequential("emit-event", () => {
+describe("emit-event", { concurrent: false }, () => {
   const prevRuntime = process.env.NEXT_RUNTIME;
 
   beforeEach(() => {

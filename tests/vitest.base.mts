@@ -13,10 +13,6 @@ export function sharedResolve(opts?: { includeMessages?: boolean }) {
   const alias: Record<string, string> = {
     "@": path.resolve(root, "src"),
     "server-only": path.resolve(root, "tests/server-only.mock.ts"),
-    "@lobehub/fluent-emoji/es/FluentEmoji": path.resolve(
-      root,
-      "node_modules/@lobehub/fluent-emoji/es/FluentEmoji/index.js"
-    ),
     "@lobehub/fluent-emoji": path.resolve(root, "tests/fluent-emoji.mock.tsx"),
   };
   if (opts?.includeMessages) {
@@ -122,7 +118,8 @@ export function createCoverageConfig(opts: CoverageConfigOptions) {
       resolveSnapshotPath,
       server: {
         deps: {
-          inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+          // 与根 vitest.config.mts 保持一致：next-intl 的 navigation 入口需要由 Vite 解析 "next/navigation"
+          inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji", "next-intl"],
         },
       },
     },

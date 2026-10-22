@@ -4,7 +4,7 @@ vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-describe.sequential("readiness probe respects shutdown flag", () => {
+describe("readiness probe respects shutdown flag", { concurrent: false }, () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useRealTimers();

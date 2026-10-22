@@ -127,6 +127,22 @@ async function flushTicks(times = 3) {
   }
 }
 
+function StatefulHarness({
+  messages,
+  initialRules,
+}: {
+  messages: ReturnType<typeof loadMessages>;
+  initialRules: AllowedModelRule[];
+}) {
+  const [rules, setRules] = useState(initialRules);
+
+  return (
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <AllowedModelRuleEditor value={rules} onChange={setRules} providerType="claude" />
+    </NextIntlClientProvider>
+  );
+}
+
 describe("AllowedModelRuleEditor", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -176,17 +192,7 @@ describe("AllowedModelRuleEditor", () => {
     const messages = loadMessages();
     const initialRules: AllowedModelRule[] = [{ matchType: "exact", pattern: "claude-opus-4-1" }];
 
-    function StatefulHarness() {
-      const [rules, setRules] = useState(initialRules);
-
-      return (
-        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-          <AllowedModelRuleEditor value={rules} onChange={setRules} providerType="claude" />
-        </NextIntlClientProvider>
-      );
-    }
-
-    const { unmount } = render(<StatefulHarness />);
+    const { unmount } = render(<StatefulHarness messages={messages} initialRules={initialRules} />);
     await flushTicks(2);
 
     const editButton = document.querySelector(
