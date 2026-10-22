@@ -33,6 +33,8 @@ import { randomUUID } from "node:crypto";
 export const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
 export const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
 export const RESPONSES_WS_SESSION_HEADER = "x-cch-responses-ws-session";
+export const WS_FORCE_HTTP_HEADER = "x-cch-responses-ws-force-http";
+export const WS_FORCE_HTTP_PAYLOAD_TOO_LARGE = "payload_too_large_for_upstream_ws";
 const ENV_VAR = "CCH_RESPONSES_WS_INTERNAL_SECRET";
 
 /**
@@ -44,6 +46,7 @@ export const RESERVED_INTERNAL_HEADERS = [
   "x-cch-client-transport",
   WS_FORWARD_FLAG_HEADER,
   RESPONSES_WS_SESSION_HEADER,
+  WS_FORCE_HTTP_HEADER,
   INTERNAL_SECRET_HEADER,
 ];
 
