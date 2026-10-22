@@ -38,6 +38,7 @@ import {
   detectUpstreamErrorFromSseOrJsonText,
   inferUpstreamErrorStatusCodeFromText,
 } from "@/lib/utils/upstream-error-detection";
+import { findLatestPriceByModel } from "@/repository/model-price";
 import {
   addMessageRequestHedgeLoserCost,
   updateMessageRequestCostWithBreakdown,
@@ -1157,6 +1158,10 @@ export type UsageMetrics = {
   // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
   input_image_tokens?: number;
   output_image_tokens?: number;
+  // hosted-tool / nested-iteration usage (parsed by countHostedUsage, priced into extra_cost_usd by withHostedCost)
+  web_search_requests?: number;
+  extra_iterations?: unknown[];
+  extra_cost_usd?: number;
 };
 
 function maybeSetCodexContext1m(
@@ -6124,7 +6129,184 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   return hasAny ? result : null;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------
+// Hosted-tool and nested-iteration usage. The providers bill these outside the top-level token counters:
+//  * Anthropic usage.server_tool_use.web_search_requests (web search, per search) and usage.iterations[] (advisor_message at the advisor
+//    model's price, compaction at the executor's price; top-level counters exclude them);
+//  * OpenAI Responses web_search_call output items (per call);
+//  * Gemini candidates[].groundingMetadata.webSearchQueries (Gemini 3: per query) and usageMetadata.toolUsePromptTokenCount (URL context
+//    etc., billed as input, reported outside promptTokenCount).
+// ---------------------------------------------------------------------------------------------------------------------------
+type HostedIteration = {
+  type: string;
+  model?: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+};
+
+function countHostedUsage(
+  responseText: string,
+  providerType: string | null | undefined
+): { webSearch: number; iterations: HostedIteration[]; toolUsePromptTokens: number } {
+  const records: Record<string, unknown>[] = [];
+  try {
+    const parsed = JSON.parse(responseText);
+    if (isRecord(parsed)) records.push(parsed);
+  } catch {
+    if (isSSEText(responseText)) {
+      for (const event of parseSSEData(responseText)) {
+        if (isRecord(event.data)) records.push(event.data);
+      }
+    } else {
+      for (const candidate of extractJsonChunks(responseText)) {
+        try {
+          const parsed = JSON.parse(candidate) as unknown;
+          if (isRecord(parsed)) records.push(parsed);
+        } catch {
+          // malformed chunk
+        }
+      }
+    }
+  }
+
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+  let claudeSearches = 0;
+  let claudeIterations: unknown[] | null = null;
+  const responsesCalls = new Set<string>();
+  const geminiQueries = new Set<string>();
+  let toolUse = 0;
+
+  const scanResponsesItem = (item: unknown) => {
+    if (isRecord(item) && typeof item.type === "string" && item.type.startsWith("web_search") && item.type.endsWith("_call")) {
+      responsesCalls.add(typeof item.id === "string" ? item.id : `idx${responsesCalls.size}`);
+    }
+  };
+
+  for (const rec of records) {
+    // Anthropic: the cumulative usage of the last message_delta / the JSON body
+    const message = isRecord(rec.message) ? rec.message : null;
+    const usage = isRecord(rec.usage) ? rec.usage : message && isRecord(message.usage) ? message.usage : null;
+    if (usage) {
+      const stu = isRecord(usage.server_tool_use) ? num(usage.server_tool_use.web_search_requests) : 0;
+      if (stu > 0 || isRecord(usage.server_tool_use)) claudeSearches = stu;
+      if (Array.isArray(usage.iterations)) claudeIterations = usage.iterations;
+    }
+    // OpenAI Responses: complete response body / response.completed / output_item.done
+    const resp = isRecord(rec.response) ? rec.response : null;
+    if (Array.isArray(rec.output)) rec.output.forEach(scanResponsesItem);
+    if (resp && Array.isArray(resp.output)) resp.output.forEach(scanResponsesItem);
+    if (rec.type === "response.output_item.done") scanResponsesItem(rec.item);
+    // Gemini: grounding queries of any candidate / chunk, tool-use prompt tokens of the last usageMetadata
+    const payload = resp && (Array.isArray(resp.candidates) || isRecord(resp.usageMetadata)) ? resp : rec;
+    if (Array.isArray(payload.candidates)) {
+      for (const cand of payload.candidates) {
+        const gm = isRecord(cand) && isRecord(cand.groundingMetadata) ? cand.groundingMetadata : null;
+        if (gm && Array.isArray(gm.webSearchQueries)) {
+          for (const q of gm.webSearchQueries) if (typeof q === "string") geminiQueries.add(q);
+        }
+      }
+    }
+    if (isRecord(payload.usageMetadata)) toolUse = num(payload.usageMetadata.toolUsePromptTokenCount);
+  }
+
+  const iterations: HostedIteration[] = [];
+  for (const it of claudeIterations ?? []) {
+    if (!isRecord(it)) continue;
+    // `message` iterations are the executor passes the top-level counters already hold; fallback_message is not billed here
+    if (it.type !== "advisor_message" && it.type !== "compaction") continue;
+    iterations.push({
+      type: it.type,
+      model: typeof it.model === "string" ? it.model : undefined,
+      input_tokens: num(it.input_tokens),
+      output_tokens: num(it.output_tokens),
+      cache_read_input_tokens: num(it.cache_read_input_tokens),
+      cache_creation_input_tokens: num(it.cache_creation_input_tokens),
+    });
+  }
+  const isGemini = providerType === "gemini" || providerType === "gemini-cli";
+  return {
+    webSearch: claudeSearches + responsesCalls.size + geminiQueries.size,
+    iterations,
+    toolUsePromptTokens: isGemini ? toolUse : 0,
+  };
+}
+
 export function parseUsageFromResponseText(
+  responseText: string,
+  providerType: string | null | undefined
+): {
+  usageRecord: Record<string, unknown> | null;
+  usageMetrics: UsageMetrics | null;
+} {
+  const base = parseUsageFromResponseTextBase(responseText, providerType);
+  if (!base.usageMetrics) return base;
+  try {
+    const hosted = countHostedUsage(responseText, providerType);
+    const metrics: UsageMetrics = { ...base.usageMetrics };
+    if (hosted.webSearch > 0) metrics.web_search_requests = hosted.webSearch;
+    if (hosted.iterations.length > 0) metrics.extra_iterations = hosted.iterations;
+    if (hosted.toolUsePromptTokens > 0) {
+      metrics.input_tokens = (metrics.input_tokens ?? 0) + hosted.toolUsePromptTokens;
+    }
+    return { usageRecord: base.usageRecord, usageMetrics: metrics };
+  } catch (error) {
+    logger.warn("[ResponseHandler] Failed to parse hosted-tool usage", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return base;
+  }
+}
+
+/**
+ * Price the hosted-tool fees (count x search_context_cost_per_query of the request model's price row) and the nested iterations
+ * (advisor_message at the advisor model's own price, compaction at the executor's price) into usage.extra_cost_usd, which
+ * calculateRequestCost adds before the provider / group multipliers. An advisor model without a price row is charged at the
+ * executor's price (never at zero); ProxyModelGuard already refuses requests whose advisor model has no price.
+ */
+async function withHostedCost(
+  usage: UsageMetrics,
+  priceData: Parameters<typeof calculateRequestCost>[1]
+): Promise<UsageMetrics> {
+  if (usage.extra_cost_usd !== undefined) return usage;
+  const searches = usage.web_search_requests ?? 0;
+  const iterations = (usage.extra_iterations ?? []) as HostedIteration[];
+  if (searches <= 0 && iterations.length === 0) return usage;
+  let extra = new Decimal(0);
+  if (searches > 0) {
+    const sc = priceData.search_context_cost_per_query;
+    const perQuery =
+      sc?.search_context_size_medium ?? sc?.search_context_size_low ?? sc?.search_context_size_high ?? 0;
+    extra = extra.plus(new Decimal(perQuery).mul(searches));
+  }
+  for (const it of iterations) {
+    let price = priceData;
+    if (it.type === "advisor_message" && it.model) {
+      const row = await findLatestPriceByModel(it.model);
+      if (row?.priceData && hasValidPriceData(row.priceData)) {
+        price = row.priceData;
+      } else {
+        logger.error("[CostCalculation] No price for advisor model, charging the executor price", { advisorModel: it.model });
+      }
+    }
+    extra = extra.plus(
+      calculateRequestCost(
+        {
+          input_tokens: it.input_tokens,
+          output_tokens: it.output_tokens,
+          cache_read_input_tokens: it.cache_read_input_tokens,
+          cache_creation_input_tokens: it.cache_creation_input_tokens,
+        },
+        price,
+        1
+      )
+    );
+  }
+  return { ...usage, extra_cost_usd: extra.toNumber() };
+}
+
+function parseUsageFromResponseTextBase(
   responseText: string,
   providerType: string | null | undefined
 ): {
@@ -6569,6 +6751,7 @@ async function updateRequestCostFromUsage(
       };
     }
 
+    usage = await withHostedCost(usage, resolvedPricing.priceData);
     const longContextPricing =
       matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null;
     const cost = calculateRequestCost(
@@ -7193,6 +7376,7 @@ async function trackCostToRedis(
     if (!resolvedPricing) return;
 
     ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+    usage = await withHostedCost(usage, resolvedPricing.priceData);
     const longContextPricing =
       pricingOverrides?.longContextPricing === undefined
         ? (matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null)
