@@ -214,6 +214,62 @@ describe("classifyFrame: openai-chat", () => {
     ).toBe("content");
   });
 
+  it("content: OpenRouter 兼容上游的 reasoning / reasoning_details 推理帧", () => {
+    // Cline API 实测帧形态：content 缺省，推理放在 reasoning 与 reasoning_details[]
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"index":0,"delta":{"reasoning":"We","reasoning_details":[{"type":"reasoning.text","text":"We","format":"unknown","index":0}]},"finish_reason":null}]}'
+      )
+    ).toBe("content");
+    // 单字段各自命中，避免任一规则被删时被组合帧掩盖
+    expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"reasoning":"We"}}]}')).toBe(
+      "content"
+    );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"We"}]}}]}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":"plan"}]}}]}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"opaque"}]}}]}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: 空的 reasoning / reasoning_details 不算内容", () => {
+    expect(
+      classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":"","reasoning":""}}]}')
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning":null,"reasoning_details":[]}}]}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":""}]}}]}'
+      )
+    ).toBe("neutral");
+  });
+
   it("neutral: role-only first chunk / finish_reason-only / usage-only", () => {
     expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"role":"assistant"}}]}')).toBe(
       "neutral"
