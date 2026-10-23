@@ -34,6 +34,7 @@ import {
 } from "@lobehub/icons";
 import { Bot } from "lucide-react";
 import type { ComponentType } from "react";
+import { OrcaRouter } from "@/lib/model-vendor/orcarouter-icon";
 import {
   type PublicStatusVendorIconKey,
   resolvePublicStatusVendorIconKey,
@@ -65,6 +66,7 @@ const PUBLIC_STATUS_VENDOR_ICON_REGISTRY: Record<
   ollama: Ollama,
   openai: OpenAI,
   openrouter: OpenRouter,
+  orcarouter: OrcaRouter,
   perplexity: Perplexity.Color,
   qwen: Qwen.Color,
   sensenova: SenseNova.Color,

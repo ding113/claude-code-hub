@@ -26,6 +26,7 @@ const DEFAULT_FORBIDDEN_PROVIDER_LABELS = [
   "claude",
   "codex",
   "openrouter",
+  "orcarouter",
   "siliconflow",
   "dashscope",
   "qwen",
