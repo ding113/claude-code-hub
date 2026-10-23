@@ -338,6 +338,8 @@
         "fastPriority": "优先服务等级（fast 模式）",
         "context1m": "1M 上下文",
         "context1mEnabled": "1M 上下文窗口已启用",
+        "longContextTier": "长上下文 >{threshold}",
+        "longContextTierRule": "输入上下文 {tokens} tokens 超过 {threshold}，整次请求按长上下文价格计费",
         "pricingProvider": "计费价格提供商",
         "pricingSourceLabel": "计费价格来源",
         "pricingSource": {
@@ -630,6 +632,8 @@
       "fastPriority": "优先服务等级（fast 模式）",
       "context1m": "1M 上下文",
       "context1mEnabled": "1M 上下文窗口已启用",
+      "longContextTier": "长上下文 >{threshold}",
+      "longContextTierRule": "输入上下文 {tokens} tokens 超过 {threshold}，整次请求按长上下文价格计费",
       "pricingProvider": "计费价格提供商",
       "pricingSourceLabel": "计费价格来源",
       "pricingSource": {

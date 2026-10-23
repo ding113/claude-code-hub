@@ -338,6 +338,8 @@
         "fastPriority": "Priority service tier (fast モード)",
         "context1m": "1M コンテキスト",
         "context1mEnabled": "1Mコンテキストウィンドウ有効",
+        "longContextTier": "長コンテキスト >{threshold}",
+        "longContextTierRule": "入力コンテキスト {tokens} トークンが {threshold} を超えたため、リクエスト全体に長コンテキスト料金が適用されます",
         "pricingProvider": "課金価格プロバイダー",
         "pricingSourceLabel": "課金価格ソース",
         "pricingSource": {
@@ -630,6 +632,8 @@
       "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
       "context1mEnabled": "1Mコンテキストウィンドウ有効",
+      "longContextTier": "長コンテキスト >{threshold}",
+      "longContextTierRule": "入力コンテキスト {tokens} トークンが {threshold} を超えたため、リクエスト全体に長コンテキスト料金が適用されます",
       "pricingProvider": "課金価格プロバイダー",
       "pricingSourceLabel": "課金価格ソース",
       "pricingSource": {

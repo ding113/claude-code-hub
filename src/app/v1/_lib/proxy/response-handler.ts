@@ -21,12 +21,15 @@ import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
 import { isCacheEffectivenessEnabled } from "@/lib/system-settings/proxy-runtime";
 import type {
   CostBreakdown,
+  LongContextTierApplied,
   RequestCostCalculationOptions,
   ResolvedLongContextPricing,
 } from "@/lib/utils/cost-calculation";
 import {
   calculateRequestCost,
   calculateRequestCostBreakdown,
+  calculateRequestCostBreakdownDetail,
+  getLongContextTriggerInputTokens,
   matchLongContextPricing,
   sanitizeMultiplier,
 } from "@/lib/utils/cost-calculation";
@@ -46,7 +49,11 @@ import {
   updateMessageRequestRoutingTrace,
   updateMessageRequestWinnerCost,
 } from "@/repository/message";
-import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
+import type {
+  HedgeLoserBilling,
+  StoredCostBreakdown,
+  StoredLongContextTier,
+} from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
@@ -1162,12 +1169,13 @@ export type UsageMetrics = {
 function maybeSetCodexContext1m(
   session: ProxySession,
   provider: Provider,
-  inputTokens: number | null | undefined
+  usage: UsageMetrics | null | undefined
 ): void {
+  // 上下文长度包含缓存命中与缓存写入的 token：billable input_tokens 已扣除缓存部分，不能单独判定
   if (
     provider.providerType === "codex" &&
-    inputTokens != null &&
-    inputTokens > CODEX_1M_CONTEXT_TOKEN_THRESHOLD
+    usage != null &&
+    getLongContextTriggerInputTokens(usage) > CODEX_1M_CONTEXT_TOKEN_THRESHOLD
   ) {
     session.setContext1mApplied(true);
   }
@@ -1372,23 +1380,28 @@ function ensureCodexServiceTierResultSpecialSetting(
   });
 }
 
+type LongContextPricingAudit = {
+  scope: "request" | "session";
+  thresholdTokens: number;
+};
+
 function createLongContextPricingAudit(
-  pricing: ResolvedLongContextPricing
+  audit: LongContextPricingAudit
 ): LongContextPricingSpecialSetting {
   return {
     type: "long_context_pricing",
     scope: "billing",
     hit: true,
-    pricingScope: pricing.scope,
-    thresholdTokens: pricing.thresholdTokens,
+    pricingScope: audit.scope,
+    thresholdTokens: audit.thresholdTokens,
   };
 }
 
 function ensureLongContextPricingAudit(
   session: ProxySession,
-  pricing: ResolvedLongContextPricing | null
+  audit: LongContextPricingAudit | null
 ): void {
-  if (!pricing) {
+  if (!audit) {
     return;
   }
 
@@ -1397,13 +1410,25 @@ function ensureLongContextPricingAudit(
     ?.find(
       (setting) =>
         setting.type === "long_context_pricing" &&
-        setting.pricingScope === pricing.scope &&
-        setting.thresholdTokens === pricing.thresholdTokens
+        setting.pricingScope === audit.scope &&
+        setting.thresholdTokens === audit.thresholdTokens
     );
 
   if (!existing) {
-    session.addSpecialSetting(createLongContextPricingAudit(pricing));
+    session.addSpecialSetting(createLongContextPricingAudit(audit));
   }
+}
+
+function toStoredLongContextTier(tier: LongContextTierApplied): StoredLongContextTier {
+  return {
+    threshold_tokens: tier.thresholdTokens,
+    observed_input_tokens: tier.observedInputTokens,
+    input_multiplier: tier.inputMultiplier,
+    output_multiplier: tier.outputMultiplier,
+    cache_creation_5m_multiplier: tier.cacheCreationMultiplier,
+    cache_creation_1h_multiplier: tier.cacheCreation1hMultiplier,
+    cache_read_multiplier: tier.cacheReadMultiplier,
+  };
 }
 
 function buildCostCalculationOptions(
@@ -3418,7 +3443,7 @@ export class ProxyResponseHandler {
         );
 
         if (billableUsageMetrics) {
-          maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
+          maybeSetCodexContext1m(session, provider, billableUsageMetrics);
         }
 
         // Codex: Extract prompt_cache_key and update session binding
@@ -3483,9 +3508,7 @@ export class ProxyResponseHandler {
             billableUsageMetrics,
             billing
           );
-          if (costUpdateResult.longContextPricingApplied) {
-            ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
-          }
+          ensureLongContextPricingAudit(session, costUpdateResult.longContextAudit);
 
           // 追踪消费到 Redis（用于限流）
           await trackCostToRedis(session, billableUsageMetrics, billing, {
@@ -5027,7 +5050,7 @@ export class ProxyResponseHandler {
           );
         }
 
-        maybeSetCodexContext1m(session, provider, usageForCost?.input_tokens);
+        maybeSetCodexContext1m(session, provider, usageForCost);
 
         let codexCacheBinding:
           | {
@@ -5092,9 +5115,7 @@ export class ProxyResponseHandler {
             finalized.billHedgeLosers
           )
         );
-        if (costUpdateResult.longContextPricingApplied) {
-          ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
-        }
+        ensureLongContextPricingAudit(session, costUpdateResult.longContextAudit);
 
         // 追踪消费到 Redis（用于限流）
         await awaitFinalization(
@@ -6507,7 +6528,7 @@ async function updateRequestCostFromUsage(
   costUsd: string | null;
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
   longContextPricing: ResolvedLongContextPricing | null;
-  longContextPricingApplied: boolean;
+  longContextAudit: LongContextPricingAudit | null;
 }> {
   const {
     provider,
@@ -6524,7 +6545,7 @@ async function updateRequestCostFromUsage(
       costUsd: null,
       resolvedPricing: null,
       longContextPricing: null,
-      longContextPricingApplied: false,
+      longContextAudit: null,
     };
   }
 
@@ -6533,7 +6554,7 @@ async function updateRequestCostFromUsage(
       costUsd: null,
       resolvedPricing: null,
       longContextPricing: null,
-      longContextPricingApplied: false,
+      longContextAudit: null,
     };
   }
 
@@ -6546,7 +6567,7 @@ async function updateRequestCostFromUsage(
       costUsd: null,
       resolvedPricing: null,
       longContextPricing: null,
-      longContextPricingApplied: false,
+      longContextAudit: null,
     };
   }
 
@@ -6565,7 +6586,7 @@ async function updateRequestCostFromUsage(
         costUsd: null,
         resolvedPricing: null,
         longContextPricing: null,
-        longContextPricingApplied: false,
+        longContextAudit: null,
       };
     }
 
@@ -6585,12 +6606,25 @@ async function updateRequestCostFromUsage(
 
     // Calculate and store cost breakdown
     let storedBreakdown: StoredCostBreakdown | undefined;
+    let longContextAudit: LongContextPricingAudit | null = longContextPricing
+      ? { scope: longContextPricing.scope, thresholdTokens: longContextPricing.thresholdTokens }
+      : null;
     try {
-      const breakdown = calculateRequestCostBreakdown(usage, resolvedPricing.priceData, {
-        context1mApplied,
-        priorityServiceTierApplied,
-        longContextPricing,
-      });
+      const { breakdown, longContextTier } = calculateRequestCostBreakdownDetail(
+        usage,
+        resolvedPricing.priceData,
+        {
+          context1mApplied,
+          priorityServiceTierApplied,
+          longContextPricing,
+        }
+      );
+      if (longContextTier) {
+        longContextAudit = {
+          scope: longContextPricing?.scope ?? "request",
+          thresholdTokens: longContextTier.thresholdTokens,
+        };
+      }
       const baseTotal = new Decimal(breakdown.input)
         .plus(breakdown.output)
         .plus(breakdown.cache_creation)
@@ -6609,6 +6643,7 @@ async function updateRequestCostFromUsage(
         provider_multiplier: sanitizeMultiplier(costMultiplier),
         group_multiplier: sanitizeMultiplier(groupCostMultiplier),
         total: cost.toString(),
+        ...(longContextTier ? { long_context: toStoredLongContextTier(longContextTier) } : {}),
       };
     } catch {
       /* non-critical */
@@ -6635,7 +6670,7 @@ async function updateRequestCostFromUsage(
         costUsd: cost.toString(),
         resolvedPricing,
         longContextPricing,
-        longContextPricingApplied: longContextPricing != null,
+        longContextAudit,
       };
     } else {
       logger.warn("[CostCalculation] Calculated cost is zero or negative", {
@@ -6653,7 +6688,7 @@ async function updateRequestCostFromUsage(
       costUsd: null,
       resolvedPricing,
       longContextPricing,
-      longContextPricingApplied: longContextPricing != null,
+      longContextAudit,
     };
   } catch (error) {
     logger.error("[CostCalculation] Failed to update request cost, skipping billing", {
@@ -6664,7 +6699,7 @@ async function updateRequestCostFromUsage(
       costUsd: null,
       resolvedPricing: null,
       longContextPricing: null,
-      longContextPricingApplied: false,
+      longContextAudit: null,
     };
   }
 }
@@ -6797,7 +6832,7 @@ export async function finalizeHedgeLoserBilling(params: {
     // else it under-bills. Only mutate for shadow-session losers (no snapshot) — the initial
     // loser uses its pre-pollution snapshot and must not mutate the shared/original session.
     if (!billingContext) {
-      maybeSetCodexContext1m(loserSession, provider, billableUsage.input_tokens);
+      maybeSetCodexContext1m(loserSession, provider, billableUsage);
     }
     const context1mApplied = billingContext?.context1mApplied ?? loserSession.getContext1mApplied();
     const costMultiplier = provider.costMultiplier;
@@ -6943,9 +6978,7 @@ export async function finalizeRequestStats(
       if (costUpdateResult.resolvedPricing) {
         ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
       }
-      if (costUpdateResult.longContextPricingApplied) {
-        ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
-      }
+      ensureLongContextPricingAudit(session, costUpdateResult.longContextAudit);
 
       await trackCostToRedis(session, billablePerRequestUsage, billing, {
         resolvedPricing: costUpdateResult.resolvedPricing,
@@ -7011,7 +7044,7 @@ export async function finalizeRequestStats(
   // 非计费端点（count_tokens / compact）不得触发 Codex 1M 上下文开关，
   // 否则会影响同 session 后续真实请求的账单口径。
   if (billableNormalizedUsage) {
-    maybeSetCodexContext1m(session, provider, billableNormalizedUsage.input_tokens);
+    maybeSetCodexContext1m(session, provider, billableNormalizedUsage);
   }
 
   const billing = sessionBillingInputs(session, provider, priorityServiceTierApplied);
@@ -7022,9 +7055,7 @@ export async function finalizeRequestStats(
     billing,
     winnerLoserAware
   );
-  if (costUpdateResult.longContextPricingApplied) {
-    ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
-  }
+  ensureLongContextPricingAudit(session, costUpdateResult.longContextAudit);
 
   // 5. 追踪消费到 Redis（用于限流）
   await trackCostToRedis(session, normalizedUsage, billing, {

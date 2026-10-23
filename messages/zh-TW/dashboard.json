@@ -338,6 +338,8 @@
         "fastPriority": "優先服務層級（fast 模式）",
         "context1m": "1M 上下文",
         "context1mEnabled": "1M 上下文視窗已啟用",
+        "longContextTier": "長上下文 >{threshold}",
+        "longContextTierRule": "輸入上下文 {tokens} tokens 超過 {threshold}，整次請求按長上下文價格計費",
         "pricingProvider": "計費價格供應商",
         "pricingSourceLabel": "計費價格來源",
         "pricingSource": {
@@ -630,6 +632,8 @@
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
       "context1mEnabled": "1M 上下文視窗已啟用",
+      "longContextTier": "長上下文 >{threshold}",
+      "longContextTierRule": "輸入上下文 {tokens} tokens 超過 {threshold}，整次請求按長上下文價格計費",
       "pricingProvider": "計費價格供應商",
       "pricingSourceLabel": "計費價格來源",
       "pricingSource": {

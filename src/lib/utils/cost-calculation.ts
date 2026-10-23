@@ -366,6 +366,38 @@ export interface CostBreakdown {
 }
 
 /**
+ * 长上下文分段计费的命中结果：输入上下文超过阈值后，整次请求的各计费维度改用分段单价。
+ * 倍率 = 分段单价 / 未命中分段时该维度使用的单价；该维度没有分段单价时缺省。
+ */
+export interface LongContextTierApplied {
+  thresholdTokens: number;
+  observedInputTokens: number;
+  inputMultiplier?: number;
+  outputMultiplier?: number;
+  cacheCreationMultiplier?: number;
+  cacheCreation1hMultiplier?: number;
+  cacheReadMultiplier?: number;
+}
+
+export interface CostBreakdownDetail {
+  breakdown: CostBreakdown;
+  longContextTier: LongContextTierApplied | null;
+}
+
+function tierMultiplier(
+  tierRate: number | undefined,
+  normalRate: number | undefined
+): number | undefined {
+  const tier = toDecimal(tierRate);
+  const normal = toDecimal(normalRate);
+  if (!tier || !normal || normal.lte(0)) {
+    return undefined;
+  }
+
+  return tier.div(normal).toDecimalPlaces(4).toNumber();
+}
+
+/**
  * Calculate cost breakdown by category (always raw cost, multiplier=1.0).
  * Returns per-category costs as plain numbers.
  */
@@ -375,6 +407,24 @@ export function calculateRequestCostBreakdown(
   context1mAppliedOrOptions: boolean | RequestCostBreakdownOptions = false,
   priorityServiceTierApplied: boolean = false
 ): CostBreakdown {
+  return calculateRequestCostBreakdownDetail(
+    usage,
+    priceData,
+    context1mAppliedOrOptions,
+    priorityServiceTierApplied
+  ).breakdown;
+}
+
+/**
+ * 与 calculateRequestCostBreakdown 相同的分项费用，同时返回本次请求命中的长上下文分段计费，
+ * 供计费详情展示阈值与各维度倍率。
+ */
+export function calculateRequestCostBreakdownDetail(
+  usage: UsageMetrics,
+  priceData: ModelPriceData,
+  context1mAppliedOrOptions: boolean | RequestCostBreakdownOptions = false,
+  priorityServiceTierApplied: boolean = false
+): CostBreakdownDetail {
   const options = normalizeRequestCostBreakdownOptions(
     context1mAppliedOrOptions,
     priorityServiceTierApplied
@@ -485,125 +535,68 @@ export function calculateRequestCostBreakdown(
     }
   );
   const longContextThreshold = resolveLongContextThreshold(priceData);
-  const longContextThresholdExceeded =
-    getLongContextTriggerInputTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
+  const observedInputTokens = getLongContextTriggerInputTokens(usage, cache5mTokens, cache1hTokens);
+  const longContextThresholdExceeded = observedInputTokens > longContextThreshold;
   const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
-  // Input tokens -> input bucket
-  // 注意：一旦请求的“输入上下文总量”超过阈值，供应商官方定价按整次请求的全量 token
-  // 应用 long-context 价格，而不是仅对超过阈值的部分加价。
-  if (
-    longContextPricing &&
-    longContextPricing.inputCostPerToken != null &&
-    usage.input_tokens != null
-  ) {
-    inputBucket = inputBucket.add(
-      multiplyCost(usage.input_tokens, longContextPricing.inputCostPerToken)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    inputAboveThreshold != null &&
-    usage.input_tokens != null
-  ) {
-    inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
-  } else {
-    inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputCostPerToken));
-  }
+  // 各维度命中长上下文分段时使用的单价：显式 long_context_pricing 优先，其次是分层价格字段。
+  // 注意：请求的“输入上下文总量”超过阈值后，供应商官方定价对整次请求的全部 token
+  // 应用 long-context 价格；input、output 与缓存都以整次请求的输入上下文判定是否命中。
+  const inputTierRate =
+    longContextPricing?.inputCostPerToken ??
+    (longContextThresholdExceeded ? inputAboveThreshold : undefined);
+  const outputTierRate =
+    longContextPricing?.outputCostPerToken ??
+    (longContextThresholdExceeded ? outputAboveThreshold : undefined);
+  const cacheCreation5mTierRate =
+    longContextPricing?.cacheCreationInputTokenCost ??
+    (longContextThresholdExceeded && hasRealCacheCreationBase
+      ? cacheCreationAboveThreshold
+      : undefined);
+  const cacheCreation1hTierRate =
+    longContextPricing?.cacheCreationInputTokenCostAbove1hr ??
+    (longContextThresholdExceeded && hasRealCacheCreationBase
+      ? cacheCreation1hAboveThreshold
+      : undefined);
+  const cacheReadTierRate =
+    longContextPricing?.cacheReadInputTokenCost ??
+    (longContextThresholdExceeded && hasRealCacheReadBase ? cacheReadAboveThreshold : undefined);
 
-  // Output tokens -> output bucket
-  // 与 input 相同：阈值判断基于整次请求的输入上下文，而不是 output bucket 自己的 token 数。
-  if (
-    longContextPricing &&
-    longContextPricing.outputCostPerToken != null &&
-    usage.output_tokens != null
-  ) {
-    outputBucket = outputBucket.add(
-      multiplyCost(usage.output_tokens, longContextPricing.outputCostPerToken)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    outputAboveThreshold != null &&
-    usage.output_tokens != null
-  ) {
-    outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
-  } else {
-    outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputCostPerToken));
-  }
+  inputBucket = inputBucket.add(
+    multiplyCost(usage.input_tokens, inputTierRate ?? inputCostPerToken)
+  );
+  outputBucket = outputBucket.add(
+    multiplyCost(usage.output_tokens, outputTierRate ?? outputCostPerToken)
+  );
+  cacheCreation5mBucket = cacheCreation5mBucket.add(
+    multiplyCost(cache5mTokens, cacheCreation5mTierRate ?? cacheCreation5mCost)
+  );
+  cacheCreation1hBucket = cacheCreation1hBucket.add(
+    multiplyCost(cache1hTokens, cacheCreation1hTierRate ?? cacheCreation1hCost)
+  );
+  cacheReadBucket = cacheReadBucket.add(
+    multiplyCost(usage.cache_read_input_tokens, cacheReadTierRate ?? cacheReadCost)
+  );
 
-  // Cache costs
-
-  // Cache creation 5m -> cache_creation_5m bucket
-  if (
-    longContextPricing &&
-    longContextPricing.cacheCreationInputTokenCost != null &&
-    cache5mTokens != null
-  ) {
-    cacheCreation5mBucket = cacheCreation5mBucket.add(
-      multiplyCost(cache5mTokens, longContextPricing.cacheCreationInputTokenCost)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    hasRealCacheCreationBase &&
-    cacheCreationAboveThreshold != null &&
-    cache5mTokens != null
-  ) {
-    cacheCreation5mBucket = cacheCreation5mBucket.add(
-      multiplyCost(cache5mTokens, cacheCreationAboveThreshold)
-    );
-  } else {
-    cacheCreation5mBucket = cacheCreation5mBucket.add(
-      multiplyCost(cache5mTokens, cacheCreation5mCost)
-    );
-  }
-
-  // Cache creation 1h -> cache_creation_1h bucket
-  if (
-    longContextPricing &&
-    longContextPricing.cacheCreationInputTokenCostAbove1hr != null &&
-    cache1hTokens != null
-  ) {
-    cacheCreation1hBucket = cacheCreation1hBucket.add(
-      multiplyCost(cache1hTokens, longContextPricing.cacheCreationInputTokenCostAbove1hr)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    hasRealCacheCreationBase &&
-    cacheCreation1hAboveThreshold != null &&
-    cache1hTokens != null
-  ) {
-    cacheCreation1hBucket = cacheCreation1hBucket.add(
-      multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold)
-    );
-  } else {
-    cacheCreation1hBucket = cacheCreation1hBucket.add(
-      multiplyCost(cache1hTokens, cacheCreation1hCost)
-    );
-  }
-
-  // Cache read -> cache_read bucket
-  if (
-    longContextPricing &&
-    longContextPricing.cacheReadInputTokenCost != null &&
-    usage.cache_read_input_tokens != null
-  ) {
-    cacheReadBucket = cacheReadBucket.add(
-      multiplyCost(usage.cache_read_input_tokens, longContextPricing.cacheReadInputTokenCost)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    hasRealCacheReadBase &&
-    cacheReadAboveThreshold != null &&
-    usage.cache_read_input_tokens != null
-  ) {
-    cacheReadBucket = cacheReadBucket.add(
-      multiplyCost(usage.cache_read_input_tokens, cacheReadAboveThreshold)
-    );
-  } else {
-    cacheReadBucket = cacheReadBucket.add(
-      multiplyCost(usage.cache_read_input_tokens, cacheReadCost)
-    );
-  }
+  const hasTierRate = [
+    inputTierRate,
+    outputTierRate,
+    cacheCreation5mTierRate,
+    cacheCreation1hTierRate,
+    cacheReadTierRate,
+  ].some((rate) => rate != null);
+  const longContextTier: LongContextTierApplied | null = hasTierRate
+    ? {
+        thresholdTokens: longContextPricing?.thresholdTokens ?? longContextThreshold,
+        observedInputTokens,
+        inputMultiplier: tierMultiplier(inputTierRate, inputCostPerToken),
+        outputMultiplier: tierMultiplier(outputTierRate, outputCostPerToken),
+        cacheCreationMultiplier: tierMultiplier(cacheCreation5mTierRate, cacheCreation5mCost),
+        cacheCreation1hMultiplier: tierMultiplier(cacheCreation1hTierRate, cacheCreation1hCost),
+        cacheReadMultiplier: tierMultiplier(cacheReadTierRate, cacheReadCost),
+      }
+    : null;
 
   // Image tokens -> respective buckets
   if (usage.output_image_tokens != null && usage.output_image_tokens > 0) {
@@ -622,13 +615,16 @@ export function calculateRequestCostBreakdown(
   const total = inputBucket.add(outputBucket).add(cacheCreationBucket).add(cacheReadBucket);
 
   return {
-    input: inputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    output: outputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    cache_creation: cacheCreationBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    cache_creation_5m: cacheCreation5mBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    cache_creation_1h: cacheCreation1hBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    cache_read: cacheReadBucket.toDecimalPlaces(COST_SCALE).toNumber(),
-    total: total.toDecimalPlaces(COST_SCALE).toNumber(),
+    breakdown: {
+      input: inputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      output: outputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      cache_creation: cacheCreationBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      cache_creation_5m: cacheCreation5mBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      cache_creation_1h: cacheCreation1hBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      cache_read: cacheReadBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+      total: total.toDecimalPlaces(COST_SCALE).toNumber(),
+    },
+    longContextTier,
   };
 }
 

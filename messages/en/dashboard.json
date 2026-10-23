@@ -338,6 +338,8 @@
         "fastPriority": "Priority service tier (fast mode)",
         "context1m": "1M Context",
         "context1mEnabled": "1M context window enabled",
+        "longContextTier": "Long context >{threshold}",
+        "longContextTierRule": "Input context of {tokens} tokens exceeds {threshold}, so the whole request is billed at long-context prices",
         "pricingProvider": "Pricing provider",
         "pricingSourceLabel": "Pricing source",
         "pricingSource": {
@@ -630,6 +632,8 @@
       "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
       "context1mEnabled": "1M context window enabled",
+      "longContextTier": "Long context >{threshold}",
+      "longContextTierRule": "Input context of {tokens} tokens exceeds {threshold}, so the whole request is billed at long-context prices",
       "pricingProvider": "Pricing provider",
       "pricingSourceLabel": "Pricing source",
       "pricingSource": {

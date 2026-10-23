@@ -17,8 +17,15 @@ let mockIsFetchingNextPage = false;
 const useInfiniteQuerySpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string, values?: Record<string, string>) =>
-    key === "logs.billingDetails.unitPricePer1M" && values?.price ? `@ ${values.price} / 1M` : key,
+  useTranslations: () => (key: string, values?: Record<string, string>) => {
+    if (key === "logs.billingDetails.unitPricePer1M" && values?.price) {
+      return `@ ${values.price} / 1M`;
+    }
+    if (key.startsWith("logs.billingDetails.longContextTier") && values) {
+      return `${key}[${Object.values(values).join("|")}]`;
+    }
+    return key;
+  },
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -788,6 +795,82 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(tooltip.innerHTML).toContain("line-through");
     expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingProvider");
     expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingSourceLabel");
+  });
+
+  test("shows the long-context tier threshold, observed context and per-dimension multipliers", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.535000",
+      inputTokens: 100000,
+      outputTokens: 5000,
+      cacheCreationInputTokens: 0,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 300000,
+      costBreakdown: {
+        input: "0.4",
+        output: "0.075",
+        cache_creation: "0",
+        cache_creation_5m: "0",
+        cache_creation_1h: "0",
+        cache_read: "0.06",
+        base_total: "0.535",
+        provider_multiplier: 1,
+        group_multiplier: 1,
+        total: "0.535",
+        long_context: {
+          threshold_tokens: 272000,
+          observed_input_tokens: 400000,
+          input_multiplier: 2,
+          output_multiplier: 1.5,
+          cache_creation_5m_multiplier: 2,
+          cache_creation_1h_multiplier: 1.25,
+          cache_read_multiplier: 2,
+        },
+      },
+    });
+
+    const text = tooltip.textContent ?? "";
+    expect(text).toContain("logs.billingDetails.longContextTier[272K]");
+    expect(text).toContain(
+      `logs.billingDetails.longContextTierRule[${(400000).toLocaleString()}|272K]`
+    );
+    expect(text).toContain("@ $4.00 / 1M");
+    expect(text).toContain("@ $15.00 / 1M");
+    expect(text).toContain("@ $0.20 / 1M");
+    expect(text).toContain("×2");
+    expect(text).toContain("×1.5");
+    // 未产生 1h 缓存时不展示回退推导出的 1h 倍率，缓存写入使用不带 TTL 的标签
+    expect(text).not.toContain("×1.25");
+    expect(text).not.toContain("logs.billingDetails.cacheWrite1h");
+    expect(text).toContain("logs.columns.cacheWrite");
+    expect(text).not.toContain("logs.billingDetails.context1m");
+  });
+
+  test("omits the long-context section when the breakdown has no tier", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.564000",
+      inputTokens: 272000,
+      outputTokens: 2000,
+      cacheCreationInputTokens: 0,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 0,
+      costBreakdown: {
+        input: "0.544",
+        output: "0.02",
+        cache_creation: "0",
+        cache_creation_5m: "0",
+        cache_creation_1h: "0",
+        cache_read: "0",
+        base_total: "0.564",
+        provider_multiplier: 1,
+        group_multiplier: 1,
+        total: "0.564",
+      },
+    });
+
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.longContextTier");
+    expect(tooltip.textContent).not.toContain("×");
   });
 
   test("keeps cost rows but collapses the summary to a single total row when no multiplier is active", () => {
