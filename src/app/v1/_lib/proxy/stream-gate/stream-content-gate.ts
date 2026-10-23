@@ -22,8 +22,12 @@ import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
  *   anthropic 的 message_delta(stop_reason=refusal) 由分类器判为 content，请求级拒绝
  *   在 message_stop 之前即提交透传
  * - 流提前结束（无终止帧的 EOF）-> 空流失败
- * - neutral 帧入缓冲；超过 event/byte 上限 -> prebuffer_overflow 失败
- *   （请求回显帧不计入字节上限，见 isRequestEchoFrame）
+ * - neutral 帧入缓冲（请求回显帧不计入字节上限，见 isRequestEchoFrame）：
+ *   - 超过 byte 上限 -> prebuffer_overflow 失败（内存保护，fail-closed）
+ *   - 超过 event 上限 -> 放行：提交已缓冲前缀并交还 reader，不再等待内容帧
+ *     （releasedBeforeContent=true）。帧数上限只约束「提交前扣住多少帧」，
+ *     不代表供应商异常：长思考 / 工具调用较多的 Anthropic 流会在首个内容帧前
+ *     连续输出大量小中性帧，把它判成失败会杀掉正常响应、计入熔断并切到同一上游。
  * - 读间隔超过 idleTimeoutMs -> idle_timeout 失败（调用方按静默超时归类）
  * - read 拒绝（首字节超时 abort / 客户端断开）-> 原样返回错误，由调用方按来源归类
  *
@@ -114,7 +118,8 @@ export class StreamPrecommitError extends ProxyError {
  * 没有任何内容或明确拒绝就只吐终止帧属于畸形流，是真实的供应商侧异常。
  *
  * 其余 reason 一律计入：`gate_error` / `decode_error` 是真实上游错误帧或损坏载荷，
- * `idle_timeout` 是真实上游静默，`prebuffer_overflow` 是异常中性帧洪泛。
+ * `idle_timeout` 是真实上游静默，`prebuffer_overflow` 是中性帧字节洪泛（超出内存上限）。
+ * 中性帧数量超限不再产生失败（见 runStreamContentGate 的放行语义），因此不会计入熔断。
  */
 export function isRequestScopedGateFailure(error: unknown): boolean {
   return (
@@ -242,6 +247,11 @@ export interface StreamGateCommitMarker {
   bufferedBytes: number;
   /** 被排除出字节计数的请求回显帧字节数 */
   echoExcludedBytes: number;
+  /**
+   * true = 中性帧数量达到 event 上限、尚未见到内容帧即放行；
+   * false = 由内容帧（或 Responses 干净终态）触发的常规提交。
+   */
+  releasedBeforeContent: boolean;
 }
 
 export type StreamGateResult =
@@ -250,6 +260,8 @@ export type StreamGateResult =
       prefixChunks: Uint8Array[];
       framesSeen: number;
       readerDone: boolean;
+      /** 与 commitMarker.releasedBeforeContent 同义；高并发模式不采集 marker 时仍可读取 */
+      releasedBeforeContent: boolean;
       commitMarker: StreamGateCommitMarker | null;
       /** 前缀被下游消费或放弃后释放；所有权随 committed 结果转移。 */
       prebufferLease: StreamGatePrebufferLease | null;
@@ -318,7 +330,11 @@ export async function runStreamContentGate(
     bufferedBytes - Math.min(echoExcludedBytes, options.prebufferByteCap) >
     options.prebufferByteCap;
 
-  const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => {
+  const commit = (
+    eventName: string | null,
+    readerDone: boolean,
+    releasedBeforeContent = false
+  ): StreamGateResult => {
     const retainedPrefixBytes = store?.retainedByteLength ?? buffered.retainedByteLength;
     const prefixChunks = store ? store.takeChunks() : buffered.take();
     // 读取期间需要覆盖 parser、输入副本和前缀的最坏峰值；提交后 parser
@@ -352,11 +368,41 @@ export async function runStreamContentGate(
       prefixChunks,
       framesSeen,
       readerDone,
+      releasedBeforeContent,
       commitMarker: options.captureCommitMarker
-        ? { frameIndex: framesSeen, chunkIndex, eventName, bufferedBytes, echoExcludedBytes }
+        ? {
+            frameIndex: framesSeen,
+            chunkIndex,
+            eventName,
+            bufferedBytes,
+            echoExcludedBytes,
+            releasedBeforeContent,
+          }
         : null,
       prebufferLease,
     };
+  };
+
+  /**
+   * 中性帧数量达到 event 上限：放行而非失败。
+   *
+   * 此时所有已见帧都是中性帧（error/malformed/空流在更早的分支已返回失败），
+   * 字节量也在 byte 上限以内，说明上游仍在正常地产出协议帧，只是首个内容帧来得晚
+   * （例如长思考期间的空 thinking_delta、ping、tool_use 的 content_block_start）。
+   * 继续扣住只会让客户端长时间收不到任何字节；判成失败则会杀掉正常响应、计入熔断，
+   * 并在共用上游的供应商之间重复同样的结果。放行后流按门控关闭时的语义透传，
+   * 之后出现的协议错误由 response-handler 与 replay 终态屏障处理。
+   */
+  const release = (eventName: string | null): StreamGateResult => {
+    logger.info("StreamGate: neutral frame budget exhausted before first content, releasing", {
+      providerId: options.providerId,
+      providerName: options.providerName,
+      family: options.family,
+      framesSeen,
+      bufferedBytes,
+      prebufferEventCap: options.prebufferEventCap,
+    });
+    return commit(eventName, false, true);
   };
 
   try {
@@ -437,10 +483,8 @@ export async function runStreamContentGate(
               return false;
             }
             if (verdict === "terminal") sawTerminal = true;
-            if (verdict === "neutral" && framesSeen > options.prebufferEventCap) {
-              trailingResult = failure("prebuffer_overflow");
-              return false;
-            }
+            // EOF 冲刷不按帧数判失败：流已结束，放行没有意义；尾部帧数受 parser 字节上限
+            // 约束，最终按内容 / 终止帧 / 空流正常归类。
             return true;
           });
         } catch (error) {
@@ -513,7 +557,8 @@ export async function runStreamContentGate(
             echoExcludedBytes += parser.lastFrame!.dataBytes;
           }
           if (framesSeen > options.prebufferEventCap) {
-            frameResult = failure("prebuffer_overflow");
+            // 帧数上限只决定何时放行；字节超限仍是内存保护意义上的失败
+            frameResult = exceedsByteCap() ? failure("prebuffer_overflow") : release(eventName);
             return false;
           }
           return true;
