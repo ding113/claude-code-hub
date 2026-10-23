@@ -321,6 +321,54 @@ describe("ModelMultiSelect", () => {
     unmount();
   });
 
+  test.each(["https://api.minimax.io/anthropic", "https://api.minimaxi.com/v1"])(
+    "offers Flash first at %s while retaining saved legacy and custom selections",
+    async (providerUrl) => {
+      const onChange = vi.fn();
+      modelPricesActionMocks.getAvailableModelCatalog.mockResolvedValueOnce([
+        { modelName: "MiniMax-M2.7", vendor: "minimax", updatedAt: "" },
+        { modelName: "MiniMax-M2.5", vendor: "minimax", updatedAt: "" },
+        { modelName: "MiniMax-H3", vendor: "minimax", updatedAt: "" },
+        { modelName: "gpt-5.5", vendor: "openai", updatedAt: "" },
+      ]);
+      const { unmount } = render(
+        <NextIntlClientProvider locale="en" messages={loadMessages()} timeZone="UTC">
+          <ModelMultiSelect
+            providerType="claude"
+            providerUrl={providerUrl}
+            selectedModels={["MiniMax-M2.7", "my-custom-minimax"]}
+            onChange={onChange}
+          />
+        </NextIntlClientProvider>
+      );
+      await openPicker();
+      const available = Array.from(
+        document.querySelectorAll('[data-model-group="available"] [data-slot="command-item"]')
+      ).map((element) => element.textContent || "");
+      expect(available[0]).toContain("MiniMax-M3.1-Flash");
+      expect(available[1]).toContain("MiniMax-M3");
+      expect(available.some((text) => text.includes("MiniMax-M2"))).toBe(false);
+      expect(available.some((text) => text.includes("MiniMax-H3"))).toBe(true);
+      expect(available.some((text) => text.includes("gpt-5.5"))).toBe(true);
+      const selected = document.querySelector('[data-model-group="selected"]');
+      expect(selected?.textContent).toContain("MiniMax-M2.7");
+      expect(selected?.textContent).toContain("my-custom-minimax");
+      expect(onChange).not.toHaveBeenCalled();
+      const flash = document.querySelector(
+        '[data-model-group="available"] [data-slot="command-item"]'
+      ) as HTMLElement;
+      await act(async () => {
+        flash.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      expect(onChange).toHaveBeenLastCalledWith([
+        "MiniMax-M2.7",
+        "my-custom-minimax",
+        "MiniMax-M3.1-Flash",
+      ]);
+      unmount();
+    }
+  );
+
   test("prefers upstream models when available", async () => {
     const messages = loadMessages();
     providerActionMocks.fetchUpstreamModels.mockResolvedValueOnce({

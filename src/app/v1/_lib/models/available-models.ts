@@ -2,6 +2,10 @@ import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { logger } from "@/lib/logger";
+import {
+  compareMinimaxModelPriority,
+  currentMinimaxModelOptions,
+} from "@/lib/minimax-model-options";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
@@ -17,6 +21,7 @@ import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
 import { checkProviderGroupMatch } from "../proxy/provider-selector";
+import { buildProxyUrl } from "../url";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -213,7 +218,7 @@ interface UpstreamFetchConfig {
 /** 各 Provider 类型的请求配置 */
 const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
   claude: {
-    buildUrl: (baseUrl) => `${baseUrl}/v1/models`,
+    buildUrl: (baseUrl) => buildProxyUrl(baseUrl, new URL("/v1/models", baseUrl)),
     buildHeaders: (p) => ({ "x-api-key": p.key, "anthropic-version": "2023-06-01" }),
     parseResponse: (body) => {
       const data =
@@ -223,7 +228,7 @@ const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
     },
   },
   openai: {
-    buildUrl: (baseUrl) => `${baseUrl}/v1/models`,
+    buildUrl: (baseUrl) => buildProxyUrl(baseUrl, new URL("/v1/models", baseUrl)),
     buildHeaders: (p) => ({ Authorization: `Bearer ${p.key}` }),
     parseResponse: (body) => {
       const data = (body as { data?: Array<{ id: string }> }).data || [];
@@ -319,7 +324,10 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
   }
 
   try {
-    return await fetchModelsWithConfig(provider, config);
+    return currentMinimaxModelOptions(
+      await fetchModelsWithConfig(provider, config),
+      (model) => model.id
+    );
   } catch (error) {
     logger.warn(`[AvailableModels] Failed to fetch from ${provider.name}:`, error);
     return [];
@@ -493,7 +501,9 @@ async function getAvailableModelsByProviderTypes(
   });
 
   return {
-    models: allModels.sort((a, b) => a.id.localeCompare(b.id)),
+    models: allModels.sort(
+      (a, b) => compareMinimaxModelPriority(a.id, b.id) || a.id.localeCompare(b.id)
+    ),
     providerName: matchedProviders.map((p) => p.name).join(", "),
   };
 }

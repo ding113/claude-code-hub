@@ -45,6 +45,8 @@ describe("inferVendorFromModelName", () => {
     { modelId: "glm-4-plus", expected: "zhipuai" },
     { modelId: "minimax-pro", expected: "minimax" },
     { modelId: "abab-6.5", expected: "minimax" },
+    { modelId: "MiniMax-M3", expected: "minimax" },
+    { modelId: "MiniMax-M2.7", expected: "minimax" },
     { modelId: "kimi-k2", expected: "moonshotai" },
     { modelId: "moonshot-v1-8k", expected: "moonshotai" },
     { modelId: "yi-lightning", expected: "01-ai" },

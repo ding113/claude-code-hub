@@ -38,6 +38,11 @@ import {
   getAvailableModelCatalog,
 } from "@/lib/api-client/v1/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/lib/api-client/v1/actions/providers";
+import {
+  currentMinimaxModelOptions,
+  isDirectMinimaxUrl,
+  MINIMAX_TEXT_DEFAULTS,
+} from "@/lib/minimax-model-options";
 import { vendorDisplayName } from "@/lib/model-vendor/vendor-inference";
 import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
@@ -155,7 +160,21 @@ export function ModelMultiSelect({
     const merged: ModelOption[] = [];
     const seen = new Set<string>();
 
-    for (const model of availableModels) {
+    const options = [...availableModels];
+    if (catalogScope === "chat" && isDirectMinimaxUrl(providerUrl)) {
+      for (const modelName of MINIMAX_TEXT_DEFAULTS) {
+        options.push(
+          buildLocalOption({
+            modelName,
+            vendor: "minimax",
+            litellmProvider: "minimax",
+            updatedAt: "",
+          })
+        );
+      }
+    }
+
+    for (const model of currentMinimaxModelOptions(options, (item) => item.modelName)) {
       if (seen.has(model.key)) {
         continue;
       }
@@ -174,7 +193,7 @@ export function ModelMultiSelect({
     }
 
     return merged;
-  }, [availableModels, selectedModels]);
+  }, [availableModels, selectedModels, providerUrl, catalogScope]);
 
   const filteredModels = useMemo(() => {
     const keyword = searchValue.trim().toLowerCase();

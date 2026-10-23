@@ -214,6 +214,8 @@ Once started:
 - **API Docs (Scalar UI)**: `http://localhost:23000/api/actions/scalar`
 - **API Docs (Swagger UI)**: `http://localhost:23000/api/actions/docs`
 
+For a dual-region, dual-protocol provider setup, see the [MiniMax provider guide](docs/providers/minimax.md).
+
 > 💡 **Tip**: To change the port, edit the `ports` section in `docker-compose.yml`.
 
 ## 🖼️ Screenshots

@@ -19,6 +19,8 @@ describe("getModelVendor", () => {
     { modelId: "doubao-pro-32k", expectedVendor: "bytedance" },
     { modelId: "glm-4-plus", expectedVendor: "zhipuai" },
     { modelId: "kimi-k2", expectedVendor: "moonshotai" },
+    { modelId: "MiniMax-M3", expectedVendor: "minimax" },
+    { modelId: "MiniMax-M2.7", expectedVendor: "minimax" },
     { modelId: "yi-lightning", expectedVendor: "01-ai" },
     { modelId: "hunyuan-pro", expectedVendor: "tencent" },
     { modelId: "ernie-4.0-8k", expectedVendor: "baidu" },
