@@ -88,6 +88,19 @@ describe("buildProxyUrl", () => {
     );
   });
 
+  test("preserves video generation v2 regional endpoint paths", () => {
+    expectBuiltUrl(
+      "https://api.minimax.io/v2/video_generation",
+      "/v2/video_generation",
+      "https://api.minimax.io/v2/video_generation"
+    );
+    expectBuiltUrl(
+      "https://api.minimaxi.com",
+      "/v2/query/video_generation/task_123",
+      "https://api.minimaxi.com/v2/query/video_generation/task_123"
+    );
+  });
+
   test("完整 Codex path：baseUrl 已包含 /openai/v1/responses 时保持原路径", () => {
     expectBuiltUrl(
       "https://relay.example.com/openai/v1/responses",

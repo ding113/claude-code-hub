@@ -57,6 +57,27 @@ const FAMILY_SAMPLES = [
     modelRequired: false,
   },
   {
+    id: "video-generation-v2-create",
+    path: "/v2/video_generation",
+    format: "openai",
+    accountingTier: "none",
+    modelRequired: true,
+  },
+  {
+    id: "video-generation-v2-query",
+    path: "/v2/query/video_generation/task_123",
+    format: "openai",
+    accountingTier: "none",
+    modelRequired: false,
+  },
+  {
+    id: "video-generation-v2-resources",
+    path: "/v2/video_generation/task_123",
+    format: "openai",
+    accountingTier: "none",
+    modelRequired: false,
+  },
+  {
     id: "openai-completions",
     path: "/v1/completions",
     format: "openai",
