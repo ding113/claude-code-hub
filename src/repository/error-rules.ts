@@ -389,6 +389,54 @@ const DEFAULT_ERROR_RULES = [
     },
   },
   {
+    pattern: "Request payload is too large",
+    category: "input_limit",
+    description: "Request body exceeds the upstream payload size limit",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 96,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "input_limit",
+        message: "请求体过大，超过上游大小限制。请减少输入内容或附件后重试",
+      },
+    },
+  },
+  {
+    pattern: "accepts at most \\d+ inline images",
+    category: "media_limit",
+    description: "Request contains more inline images than the upstream accepts",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 81,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "media_limit",
+        message: "请求中的图片数量超过上游限制，请减少图片后重试",
+      },
+    },
+  },
+  {
+    pattern: "sensitive words detected",
+    category: "content_filter",
+    description: "Request or response rejected by upstream sensitive word filtering",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 91,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "content_filter",
+        message: "内容触发上游敏感词过滤，请修改输入内容后重试",
+      },
+    },
+  },
+  {
     pattern: "max_tokens.*exceed|exceed.*max_tokens|maximum.*tokens.*allowed",
     category: "token_limit",
     description: "Max tokens parameter exceeds model limit",

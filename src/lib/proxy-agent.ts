@@ -30,12 +30,23 @@ const {
 /**
  * 设置 undici 全局 Agent，覆盖默认的 300 秒超时
  * 此配置对所有 fetch() 调用生效（无论是否使用代理）
+ *
+ * 显式关闭 HTTP/2：undici 8 的 buildConnector 在未传入 allowH2 时默认取 true
+ * （node_modules/undici/lib/core/connect.js: allowH2 = allowH2 != null ? allowH2 : true），
+ * ALPN 会同时广告 h2，Cloudflare 等边缘会协商到 HTTP/2。此时：
+ * 1. enable_http2=false 对未指定 dispatcher 的请求失效，后台开关与行为不符；
+ * 2. HTTP/2 协议错误后的“回退 HTTP/1.1”只是删除 dispatcher 回到本 Agent，
+ *    仍然协商 h2，回退等于没有回退；
+ * 3. 多个供应商共用同一 origin 时，一次 h2 流错误会同时打掉所有候选，
+ *    最终把整个请求放大成 503。
+ * HTTP/2 仅在显式启用（enable_http2=true）时通过 Agent Pool 的专用 dispatcher 使用。
  */
 setGlobalDispatcher(
   new Agent({
     connectTimeout,
     headersTimeout,
     bodyTimeout,
+    allowH2: false,
   })
 );
 
@@ -43,7 +54,8 @@ logger.info("undici global dispatcher configured", {
   connectTimeout,
   headersTimeout,
   bodyTimeout,
-  note: "覆盖 undici 默认 300s 超时，匹配 LLM 最大响应时间",
+  allowH2: false,
+  note: "覆盖 undici 默认 300s 超时，匹配 LLM 最大响应时间；全局禁用 HTTP/2，仅在 enable_http2 开启时使用专用 Agent",
 });
 
 /**
