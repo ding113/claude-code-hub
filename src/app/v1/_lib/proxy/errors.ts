@@ -748,6 +748,24 @@ export async function getErrorOverrideAsync(
 }
 
 /**
+ * 判断错误是否已命中错误规则且未配置响应体覆写
+ *
+ * 当正则/包含/精确规则命中但未配置 overrideResponse 时，
+ * 代表将该错误加入客户端错误白名单并期望原样透传脱敏后的上游错误消息。
+ */
+export function hasMatchedErrorRuleWithoutOverrideResponse(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const cached = errorDetectionCache.get(error);
+  return (
+    cached?.matched === true &&
+    !cached.overrideResponse &&
+    cached.hasConfiguredOverrideResponse !== true
+  );
+}
+
+/**
  * 检测是否为客户端中断错误
  *
  * 采用白名单模式，精确检测客户端主动中断的错误，避免误判业务错误。

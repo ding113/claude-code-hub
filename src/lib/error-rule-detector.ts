@@ -28,6 +28,8 @@ export interface ErrorDetectionResult {
   description?: string; // 规则描述
   /** 覆写响应体：如果配置了则用此响应替换原始错误响应 */
   overrideResponse?: ErrorOverrideResponse;
+  /** 规则是否配置过响应体覆写（含因格式非法在加载时被拒绝的覆写） */
+  hasConfiguredOverrideResponse?: boolean;
   /** 覆写状态码：如果配置了则用此状态码替换原始状态码 */
   overrideStatusCode?: number;
 }
@@ -42,6 +44,7 @@ interface RegexPattern {
   category: string;
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
+  hasConfiguredOverrideResponse?: boolean;
   overrideStatusCode?: number;
 }
 
@@ -55,6 +58,7 @@ interface ContainsPattern {
   category: string;
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
+  hasConfiguredOverrideResponse?: boolean;
   overrideStatusCode?: number;
 }
 
@@ -68,6 +72,7 @@ interface ExactPattern {
   category: string;
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
+  hasConfiguredOverrideResponse?: boolean;
   overrideStatusCode?: number;
 }
 
@@ -229,6 +234,9 @@ class ErrorRuleDetector {
 
           for (const rule of rules) {
             // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
+            const hasConfiguredOverrideResponse =
+              rule.hasConfiguredOverrideResponse === true ||
+              (rule.overrideResponse !== null && rule.overrideResponse !== undefined);
             let validatedOverrideResponse: ErrorOverrideResponse | undefined;
             if (rule.overrideResponse) {
               if (isValidErrorOverrideResponse(rule.overrideResponse)) {
@@ -251,6 +259,7 @@ class ErrorRuleDetector {
                   category: rule.category,
                   description: rule.description ?? undefined,
                   overrideResponse: validatedOverrideResponse,
+                  ...(hasConfiguredOverrideResponse ? { hasConfiguredOverrideResponse: true } : {}),
                   overrideStatusCode: rule.overrideStatusCode ?? undefined,
                 });
                 break;
@@ -265,6 +274,7 @@ class ErrorRuleDetector {
                   category: rule.category,
                   description: rule.description ?? undefined,
                   overrideResponse: validatedOverrideResponse,
+                  ...(hasConfiguredOverrideResponse ? { hasConfiguredOverrideResponse: true } : {}),
                   overrideStatusCode: rule.overrideStatusCode ?? undefined,
                 });
                 break;
@@ -289,6 +299,9 @@ class ErrorRuleDetector {
                     category: rule.category,
                     description: rule.description ?? undefined,
                     overrideResponse: validatedOverrideResponse,
+                    ...(hasConfiguredOverrideResponse
+                      ? { hasConfiguredOverrideResponse: true }
+                      : {}),
                     overrideStatusCode: rule.overrideStatusCode ?? undefined,
                   });
                   validRegexCount++;
@@ -402,6 +415,7 @@ class ErrorRuleDetector {
           matchType: "contains",
           description: pattern.description,
           overrideResponse: pattern.overrideResponse,
+          ...(pattern.hasConfiguredOverrideResponse ? { hasConfiguredOverrideResponse: true } : {}),
           overrideStatusCode: pattern.overrideStatusCode,
         };
       }
@@ -418,6 +432,9 @@ class ErrorRuleDetector {
         matchType: "exact",
         description: exactMatch.description,
         overrideResponse: exactMatch.overrideResponse,
+        ...(exactMatch.hasConfiguredOverrideResponse
+          ? { hasConfiguredOverrideResponse: true }
+          : {}),
         overrideStatusCode: exactMatch.overrideStatusCode,
       };
     }
@@ -430,6 +447,7 @@ class ErrorRuleDetector {
       category,
       description,
       overrideResponse,
+      hasConfiguredOverrideResponse,
       overrideStatusCode,
     } of this.regexPatterns) {
       if (pattern.test(errorMessage)) {
@@ -441,6 +459,7 @@ class ErrorRuleDetector {
           matchType: "regex",
           description,
           overrideResponse,
+          ...(hasConfiguredOverrideResponse ? { hasConfiguredOverrideResponse: true } : {}),
           overrideStatusCode,
         };
       }

@@ -173,4 +173,84 @@ describe("ProxyErrorHandler.handle overrides", () => {
     expect(responseText).not.toContain("Quota exceeded");
     expect(responseText).not.toContain("raw upstream failure");
   });
+
+  test("passes through upstream error when regex rule matches without overrideResponse", async () => {
+    mocks.detectAsync.mockResolvedValue({
+      matched: true,
+      ruleId: 624,
+      category: "invalid_request",
+      pattern: "invalid_request_error",
+      matchType: "regex",
+    });
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      verboseProviderError: false,
+      passThroughUpstreamErrorMessage: false,
+    });
+    const session = await createSession();
+    const upstreamResponse = new Response(
+      JSON.stringify({
+        error: {
+          message: "Client not allowed (detected: Anthropic/JS 0.73.0)",
+          type: "invalid_request_error",
+        },
+      }),
+      {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }
+    );
+    const error = await ProxyError.fromUpstreamResponse(upstreamResponse, {
+      id: 89,
+      name: "cpa-us-gemini",
+    });
+
+    const response = await ProxyErrorHandler.handle(session, error);
+    const responseText = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(responseText).toContain(
+      "Client not allowed (detected: Anthropic/JS 0.73.0) (cch_session_id: s_override)"
+    );
+    expect(responseText).not.toContain("cpa-us-gemini");
+    expect(responseText).not.toContain("上游请求参数无效");
+  });
+
+  test("does not treat a rejected malformed override_response as an intentional pass-through whitelist", async () => {
+    mocks.detectAsync.mockResolvedValue({
+      matched: true,
+      ruleId: 625,
+      category: "invalid_request",
+      pattern: "invalid_request_error",
+      matchType: "regex",
+      hasConfiguredOverrideResponse: true,
+    });
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      verboseProviderError: false,
+      passThroughUpstreamErrorMessage: false,
+    });
+    const session = await createSession();
+    const upstreamResponse = new Response(
+      JSON.stringify({
+        error: {
+          message: "raw upstream failure that should stay hidden when override was malformed",
+          type: "invalid_request_error",
+        },
+      }),
+      {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }
+    );
+    const error = await ProxyError.fromUpstreamResponse(upstreamResponse, {
+      id: 89,
+      name: "cpa-us-gemini",
+    });
+
+    const response = await ProxyErrorHandler.handle(session, error);
+    const responseText = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(responseText).toContain("上游请求参数无效，请检查后重试");
+    expect(responseText).not.toContain("raw upstream failure that should stay hidden");
+  });
 });

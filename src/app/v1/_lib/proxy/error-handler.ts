@@ -20,6 +20,7 @@ import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
   ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   getErrorOverrideAsync,
+  hasMatchedErrorRuleWithoutOverrideResponse,
   isEmptyResponseError,
   isRateLimitError,
   ProxyError,
@@ -113,16 +114,23 @@ function getGenericProxyErrorFallbackMessage(
   }
 }
 
+/**
+ * 解析最终返回给客户端的错误消息
+ *
+ * 优先级：显式覆写响应体 > 命中无覆写错误规则白名单透传 > 系统设置上游错误透传 > 通用状态码兜底文案
+ */
 export function resolveFinalClientErrorMessage({
   error,
   currentFallbackMessage,
   settings,
   override,
+  matchedRuleWithoutOverride,
 }: {
   error: unknown;
   currentFallbackMessage: string;
   settings?: Pick<SystemSettings, "passThroughUpstreamErrorMessage"> | null;
   override?: ErrorOverrideForMessageResolver;
+  matchedRuleWithoutOverride?: boolean;
 }): string {
   if (override?.response) {
     return currentFallbackMessage;
@@ -137,7 +145,10 @@ export function resolveFinalClientErrorMessage({
     error,
     strippedFallback
   );
-  const shouldPassThrough = settings?.passThroughUpstreamErrorMessage ?? true;
+  const isRuleMatchedWithoutResponseOverride =
+    matchedRuleWithoutOverride ?? hasMatchedErrorRuleWithoutOverrideResponse(error);
+  const shouldPassThrough =
+    isRuleMatchedWithoutResponseOverride || (settings?.passThroughUpstreamErrorMessage ?? true);
   if (!shouldPassThrough) {
     return fallback;
   }
@@ -145,12 +156,11 @@ export function resolveFinalClientErrorMessage({
   if (error instanceof ProxyError) {
     return (
       deriveClientSafeUpstreamErrorMessage({
-        rawText: error.upstreamError?.rawBody,
-        candidateMessage:
-          error.upstreamError?.safeClientMessageCandidate ??
-          error.upstreamError?.body ??
-          error.message,
+        rawText: error.upstreamError?.rawBody ?? error.upstreamError?.body,
+        candidateMessage: error.upstreamError?.safeClientMessageCandidate,
+        candidateMessages: [error.upstreamError?.body, error.message],
         providerName: error.upstreamError?.providerName ?? null,
+        allowDefaultProviderLabels: isRuleMatchedWithoutResponseOverride,
       }) ?? fallback
     );
   }
@@ -389,6 +399,7 @@ export class ProxyErrorHandler {
                 currentFallbackMessage: clientErrorMessage,
                 settings,
                 override: { response: null, statusCode: override.statusCode },
+                matchedRuleWithoutOverride: false,
               });
               return await finalizeErrorResponse(
                 ProxyResponses.buildError(
@@ -408,6 +419,7 @@ export class ProxyErrorHandler {
               currentFallbackMessage: clientErrorMessage,
               settings,
               override: { response: null, statusCode: null },
+              matchedRuleWithoutOverride: false,
             });
             return await finalizeErrorResponse(
               ProxyResponses.buildError(
@@ -439,6 +451,7 @@ export class ProxyErrorHandler {
             currentFallbackMessage: clientErrorMessage,
             settings,
             override: hasExplicitOverrideMessage ? override : null,
+            matchedRuleWithoutOverride: false,
           });
           const responseBody = {
             ...override.response,

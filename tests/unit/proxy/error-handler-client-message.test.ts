@@ -150,6 +150,34 @@ describe("resolveFinalClientErrorMessage", () => {
 
     expect(message).toBe("custom override");
   });
+
+  test("passes through message from ProxyError.fromUpstreamResponse when rawBody is undefined and body is JSON", async () => {
+    const upstreamResponse = new Response(
+      JSON.stringify({
+        error: {
+          message: 'level "minimal" not supported, valid levels: low, medium, high',
+          type: "invalid_request_error",
+        },
+      }),
+      {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }
+    );
+    const error = await ProxyError.fromUpstreamResponse(upstreamResponse, {
+      id: 89,
+      name: "cpa-us-gemini",
+    });
+
+    const message = resolveFinalClientErrorMessage({
+      error,
+      currentFallbackMessage: error.getClientSafeMessage(),
+      settings: { passThroughUpstreamErrorMessage: true },
+      override: null,
+    });
+
+    expect(message).toBe('level "minimal" not supported, valid levels: low, medium, high');
+  });
 });
 
 describe("ProxyErrorHandler.handle client message", () => {

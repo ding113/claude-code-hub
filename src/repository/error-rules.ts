@@ -65,6 +65,8 @@ export interface ErrorRule {
   description: string | null;
   /** 覆写响应体（JSON）：匹配成功时用此响应替换原始错误响应，null 表示不覆写 */
   overrideResponse: ErrorOverrideResponse | null;
+  /** 数据库中是否配置过非空 override_response（即使因格式非法被清理为 null） */
+  hasConfiguredOverrideResponse?: boolean;
   /** 覆写状态码：null 表示透传上游状态码 */
   overrideStatusCode: number | null;
   isEnabled: boolean;
@@ -119,6 +121,9 @@ export async function getActiveErrorRules(): Promise<ErrorRule[]> {
       r.overrideResponse,
       `getActiveErrorRules id=${r.id}`
     ),
+    ...(r.overrideResponse !== null && r.overrideResponse !== undefined
+      ? { hasConfiguredOverrideResponse: true }
+      : {}),
     overrideStatusCode: r.overrideStatusCode,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,

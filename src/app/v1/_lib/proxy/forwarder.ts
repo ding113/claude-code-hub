@@ -9097,6 +9097,9 @@ export class ProxyForwarder {
     return true;
   }
 
+  /**
+   * 构建所有供应商不可用时的终态 503 ProxyError，并携带最后一次上游错误的安全候选文案
+   */
   private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {
     const safeClientMessageCandidate =
       finalError instanceof ProxyError &&
@@ -9105,10 +9108,8 @@ export class ProxyForwarder {
         finalError.upstreamError?.body)
         ? (deriveClientSafeUpstreamErrorMessage({
             rawText: finalError.upstreamError?.rawBody ?? finalError.upstreamError?.body,
-            candidateMessage:
-              finalError.upstreamError?.safeClientMessageCandidate ??
-              finalError.upstreamError?.body ??
-              finalError.message,
+            candidateMessage: finalError.upstreamError?.safeClientMessageCandidate,
+            candidateMessages: [finalError.upstreamError?.body, finalError.message],
             providerName: finalError.upstreamError?.providerName ?? null,
           }) ?? undefined)
         : undefined;

@@ -7,8 +7,10 @@ import { ALL_PROVIDERS_UNAVAILABLE_MESSAGE } from "./errors";
 export interface DeriveClientSafeUpstreamErrorMessageInput {
   rawText?: string;
   candidateMessage?: string;
+  candidateMessages?: Array<string | null | undefined>;
   providerName?: string | null;
   forbiddenProviderLabels?: string[];
+  allowDefaultProviderLabels?: boolean;
 }
 
 const MAX_CLIENT_ERROR_MESSAGE_CHARS = 240;
@@ -36,7 +38,7 @@ const INTERNAL_ONLY_RE = new RegExp(
   `^(?:FAKE_200_[A-Z0-9_]+|EMPTY_RESPONSE|HTTP\\s+\\d{3}|No available providers?|No available provider endpoints|${ALL_PROVIDERS_UNAVAILABLE_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})$`,
   "iu"
 );
-const PROVIDER_PREFIX_RE = /\bProvider\s+[\w.-]+(?:\s+returned|\s*:|\s+-)/iu;
+const PROVIDER_PREFIX_RE = /\bProvider\s+(?:returned\b|[\w.-]+(?:\s+returned|\s*:|\s+-))/iu;
 // Reject both anchored-at-start and embedded raw JSON blobs; embedded JSON would otherwise
 // leak provider-shaped payloads (e.g. `Bad request: {"error":{"message":"..."}}`).
 const RAW_JSON_BLOB_ANCHORED_RE = /^[[{]/u;
@@ -161,17 +163,22 @@ function deriveCandidateFromRawText(rawText: string | undefined): string | null 
   return detected.detail;
 }
 
+/**
+ * 从上游原始响应文本或候选消息中提取并脱敏可安全返回给客户端的错误消息
+ */
 export function deriveClientSafeUpstreamErrorMessage(
   input: DeriveClientSafeUpstreamErrorMessageInput
 ): string | null {
   const labels = [
     input.providerName ?? "",
-    ...DEFAULT_FORBIDDEN_PROVIDER_LABELS,
+    ...(input.allowDefaultProviderLabels ? [] : DEFAULT_FORBIDDEN_PROVIDER_LABELS),
     ...(input.forbiddenProviderLabels ?? []),
   ].filter(Boolean);
-  const candidates = [deriveCandidateFromRawText(input.rawText), input.candidateMessage].filter(
-    (value): value is string => typeof value === "string" && value.trim().length > 0
-  );
+  const candidates = [
+    deriveCandidateFromRawText(input.rawText),
+    input.candidateMessage,
+    ...(input.candidateMessages ?? []),
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 
   for (const candidate of candidates) {
     const trimmed = candidate.trim();
