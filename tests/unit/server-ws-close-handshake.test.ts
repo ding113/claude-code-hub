@@ -10,7 +10,7 @@
 
 import { createRequire } from "node:module";
 import http from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -242,6 +242,10 @@ function connectClient(port: number) {
 }
 
 describe("server.js WebSocket close-handshake (issue #1150)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeAll(async () => {
     const port = await pickFreePort();
     originalEnv = {
@@ -305,6 +309,57 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     expect(types).toContain("response.created");
     expect(types).toContain("response.completed");
   });
+
+  it.each(["missing local binding", "canonical HTTP error", "canonical WS error"])(
+    "delivers the terminal before close(1000) and drops queued frames: %s",
+    async (kind) => {
+      if (!harness) throw new Error("harness not initialized");
+      vi.stubGlobal("__cchGetResponsesWsSessionBinding", () => undefined);
+      let upstreamCalls = 0;
+      const finishResponse = deferred<void>();
+      harness.setSseHandler((_req, res) => {
+        upstreamCalls += 1;
+        void finishResponse.promise.then(() => {
+          if (kind === "canonical HTTP error") {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: { code: "previous_response_not_found" } }));
+          } else {
+            res.statusCode = 200;
+            res.setHeader("content-type", "text/event-stream");
+            if (kind === "missing local binding") {
+              res.setHeader("x-cch-upstream-connection-local", "1");
+              res.setHeader("x-cch-upstream-transport", "websocket");
+              res.setHeader("x-cch-responses-ws-generation", "lost-generation");
+            }
+            const event =
+              kind === "canonical WS error"
+                ? { type: "error", error: { code: "previous_response_not_found" } }
+                : { type: "response.completed", response: { id: "local-response" } };
+            res.end(`data: ${JSON.stringify(event)}\n\n`);
+          }
+        });
+      });
+
+      const serverConnectionPromise = harness.nextServerConnection();
+      const client = connectClient(harness.port);
+      const serverConnection = await withTimeout(serverConnectionPromise, 3000, "no connection");
+      await client.opened;
+      client.ws.send(JSON.stringify({ type: "response.create", model: "test", input: "first" }));
+      client.ws.send(JSON.stringify({ type: "response.create", previous_response_id: "queued" }));
+      await withTimeout(serverConnection.waitForMessageCount(2), 3000, "frames not queued");
+      finishResponse.resolve();
+
+      const close = await withTimeout(client.closeEvent, 3000, "reset close handshake missing");
+      expect(close).toEqual({ code: 1000, reason: "upstream_transport_reset" });
+      expect(client.messages).toHaveLength(1);
+      expect(client.messages[0]).toMatchObject({
+        type: kind === "missing local binding" ? "response.completed" : "error",
+      });
+      await withTimeout(serverConnection.close, 3000, "server close handshake did not finish");
+      expect(upstreamCalls).toBe(1);
+    }
+  );
 
   it("sends close(1011) when the upstream stream ends without a terminal event", async () => {
     if (!harness) throw new Error("harness not initialized");

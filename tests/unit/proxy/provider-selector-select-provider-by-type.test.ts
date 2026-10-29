@@ -146,6 +146,8 @@ describe("ProxyProviderResolver.ensure - 分组倍率", () => {
 
     const setGroupCostMultiplier = vi.fn();
     const session = {
+      headers: new Headers({ "content-type": "application/json" }),
+      request: { message: { model: "gpt-5.5", messages: [] } },
       provider: null as Provider | null,
       sessionId: null,
       authState: {
@@ -231,6 +233,8 @@ describe("ProxyProviderResolver.ensure - 分组倍率", () => {
 
     const setGroupCostMultiplier = vi.fn();
     const session = {
+      headers: new Headers({ "content-type": "application/json" }),
+      request: { message: { model: "gpt-5.5", messages: [] } },
       provider: null as Provider | null,
       sessionId: "session-1",
       authState: {

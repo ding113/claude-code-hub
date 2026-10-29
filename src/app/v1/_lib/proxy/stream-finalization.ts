@@ -1,5 +1,6 @@
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { ProviderChainItem } from "@/types/message";
+import type { ResponsesWsOutcomeState } from "../responses-ws/continuation";
 import type { ProxySession } from "./session";
 
 export type DeferredStreamingDiscoveryLease = {
@@ -48,6 +49,8 @@ export type DeferredStreamingFinalization = {
   endpointId: number | null;
   endpointUrl: string;
   upstreamStatusCode: number;
+  /** Trusted, attempt-scoped WS terminal state; never inferred from upstream headers. */
+  responsesWsOutcome?: ResponsesWsOutcomeState;
   /** When true, commitWinner() already performed session binding and chain logging; finalization should skip them. */
   isHedgeWinner?: boolean;
   /**

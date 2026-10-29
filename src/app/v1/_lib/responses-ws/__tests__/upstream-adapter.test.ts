@@ -2,16 +2,22 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import { parseSseBody } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
+import { ResponsesWsContinuationError } from "@/app/v1/_lib/proxy/errors";
 import type { Provider } from "@/types/provider";
+import { getResponsesWsOutcome, type ResponsesWsSessionBinding } from "../continuation";
 import {
   clearResponsesWsSessionsForTests,
   cleanupResponsesWsSession,
   getResponsesWsSessionCountForTests,
+  getResponsesWsSessionBinding,
   setResponsesWsSessionMaxEntriesForTests,
   tryResponsesWebsocketUpstream,
 } from "../upstream-adapter";
 import {
   INTERNAL_SECRET_HEADER,
+  RESPONSES_WS_CONNECTION_LOCAL_HEADER,
+  RESPONSES_WS_GENERATION_HEADER,
+  RESPONSES_WS_PRIOR_LOCAL_HEADER,
   RESPONSES_WS_SESSION_HEADER,
   WS_FORWARD_FLAG_HEADER,
 } from "../internal-secret";
@@ -583,6 +589,9 @@ describe("tryResponsesWebsocketUpstream", () => {
       "x-cch-client-transport": "websocket",
       [WS_FORWARD_FLAG_HEADER]: "1",
       [RESPONSES_WS_SESSION_HEADER]: "client-session-1",
+      [RESPONSES_WS_PRIOR_LOCAL_HEADER]: "1",
+      [RESPONSES_WS_CONNECTION_LOCAL_HEADER]: "1",
+      [RESPONSES_WS_GENERATION_HEADER]: "spoofed-generation",
       [INTERNAL_SECRET_HEADER]: "loopback-secret-should-stay-local",
       // Custom header should pass through:
       "x-cch-tenant": "tenant-a",
@@ -604,6 +613,9 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(receivedHeaders["x-cch-client-transport"]).toBeUndefined();
     expect(receivedHeaders[WS_FORWARD_FLAG_HEADER]).toBeUndefined();
     expect(receivedHeaders[RESPONSES_WS_SESSION_HEADER]).toBeUndefined();
+    expect(receivedHeaders[RESPONSES_WS_PRIOR_LOCAL_HEADER]).toBeUndefined();
+    expect(receivedHeaders[RESPONSES_WS_CONNECTION_LOCAL_HEADER]).toBeUndefined();
+    expect(receivedHeaders[RESPONSES_WS_GENERATION_HEADER]).toBeUndefined();
     expect(receivedHeaders[INTERNAL_SECRET_HEADER]).toBeUndefined();
     // The host the upstream observed must come from the actual TCP target,
     // never the value we passed in the plain Record (which we filter):
@@ -643,6 +655,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "continuous-turns",
       body: {
         model: "gpt-5.5",
         store: false,
@@ -661,6 +674,8 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "continuous-turns",
+      continuationBinding: getResponsesWsSessionBinding("continuous-turns")!,
       body: {
         model: "gpt-5.5",
         store: false,
@@ -732,6 +747,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const turn2 = await tryResponsesWebsocketUpstream({
       ...common,
+      continuationBinding: getResponsesWsSessionBinding(common.sessionId)!,
       body: {
         model: "gpt-5.5",
         store: false,
@@ -786,6 +802,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const generated = await tryResponsesWebsocketUpstream({
       ...common,
+      continuationBinding: getResponsesWsSessionBinding(common.sessionId)!,
       body: {
         model: "gpt-5.5",
         store: false,
@@ -801,6 +818,420 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(connectionCount).toBe(1);
     expect(receivedFrames[0]).toMatchObject({ generate: false, store: false });
     expect(receivedFrames[1]).toMatchObject({ previous_response_id: "resp_warmup" });
+  });
+
+  it.each([
+    "missing-binding",
+    "binding-busy",
+    "session",
+    "generation",
+    "provider",
+    "retained-provider",
+    "endpoint",
+    "retained-endpoint",
+    "url",
+    "retained-url",
+    "fingerprint",
+    "retained-fingerprint",
+    "auth-header",
+    "custom-header",
+    "missing-entry",
+  ])(
+    "rejects local continuation %s without opening or sending on another socket",
+    async (mismatch) => {
+      let connectionCount = 0;
+      let frameCount = 0;
+      server = await startMockServer((socket) => {
+        connectionCount += 1;
+        socket.on("message", () => {
+          frameCount += 1;
+          socket.send(
+            JSON.stringify({ type: "response.completed", response: { id: "resp_local" } })
+          );
+        });
+      });
+      const common = {
+        provider: codexProvider(),
+        upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+        upstreamHeaders: new Headers({ authorization: "Bearer original" }),
+        sessionId: "bound-client",
+        endpointId: 10,
+      };
+      const first = await tryResponsesWebsocketUpstream({
+        ...common,
+        body: { store: false, input: "full history" },
+      });
+      if (!("response" in first)) throw new Error("mock WS did not connect");
+      await collectSseBody(first.response);
+      const binding = getResponsesWsSessionBinding(common.sessionId)!;
+      const continuation = {
+        ...common,
+        body: { store: false, previous_response_id: "resp_local", input: "increment" },
+        continuationBinding: { ...binding } as ResponsesWsSessionBinding | undefined,
+      };
+      if (mismatch === "missing-binding") continuation.continuationBinding = undefined;
+      if (mismatch === "binding-busy") continuation.continuationBinding!.active = true;
+      if (mismatch === "session") continuation.continuationBinding!.sessionId = "other-client";
+      if (mismatch === "generation")
+        continuation.continuationBinding!.generation = "old-generation";
+      if (mismatch === "provider") continuation.provider = { ...common.provider, id: 2 };
+      if (mismatch === "retained-provider") {
+        continuation.provider = { ...common.provider, id: 2 };
+        continuation.continuationBinding!.providerId = 2;
+      }
+      if (mismatch === "endpoint") continuation.endpointId = 11;
+      if (mismatch === "retained-endpoint") {
+        continuation.endpointId = 11;
+        continuation.continuationBinding!.endpointId = 11;
+      }
+      if (mismatch === "url") continuation.upstreamUrl += "?other=1";
+      if (mismatch === "retained-url") {
+        continuation.upstreamUrl += "?other=1";
+        continuation.continuationBinding!.upstreamUrl = continuation.upstreamUrl;
+      }
+      if (mismatch === "fingerprint")
+        continuation.continuationBinding!.fingerprint = "old-fingerprint";
+      if (mismatch === "retained-fingerprint") {
+        globalThis.__cchResponsesWsPersistentState!.sessions.get(common.sessionId)!.fingerprint =
+          "different-retained-fingerprint";
+      }
+      if (mismatch === "auth-header")
+        continuation.upstreamHeaders.set("authorization", "Bearer changed");
+      if (mismatch === "custom-header")
+        continuation.upstreamHeaders.set("x-provider-config", "changed");
+      if (mismatch === "missing-entry") cleanupResponsesWsSession(common.sessionId);
+
+      await expect(tryResponsesWebsocketUpstream(continuation)).rejects.toBeInstanceOf(
+        ResponsesWsContinuationError
+      );
+      expect(connectionCount).toBe(1);
+      expect(frameCount).toBe(1);
+    }
+  );
+
+  it("rejects a local continuation while the retained socket is active", async () => {
+    let connectionCount = 0;
+    let frameCount = 0;
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      socket.on("message", () => {
+        frameCount += 1;
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_active" } }));
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      sessionId: "busy-local-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    const binding = getResponsesWsSessionBinding(common.sessionId)!;
+    expect(binding.active).toBe(true);
+    await expect(
+      tryResponsesWebsocketUpstream({
+        ...common,
+        continuationBinding: { ...binding, active: false },
+        body: { store: false, previous_response_id: "resp_active" },
+      })
+    ).rejects.toMatchObject({ reason: "upstream_session_busy" });
+    expect(connectionCount).toBe(1);
+    expect(frameCount).toBe(1);
+    await first.response.body!.cancel();
+  });
+
+  it.each([true, undefined])(
+    "keeps prior-local routing when this turn has store=%s",
+    async (store) => {
+      let connectionCount = 0;
+      server = await startMockServer((socket) => {
+        connectionCount += 1;
+        socket.on("message", () => {
+          socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_next" } }));
+          socket.send(
+            JSON.stringify({ type: "response.completed", response: { id: "resp_next" } })
+          );
+        });
+      });
+      const common = {
+        provider: codexProvider(),
+        upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+        upstreamHeaders: {},
+        sessionId: "mode-changing-client",
+      };
+      const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+      if (!("response" in first)) throw new Error("mock WS did not connect");
+      await collectSseBody(first.response);
+      const binding = getResponsesWsSessionBinding(common.sessionId)!;
+      expect(binding.connectionLocal).toBe(true);
+      const second = await tryResponsesWebsocketUpstream({
+        ...common,
+        continuationBinding: binding,
+        body: { store, previous_response_id: "resp_next", input: "increment" },
+      });
+      if (!("response" in second)) throw new Error("mock WS did not reconnect");
+      expect(second.reused).toBe(true);
+      expect(getResponsesWsSessionBinding(common.sessionId)?.connectionLocal).toBe(true);
+      await collectSseBody(second.response);
+      expect(getResponsesWsSessionBinding(common.sessionId)).toMatchObject({
+        generation: binding.generation,
+        active: false,
+        connectionLocal: false,
+      });
+      expect(getResponsesWsOutcome(second.response)).toEqual({
+        generation: binding.generation,
+        connectionLocal: false,
+      });
+      expect(second.response.headers.get(RESPONSES_WS_CONNECTION_LOCAL_HEADER)).toBe("0");
+      expect(second.response.headers.get(RESPONSES_WS_GENERATION_HEADER)).toBe(binding.generation);
+      expect(connectionCount).toBe(1);
+    }
+  );
+
+  it("allows a fresh full turn to replace a local socket and fences stale close callbacks", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_full" } }));
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: { authorization: "Bearer original" },
+      sessionId: "replacement-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    await collectSseBody(first.response);
+    const oldBinding = getResponsesWsSessionBinding(common.sessionId)!;
+    const oldEntry = globalThis.__cchResponsesWsPersistentState!.sessions.get(common.sessionId)!;
+    const second = await tryResponsesWebsocketUpstream({
+      ...common,
+      upstreamHeaders: { authorization: "Bearer updated" },
+      body: { store: false, input: "full history again" },
+    });
+    if (!("response" in second)) throw new Error("mock WS did not reconnect");
+    await collectSseBody(second.response);
+    const newBinding = getResponsesWsSessionBinding(common.sessionId)!;
+    expect(newBinding.generation).not.toBe(oldBinding.generation);
+    oldEntry.ws.emit("close", 1000, Buffer.alloc(0));
+    expect(getResponsesWsSessionBinding(common.sessionId)).toEqual(newBinding);
+    expect(globalThis.__cchGetResponsesWsSessionBinding?.(common.sessionId)).toEqual(newBinding);
+  });
+
+  it("preserves stored-response continuation compatibility when the connection changes", async () => {
+    let connections = 0;
+    server = await startMockServer((socket) => {
+      connections += 1;
+      socket.on("message", () => {
+        socket.send(
+          JSON.stringify({ type: "response.completed", response: { id: "resp_stored" } })
+        );
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: { authorization: "Bearer first" },
+      sessionId: "stored-continuation-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: true } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    await collectSseBody(first.response);
+    const firstBinding = getResponsesWsSessionBinding(common.sessionId)!;
+    expect(firstBinding.connectionLocal).toBe(false);
+    const next = await tryResponsesWebsocketUpstream({
+      ...common,
+      upstreamHeaders: { authorization: "Bearer updated" },
+      body: { store: true, previous_response_id: "resp_stored", input: "increment" },
+    });
+    if (!("response" in next)) throw new Error("mock WS did not reconnect");
+    await collectSseBody(next.response);
+    expect(next.reused).toBe(false);
+    expect(getResponsesWsSessionBinding(common.sessionId)?.generation).not.toBe(
+      firstBinding.generation
+    );
+    expect(connections).toBe(2);
+  });
+
+  it("exposes no binding once an upstream close starts, before its close callback", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_first" } }));
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      sessionId: "closing-local-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    await collectSseBody(first.response);
+    const binding = getResponsesWsSessionBinding(common.sessionId)!;
+    const entry = globalThis.__cchResponsesWsPersistentState!.sessions.get(common.sessionId)!;
+    entry.ws.close(1000);
+    expect(getResponsesWsSessionBinding(common.sessionId)).toBeNull();
+    await expect(
+      tryResponsesWebsocketUpstream({
+        ...common,
+        continuationBinding: binding,
+        body: { store: false, previous_response_id: "resp_first" },
+      })
+    ).rejects.toMatchObject({ reason: "upstream_session_missing" });
+  });
+
+  it("rejects an explicitly local continuation without a session id", async () => {
+    await expect(
+      tryResponsesWebsocketUpstream({
+        provider: codexProvider(),
+        upstreamUrl: "http://127.0.0.1:1/v1/responses",
+        upstreamHeaders: {},
+        body: { store: false, previous_response_id: "resp_missing" },
+      })
+    ).rejects.toMatchObject({ reason: "upstream_session_missing" });
+  });
+
+  it("fails closed for protected continuations when the ws module becomes unavailable", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_first" } }));
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      sessionId: "module-unavailable-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    await collectSseBody(first.response);
+    const binding = getResponsesWsSessionBinding(common.sessionId)!;
+    vi.doMock("ws", () => {
+      throw new Error("test ws module unavailable");
+    });
+    try {
+      await expect(
+        tryResponsesWebsocketUpstream({ ...common, body: { store: false } })
+      ).resolves.toMatchObject({ failed: true, reason: "ws_module_unavailable" });
+      await expect(
+        tryResponsesWebsocketUpstream({
+          ...common,
+          continuationBinding: binding,
+          body: { store: false, previous_response_id: "resp_first" },
+        })
+      ).rejects.toMatchObject({ reason: "ws_module_unavailable" });
+    } finally {
+      vi.doUnmock("ws");
+    }
+  });
+
+  it("turns a protected reused-socket close before its first event into a typed error", async () => {
+    let frames = 0;
+    let connections = 0;
+    server = await startMockServer((socket) => {
+      connections += 1;
+      socket.on("message", () => {
+        frames += 1;
+        if (frames === 1) {
+          socket.send(
+            JSON.stringify({ type: "response.completed", response: { id: "resp_first" } })
+          );
+        } else {
+          socket.close(1000);
+        }
+      });
+    });
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      sessionId: "closed-protected-client",
+    };
+    const first = await tryResponsesWebsocketUpstream({ ...common, body: { store: false } });
+    if (!("response" in first)) throw new Error("mock WS did not connect");
+    await collectSseBody(first.response);
+    await expect(
+      tryResponsesWebsocketUpstream({
+        ...common,
+        continuationBinding: getResponsesWsSessionBinding(common.sessionId)!,
+        body: { store: false, previous_response_id: "resp_first" },
+      })
+    ).rejects.toMatchObject({ reason: "ws_closed_before_first_event" });
+    expect(connections).toBe(1);
+    expect(getResponsesWsSessionBinding(common.sessionId)).toBeNull();
+  });
+
+  it.each([400, 409])(
+    "records exact structured continuation status %s without retaining payload",
+    async (status) => {
+      let sendError: (() => void) | undefined;
+      server = await startMockServer((socket) => {
+        socket.on("message", () => {
+          socket.send(
+            JSON.stringify({ type: "response.created", response: { id: "resp_created" } })
+          );
+          sendError = () =>
+            socket.send(
+              JSON.stringify({
+                type: "error",
+                status,
+                error: { code: "previous_response_not_found", message: "private response detail" },
+              })
+            );
+        });
+      });
+      const sessionId = "typed-error-client";
+      const result = await tryResponsesWebsocketUpstream({
+        provider: codexProvider(),
+        upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+        upstreamHeaders: {},
+        sessionId,
+        body: { store: false },
+      });
+      if (!("response" in result)) throw new Error("mock WS did not connect");
+      const outcome = getResponsesWsOutcome(result.response)!;
+      expect(outcome.continuationError).toBeUndefined();
+      sendError!();
+      await collectSseBody(result.response);
+      expect(outcome).toEqual({
+        generation: expect.any(String),
+        connectionLocal: true,
+        continuationError: { code: "previous_response_not_found", status },
+      });
+      expect(JSON.stringify(outcome)).not.toContain("private response detail");
+      expect(getResponsesWsSessionBinding(sessionId)).toBeNull();
+    }
+  );
+
+  it.each([
+    '{"type":"error","error":{"code":"different_error","message":"previous_response_not_found"}}',
+    '{"type":"response.completed","response":{"output":"previous_response_not_found"}}',
+    '{"type":"response.completed","error":{"code":"previous_response_not_found"}}',
+    "previous_response_not_found",
+  ])("does not infer continuation metadata from unrelated content %s", async (frame) => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(frame);
+        if (frame === "previous_response_not_found") {
+          socket.send(
+            JSON.stringify({ type: "response.completed", response: { id: "resp_done" } })
+          );
+        }
+      });
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: {},
+      body: { store: false },
+    });
+    if (!("response" in result)) throw new Error("mock WS did not connect");
+    await collectSseBody(result.response);
+    expect(getResponsesWsOutcome(result.response)?.continuationError).toBeUndefined();
   });
 
   it("forgets the upstream WS after websocket_connection_limit_reached", async () => {

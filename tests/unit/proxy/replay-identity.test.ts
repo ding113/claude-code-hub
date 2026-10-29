@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deriveReplayIdentity } from "@/app/v1/_lib/proxy/replay/replay-identity";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import {
+  INTERNAL_SECRET_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+  RESPONSES_WS_PRIOR_LOCAL_HEADER,
+} from "@/app/v1/_lib/responses-ws/internal-secret";
 import { buildScopeTag } from "@/lib/request-identity";
 
 /**
@@ -212,5 +217,45 @@ describe("deriveReplayIdentity：不合格条件返回 null", () => {
 
   it("message 缺失导致内部异常时 fail-open 返回 null", () => {
     expect(deriveReplayIdentity(makeSession({ message: undefined }))).toBeNull();
+  });
+});
+
+describe("connection-local WS replay protection", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([false, true])(
+    "skips replay on a local WS chain including a complete first request (prior=%s)",
+    (prior) => {
+      vi.stubEnv("CCH_RESPONSES_WS_INTERNAL_SECRET", "replay-ws-test");
+      expect(
+        deriveReplayIdentity(
+          makeSession({
+            format: "response",
+            endpoint: "/v1/responses",
+            message: { model: "gpt-test", stream: true, store: prior, input: "hello" },
+            headers: {
+              "x-cch-client-transport": "websocket",
+              [INTERNAL_SECRET_HEADER]: "replay-ws-test",
+              [WS_FORWARD_FLAG_HEADER]: "1",
+              ...(prior ? { [RESPONSES_WS_PRIOR_LOCAL_HEADER]: "1" } : {}),
+            },
+          })
+        )
+      ).toBeNull();
+    }
+  );
+  it("does not trust an external HTTP transport marker", () => {
+    expect(
+      deriveReplayIdentity(
+        makeSession({
+          message: { stream: true, store: false },
+          headers: { "x-cch-client-transport": "websocket" },
+        })
+      )
+    ).not.toBeNull();
+  });
+  it("keeps replay fail-open for a legacy session without request headers", () => {
+    const session = makeSession();
+    Object.assign(session, { headers: undefined });
+    expect(deriveReplayIdentity(session)).toBeNull();
   });
 });

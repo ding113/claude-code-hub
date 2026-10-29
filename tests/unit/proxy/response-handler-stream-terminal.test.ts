@@ -7,6 +7,7 @@ import {
 } from "@/app/v1/_lib/proxy/detached-stream-budget";
 import { ProxySession, type MessageContext } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import type { ResponsesWsOutcomeState } from "@/app/v1/_lib/responses-ws/continuation";
 import type { Key } from "@/types/key";
 import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -212,9 +213,10 @@ function createProvider(): Provider {
 async function createSession(options: {
   readonly responseController?: AbortController;
   readonly pathname?: string;
+  readonly body?: Record<string, unknown>;
 }): Promise<{ readonly releaseAgent: ReturnType<typeof vi.fn>; readonly session: ProxySession }> {
   const request = new Request(`https://hub.test${options.pathname ?? "/v1/messages"}`, {
-    body: JSON.stringify({ messages: [], stream: true }),
+    body: JSON.stringify(options.body ?? { messages: [], stream: true }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -387,6 +389,84 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
 
     expect(mocks.durable).toHaveBeenCalledWith(
       51,
+      expect.objectContaining({ statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it.each([false, true])(
+    "records trusted WS continuation failure without successful side effects (compaction=%s)",
+    async (compaction) => {
+      const { releaseAgent, session } = await createSession({
+        pathname: "/v1/responses",
+        body: {
+          model: "codex-test",
+          stream: true,
+          store: false,
+          input: compaction ? [{ type: "compaction_trigger" }] : [],
+        },
+      });
+      session.setProvider({ ...createProvider(), providerType: "codex" });
+      session.originalFormat = "response";
+      expect(session.getEndpointPolicy().kind).toBe(compaction ? "raw_passthrough" : "default");
+      const outcome: ResponsesWsOutcomeState = {
+        generation: "test-generation",
+        connectionLocal: true,
+      };
+      setDeferredStreamingFinalization(session, {
+        providerId: session.provider!.id,
+        providerName: session.provider!.name,
+        providerPriority: 0,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 109,
+        endpointUrl: session.provider!.url,
+        upstreamStatusCode: 200,
+        responsesWsOutcome: outcome,
+      });
+      const body = 'data: {"type":"error","error":{"code":"previous_response_not_found"}}\n\n';
+      const status = compaction ? 409 : 400;
+      const source = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          outcome.continuationError = { code: "previous_response_not_found", status };
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      });
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      expect(await returned.text()).toBe(body);
+      await settleTasks();
+      expect(mocks.durable).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({
+          statusCode: status,
+          errorMessage: "previous_response_not_found",
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+      expect(session.getProviderChain()).toContainEqual(
+        expect.objectContaining({ reason: "client_error_non_retryable", statusCode: status })
+      );
+      expect(releaseAgent).toHaveBeenCalledOnce();
+      expect(mocks.trackerEnd).toHaveBeenCalledOnce();
+      expect(mocks.replayComplete).not.toHaveBeenCalled();
+    }
+  );
+
+  it("does not trust an upstream WS header to diagnose an opaque HTTP compact response", async () => {
+    const { session } = await createSession({ pathname: "/v1/responses/compact" });
+    const response = sseResponse(
+      'data: {"type":"error","error":{"code":"previous_response_not_found"}}\n\n'
+    );
+    response.headers.set("x-cch-upstream-transport", "websocket");
+    response.headers.set("x-cch-upstream-connection-local", "1");
+    const returned = await ProxyResponseHandler.dispatch(session, response);
+    await returned.text();
+    await settleTasks();
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
       expect.objectContaining({ statusCode: 200 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );

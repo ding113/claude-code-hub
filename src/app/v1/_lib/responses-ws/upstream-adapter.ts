@@ -14,11 +14,21 @@
  * WebSocket mode semantics.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type WebSocketType from "ws";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
-import { RESERVED_INTERNAL_HEADERS } from "./internal-secret";
+import { ResponsesWsContinuationError } from "../proxy/errors";
+import {
+  attachResponsesWsOutcome,
+  type ResponsesWsOutcomeState,
+  type ResponsesWsSessionBinding,
+} from "./continuation";
+import {
+  RESERVED_INTERNAL_HEADERS,
+  RESPONSES_WS_CONNECTION_LOCAL_HEADER,
+  RESPONSES_WS_GENERATION_HEADER,
+} from "./internal-secret";
 import { getUpstreamPayloadTooLargeMessage } from "./payload-too-large";
 
 declare global {
@@ -27,6 +37,10 @@ declare global {
   // can close the matching upstream WS as soon as the client WS disconnects.
   // eslint-disable-next-line no-var
   var __cchCleanupResponsesWsSession: ((sessionId: string) => void) | undefined;
+  // eslint-disable-next-line no-var
+  var __cchGetResponsesWsSessionBinding:
+    | ((sessionId: string) => ResponsesWsSessionBinding | null)
+    | undefined;
 }
 
 export interface UpstreamWsOutcome {
@@ -160,11 +174,8 @@ const FORBIDDEN_UPSTREAM_WS_HEADERS = new Set([
   ...RESERVED_INTERNAL_HEADERS,
 ]);
 
-type PersistentWsEntry = {
-  sessionId: string;
-  fingerprint: string;
+type PersistentWsEntry = ResponsesWsSessionBinding & {
   ws: WebSocketType;
-  active: boolean;
   createdAt: number;
   lastUsedAt: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -357,10 +368,10 @@ function prunePersistentSessions(): void {
 }
 
 function registerPersistentSession(
-  sessionId: string,
-  fingerprint: string,
+  binding: Omit<ResponsesWsSessionBinding, "active">,
   ws: WebSocketType
 ): PersistentWsEntry | null {
+  const { sessionId } = binding;
   prunePersistentSessions();
   if (persistentSessions.size >= persistentState.maxEntries) {
     logger.warn("[ResponsesWsAdapter] upstream WS session cap reached; not retaining session", {
@@ -371,8 +382,7 @@ function registerPersistentSession(
   }
 
   const entry: PersistentWsEntry = {
-    sessionId,
-    fingerprint,
+    ...binding,
     ws,
     active: true,
     createdAt: Date.now(),
@@ -415,7 +425,24 @@ export function getResponsesWsSessionCountForTests(): number {
   return persistentSessions.size;
 }
 
+/** Return only live sockets, including whether another turn currently owns them. */
+export function getResponsesWsSessionBinding(sessionId: string): ResponsesWsSessionBinding | null {
+  const entry = persistentSessions.get(sessionId);
+  if (!entry || !isWsOpen(entry.ws) || !entry.generation) return null;
+  return {
+    sessionId: entry.sessionId,
+    generation: entry.generation,
+    providerId: entry.providerId,
+    endpointId: entry.endpointId,
+    upstreamUrl: entry.upstreamUrl,
+    fingerprint: entry.fingerprint,
+    connectionLocal: entry.connectionLocal,
+    active: entry.active,
+  };
+}
+
 globalThis.__cchCleanupResponsesWsSession = cleanupResponsesWsSession;
+globalThis.__cchGetResponsesWsSessionBinding = getResponsesWsSessionBinding;
 
 export async function tryResponsesWebsocketUpstream(options: {
   provider: Provider;
@@ -425,14 +452,8 @@ export async function tryResponsesWebsocketUpstream(options: {
   sessionId?: string | null;
   endpointId?: number | null;
   abortSignal?: AbortSignal;
+  continuationBinding?: ResponsesWsSessionBinding;
 }): Promise<UpstreamWsResult> {
-  const WsCtor = (await loadWsModule()) as
-    | (typeof WebSocketType & { new (url: string, opts?: unknown): WebSocketType })
-    | null;
-  if (!WsCtor) {
-    return { failed: true, reason: "ws_module_unavailable", cacheableAsUnsupported: false };
-  }
-
   const wssUrl = toWsUrl(options.upstreamUrl);
   const headers = buildUpstreamWsHeaders(options.upstreamHeaders);
   const sessionId = options.sessionId ?? null;
@@ -443,6 +464,47 @@ export async function tryResponsesWebsocketUpstream(options: {
     upstreamUrl: wssUrl,
     headers,
   });
+  const existing = sessionId ? (persistentSessions.get(sessionId) ?? null) : null;
+  const connectionLocal = options.body.store === false;
+  const hasPreviousResponseId =
+    typeof options.body.previous_response_id === "string" &&
+    options.body.previous_response_id.trim().length > 0;
+  const expectedBinding = options.continuationBinding;
+  // Filters can change store/previous_response_id after the route guard ran.
+  // Re-evaluate the final body without depending on stripped internal headers.
+  const protectedContinuation =
+    hasPreviousResponseId &&
+    (connectionLocal || existing?.connectionLocal === true || expectedBinding !== undefined);
+
+  const WsCtor = (await loadWsModule()) as
+    | (typeof WebSocketType & { new (url: string, opts?: unknown): WebSocketType })
+    | null;
+  if (protectedContinuation) {
+    const current = sessionId ? persistentSessions.get(sessionId) : undefined;
+    if (!expectedBinding || !current || current !== existing || !isWsOpen(current.ws)) {
+      throw new ResponsesWsContinuationError("upstream_session_missing");
+    }
+    if (current.active || expectedBinding.active) {
+      throw new ResponsesWsContinuationError("upstream_session_busy");
+    }
+    if (
+      expectedBinding.sessionId !== sessionId ||
+      expectedBinding.generation !== current.generation ||
+      expectedBinding.providerId !== options.provider.id ||
+      current.providerId !== options.provider.id ||
+      expectedBinding.endpointId !== (options.endpointId ?? null) ||
+      current.endpointId !== (options.endpointId ?? null) ||
+      expectedBinding.upstreamUrl !== options.upstreamUrl ||
+      current.upstreamUrl !== options.upstreamUrl ||
+      expectedBinding.fingerprint !== fingerprint ||
+      current.fingerprint !== fingerprint
+    ) {
+      throw new ResponsesWsContinuationError("upstream_session_changed");
+    }
+    if (!WsCtor) throw new ResponsesWsContinuationError("ws_module_unavailable");
+  } else if (!WsCtor) {
+    return { failed: true, reason: "ws_module_unavailable", cacheableAsUnsupported: false };
+  }
 
   // 握手期间只保留发送所需字符串；send() 接管后立即断开本地引用。后续流事件
   // 监听器不得闭包捕获完整 options，否则整份请求 body 会滞留到生成结束。
@@ -454,9 +516,9 @@ export async function tryResponsesWebsocketUpstream(options: {
   let ws: WebSocketType;
 
   if (sessionId) {
-    const existing = persistentSessions.get(sessionId) ?? null;
-    if (existing) {
-      if (existing.active && !isWsClosingOrClosed(existing.ws)) {
+    const current = persistentSessions.get(sessionId) ?? null;
+    if (current) {
+      if (current.active && !isWsClosingOrClosed(current.ws)) {
         logger.warn(
           "[ResponsesWsAdapter] active upstream WS session is busy; opening a fresh one",
           {
@@ -467,18 +529,18 @@ export async function tryResponsesWebsocketUpstream(options: {
         // The concurrent fresh socket is request-scoped and must close after its
         // terminal event instead of replacing the in-flight session in the map.
         canRetainFreshSession = false;
-      } else if (existing.fingerprint === fingerprint && !isWsClosingOrClosed(existing.ws)) {
-        persistentEntry = existing;
+      } else if (current.fingerprint === fingerprint && isWsOpen(current.ws)) {
+        persistentEntry = current;
         persistentEntry.active = true;
         persistentEntry.lastUsedAt = Date.now();
         if (persistentEntry.idleTimer) {
           clearTimeout(persistentEntry.idleTimer);
           persistentEntry.idleTimer = null;
         }
-        ws = existing.ws;
+        ws = current.ws;
         reused = true;
       } else {
-        closePersistentEntry(existing, 1000);
+        closePersistentEntry(current, 1000);
       }
     }
   }
@@ -503,6 +565,8 @@ export async function tryResponsesWebsocketUpstream(options: {
   } else {
     ws = persistentEntry!.ws;
   }
+  const generation = persistentEntry?.generation ?? randomUUID();
+  const outcomeState: ResponsesWsOutcomeState = { generation, connectionLocal };
 
   type OpenResult =
     | { ok: true }
@@ -658,6 +722,19 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
 
     const text = typeof data === "string" ? data : data.toString("utf8");
+    if (text.includes("previous_response_not_found")) {
+      try {
+        const event = JSON.parse(text);
+        if (event?.type === "error" && event.error?.code === "previous_response_not_found") {
+          outcomeState.continuationError = {
+            code: "previous_response_not_found",
+            status: event.status === 409 ? 409 : 400,
+          };
+        }
+      } catch {
+        // Arbitrary text is not evidence of a structured continuation error.
+      }
+    }
     if (!firstEventSeen) {
       const payloadTooLargeMessage = getUpstreamPayloadTooLargeMessage(text);
       if (payloadTooLargeMessage !== null) {
@@ -884,6 +961,7 @@ export async function tryResponsesWebsocketUpstream(options: {
   }
   if (!openResult.ok) {
     finishRequest({ closeCode: 1011, forgetSession: true });
+    if (protectedContinuation) throw new ResponsesWsContinuationError(openResult.reason);
     return {
       failed: true,
       reason: openResult.reason,
@@ -893,7 +971,18 @@ export async function tryResponsesWebsocketUpstream(options: {
   }
 
   if (sessionId && canRetainFreshSession && !persistentEntry && !socketClosed) {
-    persistentEntry = registerPersistentSession(sessionId, fingerprint, ws);
+    persistentEntry = registerPersistentSession(
+      {
+        sessionId,
+        generation,
+        providerId: options.provider.id,
+        endpointId: options.endpointId ?? null,
+        upstreamUrl: options.upstreamUrl,
+        fingerprint,
+        connectionLocal,
+      },
+      ws
+    );
   }
 
   // Upstream WS is open and at least one event was received. Each downstream
@@ -968,6 +1057,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     clearMessageQueue();
     controller.close();
     if (sessionId && persistentEntry && !terminalEventShouldClosePersistent) {
+      persistentEntry.connectionLocal = connectionLocal;
       finishRequest();
     } else {
       finishRequest({ closeCode: 1000, forgetSession: true });
@@ -1028,14 +1118,19 @@ export async function tryResponsesWebsocketUpstream(options: {
   });
 
   return {
-    response: new Response(stream, {
-      status: 200,
-      headers: {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache, no-transform",
-        "x-cch-upstream-transport": "websocket",
-      },
-    }),
+    response: attachResponsesWsOutcome(
+      new Response(stream, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache, no-transform",
+          "x-cch-upstream-transport": "websocket",
+          [RESPONSES_WS_CONNECTION_LOCAL_HEADER]: connectionLocal ? "1" : "0",
+          [RESPONSES_WS_GENERATION_HEADER]: generation,
+        },
+      }),
+      outcomeState
+    ),
     connected: true,
     reused,
   };

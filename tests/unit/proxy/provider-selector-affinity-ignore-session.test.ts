@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Provider } from "@/types/provider";
 
 /**
@@ -50,6 +50,9 @@ const sessionManagerMocks = vi.hoisted(() => ({
     })),
   },
 }));
+
+const wsBindingMocks = vi.hoisted(() => ({ getResponsesWsSessionBinding: vi.fn() }));
+vi.mock("@/app/v1/_lib/responses-ws/upstream-adapter", () => wsBindingMocks);
 
 const providerRepositoryMocks = vi.hoisted(() => ({
   findProviderById: vi.fn(async () => null as Provider | null),
@@ -109,6 +112,13 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
 });
 
 import { ProxyProviderResolver } from "@/app/v1/_lib/proxy/provider-selector";
+import { getResponsesWsContinuationBinding } from "@/app/v1/_lib/responses-ws/continuation";
+import { ResponsesWsContinuationError } from "@/app/v1/_lib/proxy/errors";
+import {
+  INTERNAL_SECRET_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+  RESPONSES_WS_SESSION_HEADER,
+} from "@/app/v1/_lib/responses-ws/internal-secret";
 import { computeFingerprintChain } from "@/app/v1/_lib/proxy/affinity/fingerprint";
 
 function makeProvider(id: number, overrides: Partial<Provider> = {}): Provider {
@@ -509,4 +519,126 @@ describe("metrics-only and endpoint policy gating", () => {
     expect(storeMocks.lookup).not.toHaveBeenCalled();
     expect(session.provider?.id).toBe(55);
   });
+});
+
+describe("connection-local Responses WS provider pinning", () => {
+  const binding = {
+    sessionId: "physical-ws",
+    generation: "generation-1",
+    providerId: 42,
+    endpointId: 7,
+    upstreamUrl: "https://bound.example/v1/responses",
+    fingerprint: "headers-1",
+    connectionLocal: true,
+    active: false,
+  };
+  const provider = () => makeProvider(42, { providerType: "codex", disableSessionReuse: true });
+  const session = () =>
+    makeSession({
+      sessionId: "public-session",
+      originalFormat: "response",
+      getOriginalModel: () => "gpt-test",
+      headers: new Headers({
+        "x-cch-client-transport": "websocket",
+        [INTERNAL_SECRET_HEADER]: "ws-selector-test",
+        [WS_FORWARD_FLAG_HEADER]: "1",
+        [RESPONSES_WS_SESSION_HEADER]: "physical-ws",
+      }),
+      request: { message: { store: false, previous_response_id: "resp-test", stream: true } },
+      shouldReuseProvider: () => true,
+    });
+  beforeEach(() => {
+    vi.stubEnv("CCH_RESPONSES_WS_INTERNAL_SECRET", "ws-selector-test");
+    wsBindingMocks.getResponsesWsSessionBinding.mockReturnValue({ ...binding });
+    providerRepositoryMocks.findProviderById.mockResolvedValue(provider());
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  test("pins the idle socket's provider before Redis bindings, affinity and random selection", async () => {
+    sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(99);
+    storeMocks.lookup.mockResolvedValue(affinityHint);
+    const request = session();
+    await expect(ProxyProviderResolver.ensure(request)).resolves.toBeNull();
+    expect(request.provider.id).toBe(42);
+    expect(getResponsesWsContinuationBinding(request)).toEqual(binding);
+    expect(sessionManagerMocks.SessionManager.getSessionProvider).not.toHaveBeenCalled();
+    expect(storeMocks.lookup).not.toHaveBeenCalled();
+    expect(request.getProvidersSnapshot).not.toHaveBeenCalled();
+    expect(rateLimitMocks.RateLimitService.checkAndTrackProviderSession).toHaveBeenCalledWith(
+      42,
+      "public-session",
+      0
+    );
+  });
+
+  test("allows a live prior stored response when this turn requests store=false", async () => {
+    wsBindingMocks.getResponsesWsSessionBinding.mockReturnValue({
+      ...binding,
+      connectionLocal: false,
+    });
+    const request = session();
+    await expect(ProxyProviderResolver.ensure(request)).resolves.toBeNull();
+    expect(request.provider.id).toBe(42);
+  });
+
+  test.each([null, { ...binding, active: true }])(
+    "rejects missing or busy bindings without choosing a provider",
+    async (state) => {
+      wsBindingMocks.getResponsesWsSessionBinding.mockReturnValue(state);
+      const request = session();
+      await expect(ProxyProviderResolver.ensure(request)).rejects.toBeInstanceOf(
+        ResponsesWsContinuationError
+      );
+      expect(providerRepositoryMocks.findProviderById).not.toHaveBeenCalled();
+      expect(request.getProvidersSnapshot).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    { isEnabled: false },
+    { groupTag: "private" },
+    { allowedModels: ["other-model"] },
+    { blockedClients: ["*"] },
+    { providerType: "claude" as const },
+  ])(
+    "rejects provider permissions or eligibility changes without switching: %j",
+    async (overrides) => {
+      providerRepositoryMocks.findProviderById.mockResolvedValue(
+        makeProvider(42, { providerType: "codex", ...overrides })
+      );
+      const request = session();
+      await expect(ProxyProviderResolver.ensure(request)).rejects.toBeInstanceOf(
+        ResponsesWsContinuationError
+      );
+      expect(request.getProvidersSnapshot).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(["window", "total", "concurrent"])(
+    "still enforces %s limits and never falls back",
+    async (kind) => {
+      if (kind === "window")
+        rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockResolvedValue({
+          allowed: false,
+        });
+      if (kind === "total")
+        rateLimitMocks.RateLimitService.checkTotalCostLimit.mockResolvedValue({
+          allowed: false,
+          current: 1,
+        });
+      if (kind === "concurrent")
+        rateLimitMocks.RateLimitService.checkAndTrackProviderSession.mockResolvedValue({
+          allowed: false,
+          count: 1,
+          tracked: false,
+          referenced: false,
+        });
+      const request = session();
+      await expect(ProxyProviderResolver.ensure(request)).rejects.toBeInstanceOf(
+        ResponsesWsContinuationError
+      );
+      expect(request.getProvidersSnapshot).not.toHaveBeenCalled();
+      expect(request.recordProviderSessionRef).not.toHaveBeenCalled();
+    }
+  );
 });

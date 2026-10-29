@@ -18,7 +18,22 @@ const disk = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 vi.mock("node:fs/promises", () => disk);
-vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }));
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    fatal: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    level: "silent",
+  },
+}));
+// Disk lifetime tests do not require the stream gate's Redis cache subscriptions.
+vi.mock("@/lib/redis/client", () => ({
+  getRedisClient: vi.fn(() => null),
+  closeRedis: vi.fn(async () => {}),
+}));
 beforeEach(() => getMemoryGovernor().setEnabled(true));
 afterEach(() => {
   vi.useRealTimers();

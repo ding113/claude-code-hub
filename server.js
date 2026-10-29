@@ -45,6 +45,10 @@ const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
 const WS_SESSION_HEADER = "x-cch-responses-ws-session";
+const WS_PRIOR_LOCAL_HEADER = "x-cch-responses-ws-prior-local";
+const UPSTREAM_CONNECTION_LOCAL_HEADER = "x-cch-upstream-connection-local";
+const UPSTREAM_TRANSPORT_HEADER = "x-cch-upstream-transport";
+const WS_GENERATION_HEADER = "x-cch-responses-ws-generation";
 const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
 const INTERNAL_SECRET_ENV = "CCH_RESPONSES_WS_INTERNAL_SECRET";
 
@@ -261,6 +265,7 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
   let closed = false;
   let closing = false;
   let turnSequence = 0;
+  let lastResponseWasLocal = false;
   // Track the in-flight internal HTTP ClientRequest so we can abort it when
   // the client WebSocket disconnects mid-stream — otherwise the SSE consumer
   // (and provider concurrency / breaker counters) keep running for minutes.
@@ -461,14 +466,16 @@ async function handleWebSocketConnection(ws, req, internalHttpTarget) {
       responsesWsSessionId,
       registerTurnResource,
       requestClose,
-      internalHttpTarget
+      internalHttpTarget,
+      lastResponseWasLocal
     );
     raw = "";
     frame = null;
     body = null;
 
     try {
-      await forwarding;
+      const result = await forwarding;
+      if (result?.completed) lastResponseWasLocal = result.connectionLocal;
     } finally {
       turnActive = false;
       if (currentInternalReq === turnReq) currentInternalReq = null;
@@ -547,7 +554,8 @@ async function forwardToInternalHttp(
   responsesWsSessionId,
   registerInternalReq,
   requestClose,
-  internalHttpTarget
+  internalHttpTarget,
+  priorResponseWasLocal = false
 ) {
   // requestClose(code, reason) initiates the WebSocket closing handshake AND
   // synchronously marks the client connection closed so the caller's pending
@@ -601,6 +609,13 @@ async function forwardToInternalHttp(
   if (typeof responsesWsSessionId === "string" && responsesWsSessionId.length > 0) {
     internalHeaders[WS_SESSION_HEADER] = responsesWsSessionId;
   }
+  if (
+    priorResponseWasLocal &&
+    typeof body.previous_response_id === "string" &&
+    body.previous_response_id.length > 0
+  ) {
+    internalHeaders[WS_PRIOR_LOCAL_HEADER] = "1";
+  }
   // Per-process loopback secret. Read from process.env so it can be picked
   // up by any code path that needs to verify (the TS forwarder reads the
   // same env var via `internal-secret.ts`). The secret is generated at
@@ -621,7 +636,7 @@ async function forwardToInternalHttp(
   bodyForHttp = null;
   internalHeaders["content-length"] = String(payload.length);
 
-  await new Promise((resolve) => {
+  return await new Promise((resolve) => {
     let cleanupRequestBody = () => {};
     let turnFinished = false;
     const forceSettleTurn = () => {
@@ -648,17 +663,50 @@ async function forwardToInternalHttp(
       (res) => {
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
+        const connectionLocal = res.headers[UPSTREAM_CONNECTION_LOCAL_HEADER] === "1";
+        const upstreamTransport = res.headers[UPSTREAM_TRANSPORT_HEADER];
+        const upstreamGeneration = res.headers[WS_GENERATION_HEADER];
         let responseSettled = false;
         let responseBodyEnded = false;
         let terminalSendAcknowledged = false;
         let terminalFailureQueued = false;
+        let terminalEventType = null;
+        let previousResponseNotFound = false;
+        const hasRetainedLocalBinding = () => {
+          if (upstreamTransport !== "websocket" || typeof upstreamGeneration !== "string") {
+            return false;
+          }
+          if (upstreamGeneration.length === 0) return false;
+          const getBinding = globalThis.__cchGetResponsesWsSessionBinding;
+          if (typeof getBinding !== "function") return false;
+          try {
+            const binding = getBinding(responsesWsSessionId);
+            return (
+              binding?.generation === upstreamGeneration &&
+              binding.connectionLocal === true &&
+              binding.active === false
+            );
+          } catch {
+            return false;
+          }
+        };
         const settleResponse = () => {
           if (responseSettled) return false;
           if (!responseBodyEnded || !terminalSendAcknowledged) return false;
           responseSettled = true;
           turnFinished = true;
           cleanupRequestBody();
-          resolve();
+          // Validate after both the terminal send and HTTP body finish: the
+          // upstream socket can disappear while either acknowledgement waits.
+          // Close synchronously before resolving so queued turns cannot race
+          // ahead on a connection that has lost its continuation state.
+          if (previousResponseNotFound || (connectionLocal && !hasRetainedLocalBinding())) {
+            initiateClose(1000, "upstream_transport_reset");
+          }
+          resolve({
+            completed: terminalEventType !== null && terminalEventType !== "error",
+            connectionLocal,
+          });
           return true;
         };
         const acknowledgeTerminalSend = () => {
@@ -730,6 +778,8 @@ async function forwardToInternalHttp(
             }
             const isHttpError = !!(res.statusCode && res.statusCode >= 400);
             if (isHttpError) {
+              terminalEventType = "error";
+              previousResponseNotFound = parsed?.error?.code === "previous_response_not_found";
               safeSend(
                 ws,
                 {
@@ -748,6 +798,7 @@ async function forwardToInternalHttp(
                 status: res.statusCode,
               });
             } else {
+              terminalEventType = "response.completed";
               safeSend(
                 ws,
                 { type: "response.completed", response: parsed },
@@ -786,7 +837,6 @@ async function forwardToInternalHttp(
         let buffer = "";
         let delimiterScanOffset = 0;
         let sawTerminal = false;
-        let terminalEventType = null;
         const EVENT_DELIMITER = /\r?\n\r?\n/g;
         const failIfUnsettled = (code, message, closeReason) => {
           if (responseSettled) return;
@@ -830,12 +880,13 @@ async function forwardToInternalHttp(
                 // Some upstreams close SSE with [DONE] without a preceding
                 // response.completed. Synthesize one so the client sees a
                 // clean terminal event.
+                sawTerminal = true;
+                terminalEventType = "response.completed";
                 safeSend(ws, { type: "response.completed", response: null }, {
                   response: res,
                   onSuccess: acknowledgeTerminalSend,
                   onFailure: settleAndClose,
                 });
-                sawTerminal = true;
               }
               return;
             }
@@ -852,14 +903,19 @@ async function forwardToInternalHttp(
             }
             const isTerminalEvent =
               event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type);
+            if (isTerminalEvent) {
+              sawTerminal = true;
+              terminalEventType = event.type;
+              previousResponseNotFound =
+                event.error?.code === "previous_response_not_found" ||
+                event.response?.error?.code === "previous_response_not_found";
+            }
             safeSend(ws, event, {
               response: res,
               onSuccess: isTerminalEvent ? acknowledgeTerminalSend : undefined,
               onFailure: settleAndClose,
             });
             if (isTerminalEvent) {
-              sawTerminal = true;
-              terminalEventType = event.type;
               log("info", "ws_terminal_event_sent", { type: event.type, source: "sse" });
             }
         };

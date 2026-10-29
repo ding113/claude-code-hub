@@ -61,6 +61,7 @@ import {
   recordVendorTypeAllEndpointsTimeout,
 } from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
+import { findProviderEndpointById } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -77,6 +78,13 @@ import {
   OPENCODE_SESSION_HEADER,
   resolveAnthropicAuthHeaders,
 } from "../headers";
+import {
+  copyResponsesWsOutcome,
+  getResponsesWsContinuationBinding,
+  getResponsesWsOutcome,
+  isConnectionLocalResponsesWsContinuation,
+  isConnectionLocalResponsesWsRequest,
+} from "../responses-ws/continuation";
 import {
   evaluateResponsesWsEligibility,
   getResponsesWsSessionId,
@@ -116,6 +124,7 @@ import {
   isRetryableUpstreamStorageCapacityError,
   isSSLCertificateError,
   ProxyError,
+  ResponsesWsContinuationError,
   sanitizeUrl,
 } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -1677,6 +1686,13 @@ export class ProxyForwarder {
     try {
       return await ProxyForwarder.sendInternal(session);
     } catch (error) {
+      if (
+        error instanceof ResponsesWsContinuationError ||
+        isConnectionLocalResponsesWsContinuation(session.headers ?? {}, session.request.message)
+      ) {
+        if (session.provider)
+          ProxyForwarder.releaseProviderSessionRef(session, session.provider.id);
+      }
       await abortReplayOwnership(session, "forward_failed");
       throw error;
     }
@@ -1685,6 +1701,20 @@ export class ProxyForwarder {
   private static async sendInternal(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
       throw new Error("代理上下文缺少供应商或鉴权信息");
+    }
+
+    const protectedContinuation = isConnectionLocalResponsesWsContinuation(
+      session.headers ?? {},
+      session.request.message
+    );
+    const continuationBinding = getResponsesWsContinuationBinding(session);
+    if (
+      protectedContinuation &&
+      (!continuationBinding ||
+        continuationBinding.active ||
+        continuationBinding.providerId !== session.provider.id)
+    ) {
+      throw new ResponsesWsContinuationError("upstream_connection_unavailable");
     }
 
     const requestStartedAt = Date.now();
@@ -1776,7 +1806,8 @@ export class ProxyForwarder {
 
     const env = getEnvConfig();
     const envDefaultMaxAttempts = clampRetryAttempts(env.MAX_RETRY_ATTEMPTS_DEFAULT);
-    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
+    const rawCrossProviderFallbackEnabled =
+      !protectedContinuation && session.isRawCrossProviderFallbackEnabled();
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
     const shouldSkipRawRetryAndProviderSwitch =
       !endpointPolicy.allowRetry && !rawCrossProviderFallbackEnabled;
@@ -1795,7 +1826,7 @@ export class ProxyForwarder {
         currentProvider,
         envDefaultMaxAttempts
       );
-      if (rawCrossProviderFallbackEnabled) {
+      if (rawCrossProviderFallbackEnabled || protectedContinuation) {
         maxAttemptsPerProvider = 1;
       }
       const reactiveRectifierRetryState: ReactiveRectifierRetryState = {
@@ -1824,7 +1855,28 @@ export class ProxyForwarder {
         baseUrl: string;
       }> = [];
 
-      if (isMcpRequest) {
+      if (protectedContinuation && continuationBinding) {
+        let currentBaseUrl = currentProvider.url;
+        if (continuationBinding.endpointId !== null) {
+          const endpoint = await findProviderEndpointById(continuationBinding.endpointId);
+          if (
+            !endpoint?.isEnabled ||
+            endpoint.deletedAt ||
+            endpoint.vendorId !== providerVendorId ||
+            endpoint.providerType !== currentProvider.providerType
+          ) {
+            throw new ResponsesWsContinuationError("bound_endpoint_unavailable");
+          }
+          currentBaseUrl = endpoint.url;
+        }
+        if (buildProxyUrl(currentBaseUrl, session.requestUrl) !== continuationBinding.upstreamUrl) {
+          throw new ResponsesWsContinuationError("bound_endpoint_changed");
+        }
+        endpointCandidates.push({
+          endpointId: continuationBinding.endpointId,
+          baseUrl: currentBaseUrl,
+        });
+      } else if (isMcpRequest) {
         endpointCandidates.push({
           endpointId: null,
           baseUrl: currentProvider.url,
@@ -1986,6 +2038,9 @@ export class ProxyForwarder {
           currentProvider.providerType
         ))
       ) {
+        if (protectedContinuation) {
+          throw new ResponsesWsContinuationError("bound_provider_unavailable");
+        }
         logger.warn("ProxyForwarder: Vendor-type circuit is open, skipping provider", {
           providerId: currentProvider.id,
           vendorId: currentProvider.providerVendorId,
@@ -2073,6 +2128,10 @@ export class ProxyForwarder {
             const shouldRunPrecommitGate = isStreamGatePrecommitActive(highConcurrencyMode);
             if (
               shouldRunPrecommitGate &&
+              !isConnectionLocalResponsesWsRequest(
+                session.headers ?? {},
+                session.request.message
+              ) &&
               response.body &&
               (session.getEndpointPolicy().kind !== "raw_passthrough" || forceCodexResponsesStream)
             ) {
@@ -2194,17 +2253,20 @@ export class ProxyForwarder {
                     : {}),
                 });
 
-                streamingResponse = new Response(
-                  ProxyForwarder.buildBufferedPrefixStream(
-                    gate.prefixChunks,
-                    gateReader,
-                    gate.prebufferLease
-                  ),
-                  {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                  }
+                streamingResponse = copyResponsesWsOutcome(
+                  response,
+                  new Response(
+                    ProxyForwarder.buildBufferedPrefixStream(
+                      gate.prefixChunks,
+                      gateReader,
+                      gate.prebufferLease
+                    ),
+                    {
+                      status: response.status,
+                      statusText: response.statusText,
+                      headers: response.headers,
+                    }
+                  )
                 );
               }
             }
@@ -2221,6 +2283,7 @@ export class ProxyForwarder {
               endpointId: activeEndpoint.endpointId,
               endpointUrl: endpointAudit.endpointUrl,
               upstreamStatusCode: response.status,
+              responsesWsOutcome: getResponsesWsOutcome(response),
               bindingIntent: session.isSessionBindingAllowed() ? undefined : "none",
               healthAttemptId: `legacy-serial-${totalProvidersAttempted}-${attemptCount}`,
               healthAttemptStartedAtMonotonic: attemptStartedAtMonotonic,
@@ -2537,6 +2600,16 @@ export class ProxyForwarder {
           return response; // ⭐ 成功：立即返回，结束所有循环
         } catch (error) {
           lastError = error as Error;
+          if (lastError instanceof ResponsesWsContinuationError) {
+            session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
+              reason: "client_error_non_retryable",
+              attemptNumber: attemptCount,
+              statusCode: 400,
+              errorMessage: lastError.message,
+            });
+            throw lastError;
+          }
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
           // 使用异步版本确保错误规则已加载
@@ -2693,16 +2766,18 @@ export class ProxyForwarder {
           }
 
           // 2.5 Reactive rectifier：命中后对同供应商“整流 + 重试一次”
-          const reactiveRectifierResult = await tryApplyReactiveRectifier({
-            error: lastError,
-            provider: currentProvider,
-            requestSession: session,
-            persistSession: session,
-            errorMessage,
-            attemptNumber: attemptCount,
-            retryAttemptNumber: attemptCount + 1,
-            retryState: reactiveRectifierRetryState,
-          });
+          const reactiveRectifierResult = protectedContinuation
+            ? { matched: false as const }
+            : await tryApplyReactiveRectifier({
+                error: lastError,
+                provider: currentProvider,
+                requestSession: session,
+                persistSession: session,
+                errorMessage,
+                attemptNumber: attemptCount,
+                retryAttemptNumber: attemptCount + 1,
+                retryState: reactiveRectifierRetryState,
+              });
 
           if (reactiveRectifierResult.matched) {
             if (!reactiveRectifierResult.applied) {
@@ -2847,6 +2922,13 @@ export class ProxyForwarder {
             });
 
             if (shouldSkipRawRetryAndProviderSwitch) {
+              if (
+                protectedContinuation &&
+                shouldAccountCircuitBreaker &&
+                getEnvConfig().ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS
+              ) {
+                await recordFailure(currentProvider.id, lastError);
+              }
               logger.debug(
                 "ProxyForwarder: raw passthrough endpoint system error, skipping retry and provider switch",
                 {
@@ -3114,7 +3196,11 @@ export class ProxyForwarder {
             }
 
             // Raw passthrough endpoints: no circuit breaker, no provider switch, no retry
-            if (!endpointPolicy.allowRetry && !rawCrossProviderFallbackEnabled) {
+            if (
+              !endpointPolicy.allowRetry &&
+              !rawCrossProviderFallbackEnabled &&
+              !protectedContinuation
+            ) {
               logger.debug(
                 "ProxyForwarder: raw passthrough endpoint error, skipping circuit breaker and provider switch",
                 {
@@ -3227,6 +3313,11 @@ export class ProxyForwarder {
         }
       } // ========== 内层循环结束 ==========
 
+      // A continuation may never migrate to another provider or upstream connection.
+      if (protectedContinuation) {
+        throw lastError ?? new ResponsesWsContinuationError("upstream_connection_unavailable");
+      }
+
       // ========== 供应商切换逻辑 ==========
       const alternativeProvider = await ProxyForwarder.selectAlternative(
         session,
@@ -3283,6 +3374,7 @@ export class ProxyForwarder {
     const [session, provider, , , , , externalSignal, , onLocalAdmissionWait] = args;
     if (
       !provider ||
+      isConnectionLocalResponsesWsRequest(session.headers ?? {}, session.request.message) ||
       !mapProviderTypeToFamily(provider.providerType) ||
       !isStreamGatePrecommitActive(session.isHighConcurrencyModeEnabled())
     ) {
@@ -3318,7 +3410,9 @@ export class ProxyForwarder {
         (lease as StreamGatePrebufferLease | null)?.release();
         lease = null;
       }
-      return lease ? prepareGateResponse(response, lease) : response;
+      return lease
+        ? copyResponsesWsOutcome(response, prepareGateResponse(response, lease))
+        : response;
     } catch (error) {
       (lease as StreamGatePrebufferLease | null)?.release();
       throw error;
@@ -3906,6 +4000,18 @@ export class ProxyForwarder {
       });
     }
 
+    const finalResponsesWsBody = isWebsocketClientRequest(session.headers)
+      ? decodeRequestBodyAsJson(requestBody)
+      : null;
+    const protectedFinalContinuation = Boolean(
+      finalResponsesWsBody &&
+        isConnectionLocalResponsesWsContinuation(session.headers, finalResponsesWsBody)
+    );
+    const continuationBinding = getResponsesWsContinuationBinding(session);
+    if (protectedFinalContinuation && !continuationBinding) {
+      throw new ResponsesWsContinuationError("upstream_connection_unavailable");
+    }
+
     if (session.shouldPersistSessionDebugArtifacts()) {
       const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
       detailSnapshotSession.detailSnapshotRequestAfter = {
@@ -4155,7 +4261,7 @@ export class ProxyForwarder {
           // request-filter transformations. Falling back to
           // session.request.message would skip those rewrites and could leak
           // private fields or cause the upstream to reject the request.
-          const requestBodyJson = decodeRequestBodyAsJson(requestBody);
+          const requestBodyJson = finalResponsesWsBody ?? decodeRequestBodyAsJson(requestBody);
 
           if (requestBodyJson) {
             onUpstreamDispatch?.();
@@ -4167,6 +4273,7 @@ export class ProxyForwarder {
               sessionId: getResponsesWsSessionId(session.headers),
               endpointId: responsesWsEndpointId,
               abortSignal: transportController.signal,
+              continuationBinding: getResponsesWsContinuationBinding(session),
             });
 
             if ("response" in wsResult) {
@@ -4184,6 +4291,9 @@ export class ProxyForwarder {
                 attemptNumber: undefined,
               });
             } else {
+              if (continuationBinding || protectedFinalContinuation) {
+                throw new ResponsesWsContinuationError("upstream_connection_unavailable");
+              }
               // Only cache when the failure proves the endpoint does not
               // speak the WS protocol (HTTP 4xx / 501 on the upgrade). Any
               // transient failure (network, auth, silent upstream) should
@@ -4212,6 +4322,8 @@ export class ProxyForwarder {
               });
             }
           }
+        } else if (continuationBinding || protectedFinalContinuation) {
+          throw new ResponsesWsContinuationError("upstream_websocket_unavailable");
         } else if (wsEligibility.isWebsocketClient && wsEligibility.downgradeReason) {
           session.addProviderToChain(provider, {
             reason: "responses_ws_fallback",
@@ -4222,6 +4334,7 @@ export class ProxyForwarder {
           });
         }
       } catch (wsError) {
+        if (continuationBinding || protectedFinalContinuation) throw wsError;
         logger.warn(
           "ProxyForwarder: Upstream Responses WebSocket attempt threw, falling back to HTTP",
           {
@@ -4232,6 +4345,10 @@ export class ProxyForwarder {
             ),
           }
         );
+      }
+
+      if ((continuationBinding || protectedFinalContinuation) && !responsesWsResponse) {
+        throw new ResponsesWsContinuationError("upstream_websocket_unavailable");
       }
 
       // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
@@ -4417,6 +4534,11 @@ export class ProxyForwarder {
           undefined,
           true
         );
+      }
+
+      if (getResponsesWsContinuationBinding(session)) {
+        cleanupCombinedSignal();
+        throw fetchError;
       }
 
       // ⭐ HTTP/2 协议错误检测与透明回退
@@ -4735,6 +4857,33 @@ export class ProxyForwarder {
       }
     }
 
+    const authoritativeHeaders = new Headers(response.headers);
+    for (const name of [
+      "x-cch-upstream-connection-local",
+      "x-cch-responses-ws-generation",
+      "x-cch-upstream-transport",
+    ]) {
+      authoritativeHeaders.delete(name);
+    }
+    if (isWebsocketClientRequest(session.headers)) {
+      const outcome = getResponsesWsOutcome(response);
+      const connectionLocal = finalResponsesWsBody?.store === false;
+      authoritativeHeaders.set("x-cch-upstream-connection-local", connectionLocal ? "1" : "0");
+      authoritativeHeaders.set("x-cch-upstream-transport", outcome ? "websocket" : "http");
+      if (outcome) {
+        outcome.connectionLocal = connectionLocal;
+        authoritativeHeaders.set("x-cch-responses-ws-generation", outcome.generation);
+      }
+    }
+    response = copyResponsesWsOutcome(
+      response,
+      new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: authoritativeHeaders,
+      })
+    );
+
     // Successful responses transfer abort ownership to ResponseHandler.
     // Error bodies are consumed here, so their client listener must remain
     // attached until fromUpstreamResponse() finishes or is aborted.
@@ -4817,7 +4966,10 @@ export class ProxyForwarder {
 
   private static shouldUseStreamingHedge(session: ProxySession): boolean {
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
-    if (session.isStreamingHedgeDisabled()) {
+    if (
+      session.isStreamingHedgeDisabled() ||
+      isConnectionLocalResponsesWsRequest(session.headers ?? {}, session.request.message)
+    ) {
       return false;
     }
     return (
@@ -4959,16 +5111,13 @@ export class ProxyForwarder {
     const endpointPolicyGetter = policySession.getEndpointPolicy;
     const getterResult =
       typeof endpointPolicyGetter === "function" ? endpointPolicyGetter.call(session) : null;
-    if (getterResult) {
-      return getterResult;
-    }
-
-    const attachedPolicy = policySession.endpointPolicy;
-    if (attachedPolicy) {
-      return attachedPolicy;
-    }
-
-    return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
+    const policy =
+      getterResult ??
+      policySession.endpointPolicy ??
+      resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
+    return isConnectionLocalResponsesWsContinuation(session.headers ?? {}, session.request.message)
+      ? { ...policy, allowRetry: false, allowProviderSwitch: false }
+      : policy;
   }
 
   private static async sendStreamingWithHedge(
@@ -6137,23 +6286,27 @@ export class ProxyForwarder {
         endpointId: attempt.endpointAudit.endpointId,
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
+        responsesWsOutcome: getResponsesWsOutcome(attempt.response),
         isHedgeWinner: isActualHedgeWin,
         billHedgeLosers,
         bindingIntent: session.isSessionBindingAllowed() ? undefined : "none",
         hedgeBindingAuthorityPromise,
       });
 
-      const response = new Response(
-        ProxyForwarder.buildBufferedPrefixStream(
-          prefixChunks,
-          attempt.reader,
-          attempt.gatePrebufferLease
-        ),
-        {
-          status: attempt.response.status,
-          statusText: attempt.response.statusText,
-          headers: attempt.response.headers,
-        }
+      const response = copyResponsesWsOutcome(
+        attempt.response,
+        new Response(
+          ProxyForwarder.buildBufferedPrefixStream(
+            prefixChunks,
+            attempt.reader,
+            attempt.gatePrebufferLease
+          ),
+          {
+            status: attempt.response.status,
+            statusText: attempt.response.statusText,
+            headers: attempt.response.headers,
+          }
+        )
       );
       // 前缀流已取得这些 chunks 的所有权；赢家不再需要输家计量引用。
       attempt.billingPrefixChunks = null;
@@ -7181,6 +7334,7 @@ export class ProxyForwarder {
         endpointId: attempt.endpointAudit.endpointId,
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
+        responsesWsOutcome: getResponsesWsOutcome(attempt.response),
         isHedgeWinner: false,
         billHedgeLosers,
         bindingIntent,
@@ -7193,13 +7347,16 @@ export class ProxyForwarder {
       leaseTransferred = true;
       const prefix = attempt.chunks.takeOwned();
       resolveResult?.({
-        response: new Response(
-          ProxyForwarder.buildBufferedPrefixStream(prefix.chunks, attempt.reader, prefix.lease),
-          {
-            status: attempt.response.status,
-            statusText: attempt.response.statusText,
-            headers: attempt.response.headers,
-          }
+        response: copyResponsesWsOutcome(
+          attempt.response,
+          new Response(
+            ProxyForwarder.buildBufferedPrefixStream(prefix.chunks, attempt.reader, prefix.lease),
+            {
+              status: attempt.response.status,
+              statusText: attempt.response.statusText,
+              headers: attempt.response.headers,
+            }
+          )
         ),
       });
     };
@@ -9168,11 +9325,14 @@ export class ProxyForwarder {
         reader.releaseLock();
         const body = concatChunks(chunks.take()) ?? new Uint8Array(0);
         return {
-          response: new Response(body, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-          }),
+          response: copyResponsesWsOutcome(
+            response,
+            new Response(body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          ),
           text: new TextDecoder().decode(body),
           exceededLimit: false,
         };
@@ -9183,11 +9343,14 @@ export class ProxyForwarder {
         const prefixChunks = chunks.take();
         prefixChunks.push(value);
         return {
-          response: new Response(ProxyForwarder.buildBufferedPrefixStream(prefixChunks, reader), {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-          }),
+          response: copyResponsesWsOutcome(
+            response,
+            new Response(ProxyForwarder.buildBufferedPrefixStream(prefixChunks, reader), {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          ),
           text: undefined,
           exceededLimit: true,
         };
