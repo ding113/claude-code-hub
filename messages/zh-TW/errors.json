@@ -1,4 +1,7 @@
 {
+  "PROXY_MODEL_CATALOG_UNAVAILABLE": "模型目錄暫時無法使用，請稍後重試。",
+  "PROXY_MODEL_CATALOG_TOO_LARGE": "模型目錄超過支援的回應大小，請縮小允許的模型範圍。",
+  "PROXY_MODEL_CATALOG_CLIENT_DENIED": "此用戶端無權存取模型目錄。",
   "LOCAL_CAPACITY_EXCEEDED": "本機請求處理容量不足，請稍後重試。",
   "_comment": "Error messages for Chinese Traditional",
 

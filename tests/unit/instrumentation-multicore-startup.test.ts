@@ -53,6 +53,7 @@ describe("request-only multicore instrumentation startup", { concurrent: false }
     const ensureSystemSettingsCacheSubscription = vi.fn(async () => true);
     const reloadErrorRules = vi.fn(async () => {});
     const getProxyRuntimeSettings = vi.fn(async () => ({}));
+    const startCodexModelCatalogScheduler = vi.fn();
     const backgroundQueueModuleFactory = vi.fn(() => ({ scheduleAutoCleanup: vi.fn() }));
 
     vi.doMock("@/drizzle/admitted-client", () => ({ findSafeDatabaseError: () => null }));
@@ -85,6 +86,9 @@ describe("request-only multicore instrumentation startup", { concurrent: false }
       errorRuleDetector: { reload: reloadErrorRules },
     }));
     vi.doMock("@/lib/system-settings/proxy-runtime", () => ({ getProxyRuntimeSettings }));
+    vi.doMock("@/lib/cache/codex-model-catalog-cache", () => ({
+      startCodexModelCatalogScheduler,
+    }));
     vi.doMock("@/lib/log-cleanup/cleanup-queue", backgroundQueueModuleFactory);
 
     const processOn = vi
@@ -106,6 +110,7 @@ describe("request-only multicore instrumentation startup", { concurrent: false }
     expect(startBackgroundReload).toHaveBeenCalledWith({ reason: "startup" });
     expect(reloadErrorRules).toHaveBeenCalledTimes(1);
     expect(getProxyRuntimeSettings).toHaveBeenCalledTimes(1);
+    expect(startCodexModelCatalogScheduler).toHaveBeenCalledOnce();
     expect(runMigrations).not.toHaveBeenCalled();
     expect(backgroundQueueModuleFactory).not.toHaveBeenCalled();
     expect(exit).not.toHaveBeenCalled();

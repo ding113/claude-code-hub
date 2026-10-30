@@ -1,4 +1,7 @@
 {
+  "PROXY_MODEL_CATALOG_UNAVAILABLE": "模型目录暂时不可用，请稍后重试。",
+  "PROXY_MODEL_CATALOG_TOO_LARGE": "模型目录超过支持的响应大小，请缩小允许的模型范围。",
+  "PROXY_MODEL_CATALOG_CLIENT_DENIED": "此客户端无权访问模型目录。",
   "LOCAL_CAPACITY_EXCEEDED": "本地请求处理容量不足，请稍后重试。",
   "_comment": "Error messages for Chinese Simplified",
 

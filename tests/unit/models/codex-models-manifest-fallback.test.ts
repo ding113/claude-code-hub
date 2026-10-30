@@ -1,173 +1,148 @@
+import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/repository/key", () => ({
-  resolveApiKeyAuthOutcome: vi.fn(),
-}));
-
-vi.mock("@/repository/provider", () => ({
-  findAllProviders: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("@/lib/proxy-agent", () => ({
-  createProxyAgentForProvider: vi.fn(),
-}));
-
-vi.mock("@/lib/utils/timezone", () => ({
-  resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
-}));
-
-vi.mock("@/lib/utils/provider-schedule", () => ({
-  isProviderActiveNow: vi.fn().mockReturnValue(true),
-}));
-
-vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
-  checkProviderGroupMatch: vi.fn().mockReturnValue(true),
-}));
-
-vi.mock("next-intl/server", () => ({
-  getLocale: vi.fn().mockResolvedValue("en"),
-}));
-
+vi.mock("@/repository/key", () => ({ resolveApiKeyAuthOutcome: vi.fn() }));
+vi.mock("@/repository/provider", () => ({ findAllProviders: vi.fn(async () => []) }));
+vi.mock("@/lib/utils/timezone", () => ({ resolveSystemTimezone: vi.fn(async () => "UTC") }));
+vi.mock("@/app/v1/_lib/models/codex-model-catalog-service", () => {
+  class CodexModelCatalogUnavailableError extends Error {}
+  class CodexModelCatalogTooLargeError extends Error {}
+  class CodexModelCatalogClientDeniedError extends Error {}
+  return {
+    getCodexModelCatalog: vi.fn(),
+    CodexModelCatalogUnavailableError,
+    CodexModelCatalogTooLargeError,
+    CodexModelCatalogClientDeniedError,
+  };
+});
+vi.mock("next-intl/server", () => ({ getLocale: vi.fn(async () => "en") }));
 vi.mock("@/lib/utils/error-messages", async () => {
   const actual = await vi.importActual<typeof import("@/lib/utils/error-messages")>(
     "@/lib/utils/error-messages"
   );
-  return {
-    ...actual,
-    getErrorMessageServer: vi.fn(async (_locale: string, code: string) => code),
-  };
+  return { ...actual, getErrorMessageServer: vi.fn(async (_locale: string, code: string) => code) };
 });
 
 import { handleAvailableModels } from "@/app/v1/_lib/models/available-models";
+import {
+  CodexModelCatalogClientDeniedError,
+  CodexModelCatalogTooLargeError,
+  CodexModelCatalogUnavailableError,
+  getCodexModelCatalog,
+} from "@/app/v1/_lib/models/codex-model-catalog-service";
 import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { findAllProviders } from "@/repository/provider";
 
-const CODEX_MODELS_ETAG = 'W/"cch-codex-bundled-v1"';
-
-function createApp() {
+const catalog = { models: [{ slug: "gpt-6.1-terra", visibility: "list" }] };
+const path = "/v1/models?client_version=0.164.0";
+function request(url = path, headers: Record<string, string> = {}) {
   const app = new Hono();
   app.get("/v1/models", handleAvailableModels);
   app.get("/v1beta/models", handleAvailableModels);
-  return app;
-}
-
-function authenticatedRequest(path: string, headers?: Record<string, string>) {
-  return createApp().request(`http://localhost${path}`, {
-    headers: {
-      authorization: "Bearer sk-test",
-      ...headers,
-    },
+  return app.request(`http://localhost${url}`, {
+    headers: { authorization: "Bearer test-key", ...headers },
   });
 }
 
-describe("Codex models manifest fallback", () => {
+describe("Codex native catalog handler", () => {
   beforeEach(() => {
     vi.mocked(resolveApiKeyAuthOutcome).mockResolvedValue({
       ok: true,
-      user: { id: 1, providerGroup: null, isEnabled: true, expiresAt: null },
-      key: { providerGroup: null, name: "test-key" },
+      user: { id: 1, providerGroup: null, isEnabled: true, expiresAt: null, allowedModels: [] },
+      key: { providerGroup: null, name: "test" },
     } as never);
+    vi.mocked(getCodexModelCatalog).mockResolvedValue(catalog as never);
     vi.mocked(findAllProviders).mockResolvedValue([]);
   });
 
-  it("returns an empty Codex manifest for a non-empty client_version", async () => {
-    const response = await authenticatedRequest("/v1/models?client_version=0.144.1");
-
+  it("returns the complete native directory and requests fresh authentication", async () => {
+    const response = await request();
     expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(catalog);
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("content-length")).toBe(
+      String(Buffer.byteLength(JSON.stringify(catalog)))
+    );
+    expect(response.headers.get("x-accel-buffering")).toBe("yes");
+    expect(resolveApiKeyAuthOutcome).toHaveBeenCalledWith("test-key", { fresh: true });
+    expect(getCodexModelCatalog).toHaveBeenCalledWith(
+      expect.any(Object),
+      "0.164.0",
+      expect.any(Headers)
+    );
+  });
+
+  it("rechecks permissions before honoring a matching ETag", async () => {
+    const etag = `W/"${createHash("sha256").update(JSON.stringify(catalog)).digest("hex")}"`;
+    const response = await request(path, { "if-none-match": etag });
+    expect(response.status).toBe(304);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(getCodexModelCatalog).toHaveBeenCalledOnce();
+    expect(resolveApiKeyAuthOutcome).toHaveBeenCalledWith("test-key", { fresh: true });
+  });
+
+  it("updates the ETag after the permission-filtered result changes", async () => {
+    const first = await request();
+    const previous = first.headers.get("etag");
+    vi.mocked(getCodexModelCatalog).mockResolvedValueOnce({ models: [] });
+    const response = await request(path, { "if-none-match": previous ?? "" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).not.toBe(previous);
     expect(await response.json()).toEqual({ models: [] });
-    expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
-    expect(response.headers.get("cache-control")).toBe("no-cache");
-    expect(findAllProviders).not.toHaveBeenCalled();
   });
 
-  it("returns 304 for matching If-None-Match validators", async () => {
-    for (const ifNoneMatch of [CODEX_MODELS_ETAG, `"other", ${CODEX_MODELS_ETAG}`, "*"]) {
-      const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
-        "if-none-match": ifNoneMatch,
-      });
-
-      expect(response.status).toBe(304);
-      expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
-      expect(response.headers.get("cache-control")).toBe("no-cache");
-      expect(await response.text()).toBe("");
-      expect(findAllProviders).not.toHaveBeenCalled();
-    }
-  });
-
-  it("keeps the OpenAI models response for requests without client_version", async () => {
-    const response = await authenticatedRequest("/v1/models");
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ object: "list", data: [] });
-    expect(response.headers.get("etag")).toBeNull();
-    expect(findAllProviders).toHaveBeenCalledTimes(1);
-  });
-
-  it("ignores a whitespace-only client_version", async () => {
-    const response = await authenticatedRequest("/v1/models?client_version=%20%20");
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ object: "list", data: [] });
-    expect(findAllProviders).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps Gemini model discovery for /v1beta/models with client_version", async () => {
-    const response = await authenticatedRequest("/v1beta/models?client_version=0.144.1");
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ models: [] });
-    expect(response.headers.get("etag")).toBeNull();
-    expect(findAllProviders).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps Gemini model discovery for x-goog-api-key requests with client_version", async () => {
-    const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
-      "x-goog-api-key": "gemini-key",
-    });
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ models: [] });
-    expect(response.headers.get("etag")).toBeNull();
-    expect(findAllProviders).toHaveBeenCalledTimes(1);
+  it("declares the complete UTF-8 body length for multibyte metadata", async () => {
+    vi.mocked(getCodexModelCatalog).mockResolvedValueOnce({
+      models: [{ ...catalog.models[0], display_name: "模型" }],
+    } as never);
+    const response = await request();
+    const body = await response.text();
+    expect(response.headers.get("content-length")).toBe(String(Buffer.byteLength(body, "utf8")));
+    expect(Buffer.byteLength(body, "utf8")).toBeGreaterThan(body.length);
   });
 
   it.each([
-    ["/v1/models?client_version=0.144.1&format=gemini", undefined],
-    ["/v1/models?client_version=0.144.1&api_type=gemini", undefined],
-    ["/v1/models?client_version=0.144.1", { "x-cch-api-type": "gemini" }],
-  ])("keeps explicit model format override for %s", async (path, headers) => {
-    const response = await authenticatedRequest(path, headers);
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ object: "list", data: [] });
-    expect(response.headers.get("etag")).toBeNull();
-    expect(findAllProviders).toHaveBeenCalledTimes(1);
+    [new CodexModelCatalogUnavailableError(), 503, "PROXY_MODEL_CATALOG_UNAVAILABLE"],
+    [new CodexModelCatalogTooLargeError(), 502, "PROXY_MODEL_CATALOG_TOO_LARGE"],
+    [new CodexModelCatalogClientDeniedError(), 403, "PROXY_MODEL_CATALOG_CLIENT_DENIED"],
+  ])("localizes catalog failures without caching them", async (error, status, code) => {
+    vi.mocked(getCodexModelCatalog).mockRejectedValueOnce(error);
+    const response = await request();
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: { message: code, type: code } });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("retry-after")).toBe(status === 503 ? "1" : null);
   });
 
-  it("still requires authentication before returning the fallback manifest", async () => {
-    const response = await createApp().request("http://localhost/v1/models?client_version=0.144.1");
-
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({
-      error: { message: "未提供认证凭据", type: "authentication_error" },
-    });
-    expect(resolveApiKeyAuthOutcome).not.toHaveBeenCalled();
-    expect(findAllProviders).not.toHaveBeenCalled();
-  });
-
-  it("rejects an invalid API key before returning the fallback manifest", async () => {
+  it("rejects authentication before evaluating a cached catalog", async () => {
     vi.mocked(resolveApiKeyAuthOutcome).mockResolvedValueOnce({
       ok: false,
-      reason: "not_found",
+      reason: "key_disabled",
     });
-
-    const response = await authenticatedRequest("/v1/models?client_version=0.144.1");
-
+    const response = await request(path, { "if-none-match": "*" });
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({
-      error: { message: "PROXY_INVALID_API_KEY", type: "invalid_api_key" },
-    });
-    expect(findAllProviders).not.toHaveBeenCalled();
+    expect(getCodexModelCatalog).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "/v1/models",
+    "/v1/models?client_version=%20%20",
+    "/v1/models?client_version=0.164.0&format=responses",
+  ])("preserves the ordinary model list for %s", async (url) => {
+    const response = await request(url);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ object: "list", data: [] });
+    expect(getCodexModelCatalog).not.toHaveBeenCalled();
+    expect(resolveApiKeyAuthOutcome).toHaveBeenCalledWith("test-key");
+  });
+
+  it("preserves the Gemini metadata route", async () => {
+    const response = await request("/v1beta/models?client_version=0.164.0");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ models: [] });
+    expect(getCodexModelCatalog).not.toHaveBeenCalled();
   });
 });

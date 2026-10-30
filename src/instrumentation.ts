@@ -470,6 +470,17 @@ async function warmupProxyRuntimeSettings(): Promise<void> {
   }
 }
 
+async function startCodexModelCatalogRuntime(): Promise<void> {
+  try {
+    const { startCodexModelCatalogScheduler } = await import(
+      "@/lib/cache/codex-model-catalog-cache"
+    );
+    startCodexModelCatalogScheduler();
+  } catch {
+    logger.warn("[Instrumentation] Model catalog scheduler initialization failed");
+  }
+}
+
 /**
  * 同一进程 cluster 内仅 slot 0 持有单例调度器和队列 consumer。每个网关 worker
  * 仍需初始化进程本地缓存、生命周期 hook 与可观测性。单进程和外部横向扩容部署
@@ -564,6 +575,7 @@ export async function register() {
           );
         }
         await warmupProxyRuntimeSettings();
+        await startCodexModelCatalogRuntime();
         logger.info("[Multicore] Request-only gateway worker ready");
         return;
       }
@@ -790,6 +802,7 @@ export async function register() {
 
       // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
       await warmupProxyRuntimeSettings();
+      await startCodexModelCatalogRuntime();
 
       logger.info("Application ready");
     }
@@ -959,6 +972,7 @@ export async function register() {
 
         // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
         await warmupProxyRuntimeSettings();
+        await startCodexModelCatalogRuntime();
       } else {
         logger.warn(
           "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"

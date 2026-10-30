@@ -100,6 +100,11 @@ export async function runApplicationCleanup(
       (async () => {
         const { stopCacheCleanup } = await import("@/lib/cache/session-cache");
         stopCacheCleanup();
+        (
+          globalThis as typeof globalThis & {
+            __CCH_CODEX_MODEL_CATALOG_CACHE__?: { stop: () => void };
+          }
+        ).__CCH_CODEX_MODEL_CATALOG_CACHE__?.stop();
         const stopRoutingTraceOutboxReplayScheduler = (
           globalThis as typeof globalThis & {
             __CCH_STOP_ROUTING_TRACE_OUTBOX__?: (options?: {

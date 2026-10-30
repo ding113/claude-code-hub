@@ -1,4 +1,7 @@
 {
+  "PROXY_MODEL_CATALOG_UNAVAILABLE": "モデルカタログを一時的に利用できません。しばらくしてから再試行してください。",
+  "PROXY_MODEL_CATALOG_TOO_LARGE": "モデルカタログが対応する応答サイズを超えています。許可するモデルの範囲を絞ってください。",
+  "PROXY_MODEL_CATALOG_CLIENT_DENIED": "このクライアントにはモデルカタログへのアクセスが許可されていません。",
   "LOCAL_CAPACITY_EXCEEDED": "ローカルのリクエスト処理容量が不足しています。しばらくしてから再試行してください。",
   "_comment": "Error messages for Japanese",
 

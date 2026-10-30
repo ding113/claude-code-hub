@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
@@ -17,6 +18,12 @@ import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
 import { checkProviderGroupMatch } from "../proxy/provider-selector";
+import {
+  CodexModelCatalogClientDeniedError,
+  CodexModelCatalogTooLargeError,
+  CodexModelCatalogUnavailableError,
+  getCodexModelCatalog,
+} from "./codex-model-catalog-service";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -28,9 +35,6 @@ export interface FetchedModel {
 
 /** 模型列表请求的默认超时（毫秒） */
 const DEFAULT_MODELS_TIMEOUT_MS = 10000;
-
-/** Codex CLI 使用空远端清单时会回退到内置模型目录。 */
-const CODEX_MODELS_MANIFEST_ETAG = 'W/"cch-codex-bundled-v1"';
 
 function matchesIfNoneMatch(value: string | undefined, etag: string): boolean {
   if (!value) return false;
@@ -65,8 +69,19 @@ function extractApiKey(c: Context): string | null {
  *
  * @throws {Response} 401 错误响应（未提供凭据、无效 key、用户禁用、用户过期）
  */
-async function authenticateRequest(c: Context): Promise<{
-  user: { id: number; providerGroup: string | null; isEnabled: boolean; expiresAt?: Date | null };
+async function authenticateRequest(
+  c: Context,
+  fresh = false
+): Promise<{
+  user: {
+    id: number;
+    providerGroup: string | null;
+    isEnabled: boolean;
+    expiresAt?: Date | null;
+    allowedModels?: string[];
+    allowedClients?: string[];
+    blockedClients?: string[];
+  };
   key: { providerGroup: string | null; name: string };
 }> {
   const apiKey = extractApiKey(c);
@@ -74,7 +89,9 @@ async function authenticateRequest(c: Context): Promise<{
     throw c.json({ error: { message: "未提供认证凭据", type: "authentication_error" } }, 401);
   }
 
-  const outcome = await resolveApiKeyAuthOutcome(apiKey);
+  const outcome = fresh
+    ? await resolveApiKeyAuthOutcome(apiKey, { fresh: true })
+    : await resolveApiKeyAuthOutcome(apiKey);
   if (!outcome.ok) {
     // Exhaustive switch: see auth-guard.ts for rationale. Adding a new
     // ApiKeyAuthFailureReason will produce a TypeScript error on the
@@ -554,23 +571,40 @@ export const handleOpenAICompatibleModels = createFixedProviderTypesModelsHandle
  * 处理可用模型列表请求
  */
 export async function handleAvailableModels(c: Context): Promise<Response> {
+  const requestStartedAt = performance.now();
   try {
-    const { user, key } = await authenticateRequest(c);
     const responseFormat = detectResponseFormat(c);
     const clientFormatOverride = detectClientFormatOverride(c);
-
-    if (
+    const clientVersion = c.req.query("client_version")?.trim();
+    const nativeCatalog = Boolean(
       c.req.path === "/v1/models" &&
-      responseFormat === "openai" &&
-      clientFormatOverride === null &&
-      c.req.query("client_version")?.trim()
-    ) {
-      c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
-      c.header("Cache-Control", "no-cache");
-      if (matchesIfNoneMatch(c.req.header("if-none-match"), CODEX_MODELS_MANIFEST_ETAG)) {
+        responseFormat === "openai" &&
+        clientFormatOverride === null &&
+        clientVersion
+    );
+    const { user, key } = await authenticateRequest(c, nativeCatalog);
+    const authElapsedMs = performance.now() - requestStartedAt;
+
+    if (nativeCatalog && clientVersion) {
+      const catalog = await getCodexModelCatalog({ user, key }, clientVersion, c.req.raw.headers);
+      const body = JSON.stringify(catalog);
+      const etag = `W/"${createHash("sha256").update(body).digest("hex")}"`;
+      c.header("ETag", etag);
+      c.header("Cache-Control", "private, no-cache");
+      logger.info("[CodexModelCatalog] Response ready", {
+        modelCount: catalog.models.length,
+        bytes: Buffer.byteLength(body),
+        authMs: Math.round(authElapsedMs),
+        elapsedMs: Math.round(performance.now() - requestStartedAt),
+      });
+      if (matchesIfNoneMatch(c.req.header("if-none-match"), etag)) {
         return c.body(null, 304);
       }
-      return c.json({ models: [] });
+      c.header("Content-Type", "application/json; charset=utf-8");
+      c.header("Content-Length", String(Buffer.byteLength(body, "utf8")));
+      // This is a complete document; let reverse proxies decouple its delivery from Node.
+      c.header("X-Accel-Buffering", "yes");
+      return c.body(body);
     }
 
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
@@ -600,6 +634,27 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
     }
   } catch (e) {
     if (e instanceof Response) return e;
+    if (
+      e instanceof CodexModelCatalogUnavailableError ||
+      e instanceof CodexModelCatalogTooLargeError ||
+      e instanceof CodexModelCatalogClientDeniedError
+    ) {
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const unavailable = e instanceof CodexModelCatalogUnavailableError;
+      const tooLarge = e instanceof CodexModelCatalogTooLargeError;
+      const code = unavailable
+        ? ERROR_CODES.PROXY_MODEL_CATALOG_UNAVAILABLE
+        : tooLarge
+          ? ERROR_CODES.PROXY_MODEL_CATALOG_TOO_LARGE
+          : ERROR_CODES.PROXY_MODEL_CATALOG_CLIENT_DENIED;
+      if (unavailable) c.header("Retry-After", "1");
+      c.header("Cache-Control", "private, no-store");
+      return c.json(
+        { error: { message: await getErrorMessageServer(locale, code), type: code } },
+        unavailable ? 503 : tooLarge ? 502 : 403
+      );
+    }
     throw e;
   }
 }

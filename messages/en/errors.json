@@ -1,4 +1,7 @@
 {
+  "PROXY_MODEL_CATALOG_UNAVAILABLE": "The model catalog is temporarily unavailable. Retry shortly.",
+  "PROXY_MODEL_CATALOG_TOO_LARGE": "The model catalog exceeds the supported response size. Narrow the permitted model list.",
+  "PROXY_MODEL_CATALOG_CLIENT_DENIED": "This client is not permitted to access the model catalog.",
   "LOCAL_CAPACITY_EXCEEDED": "Local request capacity exhausted; retry later.",
   "_comment": "Error messages for English",
 

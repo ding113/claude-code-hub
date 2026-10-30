@@ -21,6 +21,7 @@
     "test:e2e": "vitest run --config tests/configs/e2e.config.mts --reporter=verbose --configLoader bundle",
     "test:integration": "vitest run --config tests/configs/integration.config.mts --reporter=verbose --configLoader bundle",
     "test:integration:provider-batch-ledger": "vitest run --config tests/configs/provider-batch-ledger-postgres.config.mts --configLoader bundle",
+    "test:coverage:codex-model-catalog": "vitest run --config tests/configs/codex-model-catalog.config.mts --coverage --configLoader bundle",
     "test:coverage": "vitest run --coverage --configLoader bundle",
     "test:coverage:logs-sessionid-time-filter": "vitest run --config tests/configs/logs-sessionid-time-filter.config.mts --coverage --configLoader bundle",
     "test:coverage:codex-session-id-completer": "vitest run --config tests/configs/codex-session-id-completer.config.mts --coverage --configLoader bundle",

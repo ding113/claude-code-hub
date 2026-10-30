@@ -565,71 +565,78 @@ export type ApiKeyAuthOutcome =
  * the caller inspects `user.isEnabled` / `user.expiresAt` directly so it can
  * apply consistent semantics across the proxy and UI auth paths.
  */
-export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKeyAuthOutcome> {
-  const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
+export async function resolveApiKeyAuthOutcome(
+  keyString: string,
+  options: { fresh?: boolean } = {}
+): Promise<ApiKeyAuthOutcome> {
+  // Catalog permissions must reflect revocations even while inference caches are warm.
+  if (!options.fresh) {
+    const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
 
-  // 默认鉴权链路：Vacuum Filter -> Redis -> DB
-  // Redis 缓存只保存活跃 key，命中即代表 ok=true。
-  const cachedKey = await getCachedActiveKey(keyString);
-  if (cachedKey) {
-    // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
-    // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+    // 默认鉴权链路：Vacuum Filter -> Redis -> DB
+    // Redis 缓存只保存活跃 key，命中即代表 ok=true。
+    const cachedKey = await getCachedActiveKey(keyString);
+    if (cachedKey) {
+      // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
+      // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+      if (vfSaysMissing) {
+        apiKeyVacuumFilter.noteExistingKey(keyString);
+      }
+
+      const cachedUser = await getCachedUser(cachedKey.userId);
+      if (cachedUser) {
+        return { ok: true, user: cachedUser, key: cachedKey };
+      }
+
+      // user 缓存 miss：仅补齐 user（相较 join 更轻量）
+      const [userRow] = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          description: users.description,
+          role: users.role,
+          rpm: users.rpmLimit,
+          dailyQuota: users.dailyLimitUsd,
+          providerGroup: users.providerGroup,
+          tags: users.tags,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+          deletedAt: users.deletedAt,
+          limit5hUsd: users.limit5hUsd,
+          limit5hResetMode: users.limit5hResetMode,
+          limitWeeklyUsd: users.limitWeeklyUsd,
+          limitMonthlyUsd: users.limitMonthlyUsd,
+          limitTotalUsd: users.limitTotalUsd,
+          costResetAt: users.costResetAt,
+          limit5hCostResetAt: users.limit5hCostResetAt,
+          limitConcurrentSessions: users.limitConcurrentSessions,
+          dailyResetMode: users.dailyResetMode,
+          dailyResetTime: users.dailyResetTime,
+          isEnabled: users.isEnabled,
+          expiresAt: users.expiresAt,
+          allowedClients: users.allowedClients,
+          blockedClients: users.blockedClients,
+          allowedModels: users.allowedModels,
+        })
+        .from(users)
+        .where(and(eq(users.id, cachedKey.userId), isNull(users.deletedAt)));
+
+      if (!userRow) {
+        // join 语义：用户被删除则 key 无效；顺带清理 key 缓存避免重复 miss
+        invalidateCachedKey(keyString).catch(() => {});
+        return { ok: false, reason: "not_found" };
+      }
+
+      const user = toUser(userRow);
+      cacheUser(user).catch(() => {});
+      return { ok: true, user, key: cachedKey };
+    }
+
+    // Vacuum Filter 负向短路：肯定不存在则直接返回 not_found，避免打 DB
+    // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
     if (vfSaysMissing) {
-      apiKeyVacuumFilter.noteExistingKey(keyString);
-    }
-
-    const cachedUser = await getCachedUser(cachedKey.userId);
-    if (cachedUser) {
-      return { ok: true, user: cachedUser, key: cachedKey };
-    }
-
-    // user 缓存 miss：仅补齐 user（相较 join 更轻量）
-    const [userRow] = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        description: users.description,
-        role: users.role,
-        rpm: users.rpmLimit,
-        dailyQuota: users.dailyLimitUsd,
-        providerGroup: users.providerGroup,
-        tags: users.tags,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        deletedAt: users.deletedAt,
-        limit5hUsd: users.limit5hUsd,
-        limit5hResetMode: users.limit5hResetMode,
-        limitWeeklyUsd: users.limitWeeklyUsd,
-        limitMonthlyUsd: users.limitMonthlyUsd,
-        limitTotalUsd: users.limitTotalUsd,
-        costResetAt: users.costResetAt,
-        limit5hCostResetAt: users.limit5hCostResetAt,
-        limitConcurrentSessions: users.limitConcurrentSessions,
-        dailyResetMode: users.dailyResetMode,
-        dailyResetTime: users.dailyResetTime,
-        isEnabled: users.isEnabled,
-        expiresAt: users.expiresAt,
-        allowedClients: users.allowedClients,
-        allowedModels: users.allowedModels,
-      })
-      .from(users)
-      .where(and(eq(users.id, cachedKey.userId), isNull(users.deletedAt)));
-
-    if (!userRow) {
-      // join 语义：用户被删除则 key 无效；顺带清理 key 缓存避免重复 miss
-      invalidateCachedKey(keyString).catch(() => {});
       return { ok: false, reason: "not_found" };
     }
-
-    const user = toUser(userRow);
-    cacheUser(user).catch(() => {});
-    return { ok: true, user, key: cachedKey };
-  }
-
-  // Vacuum Filter 负向短路：肯定不存在则直接返回 not_found，避免打 DB
-  // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
-  if (vfSaysMissing) {
-    return { ok: false, reason: "not_found" };
   }
 
   // 注意：此处放宽 WHERE 条件，不再过滤 isEnabled / expiresAt，由后续逻辑分类失败原因。
@@ -680,6 +687,7 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
       userIsEnabled: users.isEnabled,
       userExpiresAt: users.expiresAt,
       userAllowedClients: users.allowedClients,
+      userBlockedClients: users.blockedClients,
       userAllowedModels: users.allowedModels,
       userCreatedAt: users.createdAt,
       userUpdatedAt: users.updatedAt,
@@ -735,6 +743,7 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
     isEnabled: row.userIsEnabled,
     expiresAt: row.userExpiresAt,
     allowedClients: row.userAllowedClients,
+    blockedClients: row.userBlockedClients,
     allowedModels: row.userAllowedModels,
     createdAt: row.userCreatedAt,
     updatedAt: row.userUpdatedAt,
@@ -767,7 +776,7 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
   });
 
   // 最佳努力：写入 Redis 缓存（不影响正确性）
-  cacheAuthResult(keyString, { user, key }).catch(() => {});
+  if (!options.fresh) cacheAuthResult(keyString, { user, key }).catch(() => {});
   return { ok: true, user, key };
 }
 

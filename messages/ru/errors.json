@@ -1,4 +1,7 @@
 {
+  "PROXY_MODEL_CATALOG_UNAVAILABLE": "Каталог моделей временно недоступен. Повторите попытку позже.",
+  "PROXY_MODEL_CATALOG_TOO_LARGE": "Каталог моделей превышает допустимый размер ответа. Сократите список разрешённых моделей.",
+  "PROXY_MODEL_CATALOG_CLIENT_DENIED": "Этому клиенту запрещён доступ к каталогу моделей.",
   "LOCAL_CAPACITY_EXCEEDED": "Недостаточно локальных ресурсов для обработки запроса. Повторите попытку позже.",
   "_comment": "Error messages for Russian",
 

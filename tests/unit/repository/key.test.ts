@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const row = {
   keyId: 1,
@@ -47,10 +47,12 @@ const row = {
   userDeletedAt: null,
 };
 
+const whereMock = vi.fn(async () => [row]);
+
 const selectMock = vi.fn(() => ({
   from: vi.fn(() => ({
     innerJoin: vi.fn(() => ({
-      where: vi.fn(async () => [row]),
+      where: whereMock,
     })),
   })),
 }));
@@ -119,6 +121,22 @@ vi.mock("@/drizzle/schema", () => ({
   },
 }));
 
+const authCache = vi.hoisted(() => ({
+  getCachedActiveKey: vi.fn(),
+  getCachedUser: vi.fn(),
+  cacheAuthResult: vi.fn(async () => {}),
+  cacheUser: vi.fn(async () => {}),
+  invalidateCachedKey: vi.fn(async () => {}),
+  cacheActiveKey: vi.fn(async () => {}),
+  invalidateCachedUser: vi.fn(async () => {}),
+}));
+const vacuum = vi.hoisted(() => ({
+  isDefinitelyNotPresent: vi.fn(() => true),
+  noteExistingKey: vi.fn(),
+}));
+vi.mock("@/lib/security/api-key-auth-cache", () => authCache);
+vi.mock("@/lib/security/api-key-vacuum-filter", () => ({ apiKeyVacuumFilter: vacuum }));
+
 const sqlMock = (...args: unknown[]) => args;
 sqlMock.join = (...args: unknown[]) => args;
 
@@ -138,6 +156,12 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 describe("repository/key validateApiKeyAndGetUser", () => {
+  beforeEach(() => {
+    vacuum.isDefinitelyNotPresent.mockReturnValue(false);
+    authCache.getCachedActiveKey.mockResolvedValue(null);
+    authCache.getCachedUser.mockResolvedValue(null);
+    whereMock.mockResolvedValue([row]);
+  });
   it("should return user with limit fields populated", async () => {
     const { validateApiKeyAndGetUser } = await import("@/repository/key");
 
@@ -151,5 +175,49 @@ describe("repository/key validateApiKeyAndGetUser", () => {
     expect(result?.user.limitConcurrentSessions).toBe(7);
     expect(result?.user.dailyResetMode).toBe("rolling");
     expect(result?.user.dailyResetTime).toBe("01:00");
+  });
+});
+
+describe("fresh catalog authentication", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    whereMock.mockResolvedValue([row]);
+    vacuum.isDefinitelyNotPresent.mockReturnValue(true);
+    authCache.getCachedActiveKey.mockResolvedValue({ userId: row.userId });
+    authCache.getCachedUser.mockResolvedValue({ id: row.userId, allowedModels: ["old"] });
+  });
+
+  it("bypasses both the vacuum filter and stale Redis permissions", async () => {
+    const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+    const result = await resolveApiKeyAuthOutcome("sk-test", { fresh: true });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.user.allowedModels).toEqual([]);
+    expect(vacuum.isDefinitelyNotPresent).not.toHaveBeenCalled();
+    expect(authCache.getCachedActiveKey).not.toHaveBeenCalled();
+    expect(authCache.getCachedUser).not.toHaveBeenCalled();
+    expect(authCache.cacheAuthResult).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [[], "not_found"],
+    [[{ ...row, keyIsEnabled: false }], "key_disabled"],
+    [[{ ...row, keyExpiresAt: new Date(0) }], "key_expired"],
+  ])(
+    "preserves database failure classification despite a stale active key",
+    async (rows, reason) => {
+      whereMock.mockResolvedValueOnce(rows as (typeof row)[]);
+      const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+      expect(await resolveApiKeyAuthOutcome("sk-test", { fresh: true })).toEqual({
+        ok: false,
+        reason,
+      });
+    }
+  );
+
+  it("still chooses an active duplicate key deterministically", async () => {
+    whereMock.mockResolvedValueOnce([{ ...row, keyIsEnabled: false }, row]);
+    const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+    const result = await resolveApiKeyAuthOutcome("sk-test", { fresh: true });
+    expect(result.ok).toBe(true);
   });
 });
