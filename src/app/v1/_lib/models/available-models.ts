@@ -349,23 +349,41 @@ export function getProviderTypesForFormat(clientFormat: ClientFormat): Provider[
 }
 
 /**
- * 获取用户可用的模型列表
- *
- * 决策流程：
- * 1. 根据 clientFormat 确定需要决策的 providerType 列表
- * 2. 对每种 providerType 独立进行完整决策（分组过滤 → 健康检查 → 优先级 → 加权随机）
- * 3. 每种类型选出 1 个最优 provider
- * 4. 聚合这些 provider 的模型列表（去重）
+ * Provider types listed when /v1/models has no explicit protocol or format.
+ * A new ProviderType must be added here so the default catalog stays complete.
  */
-async function getAvailableModels(
-  authState: {
-    user: { id: number; providerGroup: string | null };
-    key: { providerGroup: string | null };
-  },
-  clientFormat: ClientFormat
-): Promise<{ models: FetchedModel[]; providerName?: string }> {
-  const providerTypes = getProviderTypesForFormat(clientFormat);
-  return getAvailableModelsByProviderTypes(authState, providerTypes);
+function listUnscopedCatalogProviderTypes(): Provider["providerType"][] {
+  const providerTypes: Record<Provider["providerType"], true> = {
+    claude: true,
+    "claude-auth": true,
+    codex: true,
+    "openai-compatible": true,
+    gemini: true,
+    "gemini-cli": true,
+  };
+  return Object.keys(providerTypes) as Provider["providerType"][];
+}
+
+/**
+ * Resolve which provider types feed /v1/models.
+ *
+ * Unspecified requests keep the OpenAI response envelope but include every
+ * provider type the key can access. Explicit format query/headers and
+ * protocol-identifying headers stay limited to that format.
+ */
+function resolveCatalogProviderTypes(
+  responseFormat: ResponseFormat,
+  clientFormatOverride: ClientFormat | null
+): Provider["providerType"][] {
+  if (clientFormatOverride) {
+    return getProviderTypesForFormat(clientFormatOverride);
+  }
+
+  if (responseFormat === "openai") {
+    return listUnscopedCatalogProviderTypes();
+  }
+
+  return getProviderTypesForFormat(mapResponseFormatToClientFormat(responseFormat));
 }
 
 /**
@@ -574,15 +592,20 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
     }
 
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
+    const providerTypes = resolveCatalogProviderTypes(responseFormat, clientFormatOverride);
 
     logger.debug("[AvailableModels] Request received", {
       userId: user.id,
       responseFormat,
       clientFormat,
       clientFormatOverride: clientFormatOverride || undefined,
+      providerTypes,
     });
 
-    const { models, providerName } = await getAvailableModels({ user, key }, clientFormat);
+    const { models, providerName } = await getAvailableModelsByProviderTypes(
+      { user, key },
+      providerTypes
+    );
 
     logger.debug("[AvailableModels] Response ready", {
       userId: user.id,
