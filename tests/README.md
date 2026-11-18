@@ -26,12 +26,14 @@ bun run test:coverage
 测试完成后会**自动清理**最近 10 分钟内创建的测试用户（名称包含"测试用户"、"test"或"Test"）。
 
 **禁用自动清理**：
+
 ```bash
 # 设置环境变量
 AUTO_CLEANUP_TEST_DATA=false bun run test
 ```
 
 **手动清理所有历史测试数据**：
+
 ```bash
 # PowerShell
 .\scripts\cleanup-test-users.ps1
@@ -61,6 +63,7 @@ bash scripts/cleanup-test-users.sh
 ```
 
 **测试内容**：
+
 - 用户 CRUD 完整流程
 - Key 管理完整流程
 - 业务逻辑验证
@@ -147,6 +150,7 @@ ADMIN_TOKEN=2219260993
 ```
 
 **测试中的使用**：
+
 ```typescript
 // tests/setup.ts 自动设置
 process.env.TEST_ADMIN_TOKEN = process.env.ADMIN_TOKEN;
@@ -175,6 +179,7 @@ echo 'DSN=postgres://postgres:postgres@localhost:5432/claude_code_hub' > .env.te
 3. **启用所有测试**：
 
 编辑 `vitest.config.mts`，注释掉 exclude 中的这几行：
+
 ```typescript
 // "tests/integration/**",
 // "tests/api/users-actions.test.ts",
@@ -188,6 +193,7 @@ bun run test
 ```
 
 **预期结果**：
+
 ```
 ✅ Test Files  11 passed (11)
 ✅      Tests  141 passed (141)
